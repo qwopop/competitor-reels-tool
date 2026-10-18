@@ -13,6 +13,12 @@ Track Instagram competitors, pull their 20 most recent Reels into a library, and
 | --- | --- | --- | --- |
 | ![Reels](docs/screenshots/dashboard.png) | ![Competitors](docs/screenshots/competitors.png) | ![Content plan](docs/screenshots/content-plan.png) | ![Remix editor](docs/screenshots/remix.png) |
 
+### Sample Reels
+
+| Mountain trail | White building | Dogs in grass |
+| --- | --- | --- |
+| ![Mountain trail](frontend/public/sample-reels/reel-mountain-trail.jpg) | ![White building](frontend/public/sample-reels/reel-white-building.jpg) | ![Dogs in grass](frontend/public/sample-reels/reel-dogs-in-grass.jpg) |
+
 ## Run it locally
 
 Requirements: [uv](https://docs.astral.sh/uv/), Node.js 20+, and `make`.
