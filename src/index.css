@@ -1,0 +1,74 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background-color: #0a0b14;
+  color: #e7e9f3;
+  font-family: 'Inter', ui-sans-serif, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* Subtle scrollbars that match the dark theme. */
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+*::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 9999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.16);
+  background-clip: padding-box;
+}
+
+@layer components {
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg px-3.5 py-2 text-sm font-medium transition-all duration-200 disabled:cursor-not-allowed disabled:opacity-50;
+  }
+  .btn-primary {
+    @apply btn bg-accent-500 text-ink-950 hover:bg-accent-400 active:scale-[0.98] shadow-[0_8px_24px_-10px_rgba(63,199,135,0.6)];
+  }
+  .btn-ghost {
+    @apply btn text-gray-300 hover:bg-white/5 hover:text-white;
+  }
+  .btn-outline {
+    @apply btn border border-white/10 text-gray-200 hover:border-white/25 hover:bg-white/5;
+  }
+  .card {
+    @apply rounded-2xl border border-white/10 bg-ink-800/70 backdrop-blur-sm;
+  }
+  .input {
+    @apply w-full rounded-lg border border-white/10 bg-ink-900/80 px-3.5 py-2.5 text-sm text-white placeholder:text-gray-500 outline-none transition focus:border-accent-400/60 focus:ring-2 focus:ring-accent-400/20;
+  }
+  .label {
+    @apply text-xs font-medium uppercase tracking-wider text-gray-400;
+  }
+  .chip {
+    @apply inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium;
+  }
+  .skeleton {
+    @apply relative overflow-hidden rounded-md bg-white/5;
+  }
+  .skeleton::after {
+    content: '';
+    @apply absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/5 to-transparent animate-shimmer;
+  }
+}
