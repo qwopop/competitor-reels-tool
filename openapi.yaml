@@ -1,0 +1,276 @@
+openapi: 3.1.0
+info:
+  title: Competitor Reels API
+  version: 0.1.0
+  description: >
+    Contract between the React frontend (frontend/) and the FastAPI backend
+    (backend/). Mirrors the ReelsApi service interface in frontend/src/types.ts.
+servers:
+  - url: http://localhost:8091
+    description: Local development server
+
+paths:
+  /api/competitors:
+    get:
+      operationId: listCompetitors
+      summary: List tracked competitors, newest first
+      responses:
+        "200":
+          description: Competitors
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Competitor"
+    post:
+      operationId: addCompetitor
+      summary: Track a competitor from an Instagram profile URL or @username
+      description: >
+        If the username is already tracked, the existing competitor is returned
+        with status 200 instead of creating a duplicate.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AddCompetitorRequest"
+      responses:
+        "201":
+          description: Competitor created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Competitor"
+        "200":
+          description: Competitor already tracked
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Competitor"
+        "400":
+          $ref: "#/components/responses/Error"
+
+  /api/competitors/{competitor_id}:
+    parameters:
+      - $ref: "#/components/parameters/CompetitorId"
+    delete:
+      operationId: removeCompetitor
+      summary: Stop tracking a competitor and delete its Reels
+      responses:
+        "204":
+          description: Removed
+        "404":
+          $ref: "#/components/responses/Error"
+
+  /api/competitors/{competitor_id}/reels/fetch:
+    parameters:
+      - $ref: "#/components/parameters/CompetitorId"
+    post:
+      operationId: fetchReelsForCompetitor
+      summary: Fetch the 20 most recent Reels for a competitor
+      description: >
+        Replaces any Reels previously stored for this competitor, so refetching
+        never duplicates rows.
+      responses:
+        "200":
+          description: The freshly fetched Reels
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Reel"
+        "404":
+          $ref: "#/components/responses/Error"
+
+  /api/reels:
+    get:
+      operationId: listReels
+      summary: List all stored Reels, most recently posted first
+      responses:
+        "200":
+          description: Reels
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Reel"
+
+  /api/reels/{reel_id}:
+    parameters:
+      - $ref: "#/components/parameters/ReelId"
+    get:
+      operationId: getReel
+      summary: Get one Reel
+      responses:
+        "200":
+          description: Reel
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Reel"
+        "404":
+          $ref: "#/components/responses/Error"
+
+  /api/reels/{reel_id}/remix:
+    parameters:
+      - $ref: "#/components/parameters/ReelId"
+    post:
+      operationId: remixReel
+      summary: Generate an AI breakdown (hook, script, CTA) for a Reel
+      description: >
+        Returns the existing remix with status 200 if one was already generated
+        for this Reel, otherwise generates a new one and returns it with 201.
+      responses:
+        "201":
+          description: Remix generated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RemixedReel"
+        "200":
+          description: Existing remix returned
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RemixedReel"
+        "404":
+          $ref: "#/components/responses/Error"
+
+  /api/remixes/{remix_id}:
+    parameters:
+      - $ref: "#/components/parameters/RemixId"
+    get:
+      operationId: getRemix
+      summary: Get one remix
+      responses:
+        "200":
+          description: Remix
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RemixedReel"
+        "404":
+          $ref: "#/components/responses/Error"
+    patch:
+      operationId: updateRemix
+      summary: Edit the title, hook, script, or CTA of a remix
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateRemixRequest"
+      responses:
+        "200":
+          description: Updated remix
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RemixedReel"
+        "404":
+          $ref: "#/components/responses/Error"
+
+components:
+  parameters:
+    CompetitorId:
+      name: competitor_id
+      in: path
+      required: true
+      schema:
+        type: string
+    ReelId:
+      name: reel_id
+      in: path
+      required: true
+      schema:
+        type: string
+    RemixId:
+      name: remix_id
+      in: path
+      required: true
+      schema:
+        type: string
+
+  responses:
+    Error:
+      description: Error
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+
+  schemas:
+    Competitor:
+      type: object
+      required: [id, username, instagramUrl, displayName, avatarUrl, addedAt]
+      properties:
+        id: { type: string }
+        username: { type: string }
+        instagramUrl: { type: string, format: uri }
+        displayName: { type: string }
+        avatarUrl: { type: string, format: uri }
+        addedAt: { type: string, format: date-time }
+
+    AddCompetitorRequest:
+      type: object
+      required: [instagramUrl]
+      properties:
+        instagramUrl:
+          type: string
+          description: Instagram profile URL, or a bare username such as @vibecoder
+          examples: ["https://instagram.com/vibecoder"]
+
+    Reel:
+      type: object
+      required:
+        [id, competitorId, competitorUsername, shortcode, permalink, caption,
+         thumbnailUrl, viewCount, likeCount, commentCount, postedAt, fetchedAt]
+      properties:
+        id: { type: string }
+        competitorId: { type: string }
+        competitorUsername: { type: string }
+        shortcode:
+          type: string
+          description: Instagram short code used to build the permalink
+        permalink: { type: string, format: uri }
+        caption: { type: string }
+        thumbnailUrl: { type: string, format: uri }
+        viewCount: { type: integer, minimum: 0 }
+        likeCount: { type: integer, minimum: 0 }
+        commentCount: { type: integer, minimum: 0 }
+        postedAt: { type: string, format: date-time }
+        fetchedAt: { type: string, format: date-time }
+
+    RemixedReel:
+      type: object
+      required: [id, reelId, title, hook, script, cta, createdAt, updatedAt]
+      properties:
+        id: { type: string }
+        reelId: { type: string }
+        title: { type: string }
+        hook: { type: string }
+        script: { type: string }
+        cta: { type: string }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    UpdateRemixRequest:
+      type: object
+      description: Only the provided fields are changed.
+      additionalProperties: false
+      properties:
+        title: { type: string }
+        hook: { type: string }
+        script: { type: string }
+        cta: { type: string }
+
+    ErrorResponse:
+      type: object
+      required: [detail]
+      properties:
+        detail:
+          type: string
+          description: Human-readable error message shown in the UI

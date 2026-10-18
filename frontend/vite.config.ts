@@ -13,4 +13,10 @@ export default defineConfig({
   optimizeDeps: {
     exclude: ['lucide-react'],
   },
+  server: {
+    // Forward API calls to the FastAPI backend started by `make run`.
+    proxy: {
+      '/api': 'http://localhost:8091',
+    },
+  },
 });

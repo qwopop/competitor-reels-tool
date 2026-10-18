@@ -7,12 +7,9 @@ import type {
 } from '@/types';
 
 // ----------------------------------------------------------------------------
-// Mock implementation of the ReelsApi service.
-//
-// Everything is persisted to localStorage so the app keeps working across
-// reloads without a real backend. Swap this file for a real implementation
-// (Supabase / edge functions / Instagram Graph API) and the rest of the app
-// does not need to change — it only depends on the ReelsApi interface.
+// Offline mock of the ReelsApi service, persisted to localStorage. It is no
+// longer the app default (see ApiContext.tsx); use it in tests or to demo the
+// UI without the backend. It mirrors the backend's behavior in backend/app.
 // ----------------------------------------------------------------------------
 
 const COMPETITORS_KEY = 'mock.competitors';
