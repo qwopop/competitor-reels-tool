@@ -54,6 +54,27 @@ class RemixRow(Base):
     updated_at: Mapped[str] = mapped_column(String(40))
 
 
+class ContentPlanRow(Base):
+    """A Reel queued for filming. Fields are copied from the Reel, not linked to it.
+
+    Re-fetching a competitor replaces their Reels with new rows. Keeping a
+    snapshot here means the filming list survives those refreshes.
+    """
+
+    __tablename__ = "content_plan"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    reel_id: Mapped[str] = mapped_column(String(64), index=True)
+    status: Mapped[str] = mapped_column(String(20))
+    competitor_username: Mapped[str] = mapped_column(String(64))
+    caption: Mapped[str] = mapped_column(String(500))
+    thumbnail_url: Mapped[str] = mapped_column(String(512))
+    permalink: Mapped[str] = mapped_column(String(255))
+    posted_at: Mapped[str] = mapped_column(String(40))
+    added_at: Mapped[str] = mapped_column(String(40))
+    updated_at: Mapped[str] = mapped_column(String(40))
+
+
 def make_engine(database_url: str) -> Engine:
     connect_args = {"check_same_thread": False} if database_url.startswith("sqlite") else {}
     engine = create_engine(database_url, connect_args=connect_args)

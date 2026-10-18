@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import type { Reel } from '@/types';
+import type { ContentPlanItem, Reel } from '@/types';
 import { useApi } from '@/services';
 import { compactNumber, relativeTime } from '@/utils/format';
 import { EmptyState, ErrorBanner, FullPageLoader, Spinner } from '@/components/ui';
+import { planStatusMeta } from '@/utils/plan';
 
 export function DashboardPage() {
   const api = useApi();
@@ -11,6 +12,8 @@ export function DashboardPage() {
   const [reels, setReels] = useState<Reel[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [remixingId, setRemixingId] = useState<string | null>(null);
+  // Plan items keyed by the Reel they came from, so each card knows its state.
+  const [planByReel, setPlanByReel] = useState<Record<string, ContentPlanItem>>({});
 
   useEffect(() => {
     let active = true;
@@ -19,10 +22,24 @@ export function DashboardPage() {
       if (res.error) setError(res.error);
       else setReels(res.data ?? []);
     });
+    api.listContentPlan().then((res) => {
+      if (!active || !res.data) return;
+      setPlanByReel(Object.fromEntries(res.data.map((item) => [item.reelId, item])));
+    });
     return () => {
       active = false;
     };
   }, [api]);
+
+  async function handleAddToPlan(reel: Reel) {
+    const res = await api.addToContentPlan(reel.id);
+    if (res.error || !res.data) {
+      setError(res.error ?? 'Could not add to the content plan.');
+      return;
+    }
+    const item = res.data;
+    setPlanByReel((prev) => ({ ...prev, [reel.id]: item }));
+  }
 
   async function handleRemix(reel: Reel) {
     setRemixingId(reel.id);
@@ -96,15 +113,20 @@ export function DashboardPage() {
                   · {compactNumber(reel.commentCount)} comments
                 </p>
               </div>
-              <div className="mt-5 flex items-center justify-between gap-3">
-                <a
-                  href={reel.permalink}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="text-sm text-ink/60 underline-offset-4 transition-colors hover:text-ink hover:underline"
-                >
-                  View profile on Instagram
-                </a>
+              <div className="mt-5 flex flex-wrap items-center gap-3">
+                {planByReel[reel.id] ? (
+                  <span className="px-4 py-2 text-sm text-ink/70">
+                    <span aria-hidden="true">{planStatusMeta(planByReel[reel.id].status).emoji}</span>{' '}
+                    In content plan
+                  </span>
+                ) : (
+                  <button
+                    onClick={() => handleAddToPlan(reel)}
+                    className="btn-outline px-4 py-2 text-sm"
+                  >
+                    Add to plan
+                  </button>
+                )}
                 <button
                   onClick={() => handleRemix(reel)}
                   disabled={remixingId === reel.id}
@@ -118,6 +140,14 @@ export function DashboardPage() {
                     'Remix'
                   )}
                 </button>
+                <a
+                  href={reel.permalink}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="basis-full text-sm text-ink/60 underline-offset-4 transition-colors hover:text-ink hover:underline"
+                >
+                  View profile on Instagram
+                </a>
               </div>
             </article>
           ))}

@@ -46,6 +46,22 @@ export interface RemixedReel {
   updatedAt: string;
 }
 
+// not_started: nothing ready yet. ready: script done, ready to film. filmed: filmed and posted.
+export type PlanStatus = 'not_started' | 'ready' | 'filmed';
+
+export interface ContentPlanItem {
+  id: string;
+  reelId: string;
+  status: PlanStatus;
+  competitorUsername: string;
+  caption: string;
+  thumbnailUrl: string;
+  permalink: string;
+  postedAt: string;
+  addedAt: string;
+  updatedAt: string;
+}
+
 export interface ServiceResult<T> {
   data: T | null;
   error: string | null;
@@ -66,4 +82,11 @@ export interface ReelsApi {
     id: string,
     patch: Partial<Pick<RemixedReel, 'title' | 'hook' | 'script' | 'cta'>>
   ): Promise<ServiceResult<RemixedReel>>;
+  listContentPlan(): Promise<ServiceResult<ContentPlanItem[]>>;
+  addToContentPlan(reelId: string): Promise<ServiceResult<ContentPlanItem>>;
+  updateContentPlanStatus(
+    id: string,
+    status: PlanStatus
+  ): Promise<ServiceResult<ContentPlanItem>>;
+  removeFromContentPlan(id: string): Promise<ServiceResult<void>>;
 }

@@ -2,9 +2,10 @@ import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
 import { useApi } from '@/services';
-import type { Reel, RemixedReel } from '@/types';
+import type { ContentPlanItem, Reel, RemixedReel } from '@/types';
 import { compactNumber, relativeTime } from '@/utils/format';
 import { ErrorBanner, FullPageLoader, Spinner } from '@/components/ui';
+import { planStatusMeta } from '@/utils/plan';
 
 export function RemixPage() {
   const { id } = useParams<{ id: string }>();
@@ -22,6 +23,7 @@ export function RemixPage() {
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   const [savedAt, setSavedAt] = useState<string | null>(null);
+  const [planItem, setPlanItem] = useState<ContentPlanItem | null>(null);
 
   useEffect(() => {
     if (!id) return;
@@ -43,6 +45,9 @@ export function RemixPage() {
       const reelRes = await api.getReel(r.reelId);
       if (!active) return;
       if (reelRes.data) setReel(reelRes.data);
+      const planRes = await api.listContentPlan();
+      if (!active) return;
+      setPlanItem(planRes.data?.find((item) => item.reelId === r.reelId) ?? null);
       setLoading(false);
     })();
     return () => {
@@ -69,6 +74,16 @@ export function RemixPage() {
     setRemix(res.data);
     setSavedAt(res.data.updatedAt);
     setDirty(false);
+  }
+
+  async function handleAddToPlan() {
+    if (!reel) return;
+    const res = await api.addToContentPlan(reel.id);
+    if (res.error || !res.data) {
+      setError(res.error ?? 'Could not add to the content plan.');
+      return;
+    }
+    setPlanItem(res.data);
   }
 
   if (loading) return <FullPageLoader label="Loading remix…" />;
@@ -191,13 +206,25 @@ export function RemixPage() {
                   ? `Saved ${relativeTime(savedAt)}`
                   : `Created ${relativeTime(remix.createdAt)}`}
             </p>
-            <button
-              onClick={handleSave}
-              disabled={!dirty || saving}
-              className="btn-primary"
-            >
-              {saving ? <Spinner /> : null} Save changes
-            </button>
+            <div className="flex flex-wrap items-center gap-3">
+              {reel && planItem ? (
+                <span className="px-4 py-2 text-sm text-ink/70">
+                  <span aria-hidden="true">{planStatusMeta(planItem.status).emoji}</span>{' '}
+                  In content plan
+                </span>
+              ) : reel ? (
+                <button onClick={handleAddToPlan} className="btn-outline">
+                  Add to plan
+                </button>
+              ) : null}
+              <button
+                onClick={handleSave}
+                disabled={!dirty || saving}
+                className="btn-primary"
+              >
+                {saving ? <Spinner /> : null} Save changes
+              </button>
+            </div>
           </div>
         </section>
       </div>

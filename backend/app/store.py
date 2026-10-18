@@ -4,7 +4,7 @@ from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
 from app import generator
-from app.models import CompetitorRow, ReelRow, RemixRow
+from app.models import ContentPlanRow, CompetitorRow, ReelRow, RemixRow
 
 
 def list_competitors(db: Session) -> list[CompetitorRow]:
@@ -73,3 +73,35 @@ def update_remix(db: Session, remix: RemixRow, changes: dict[str, str]) -> Remix
     remix.updated_at = generator.now_iso()
     db.commit()
     return remix
+
+
+def list_plan_items(db: Session) -> list[ContentPlanRow]:
+    stmt = select(ContentPlanRow).order_by(ContentPlanRow.added_at.desc())
+    return list(db.scalars(stmt))
+
+
+def get_plan_item(db: Session, item_id: str) -> ContentPlanRow | None:
+    return db.get(ContentPlanRow, item_id)
+
+
+def get_plan_item_for_reel(db: Session, reel_id: str) -> ContentPlanRow | None:
+    return db.scalars(select(ContentPlanRow).where(ContentPlanRow.reel_id == reel_id)).first()
+
+
+def add_plan_item(db: Session, reel: ReelRow) -> ContentPlanRow:
+    item = generator.build_plan_item(reel)
+    db.add(item)
+    db.commit()
+    return item
+
+
+def update_plan_status(db: Session, item: ContentPlanRow, status: str) -> ContentPlanRow:
+    item.status = status
+    item.updated_at = generator.now_iso()
+    db.commit()
+    return item
+
+
+def delete_plan_item(db: Session, item: ContentPlanRow) -> None:
+    db.delete(item)
+    db.commit()

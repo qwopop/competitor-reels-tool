@@ -173,6 +173,77 @@ paths:
         "404":
           $ref: "#/components/responses/Error"
 
+  /api/content-plan:
+    get:
+      operationId: listContentPlan
+      summary: List the Reels in the content plan, most recently added first
+      responses:
+        "200":
+          description: Content plan items
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ContentPlanItem"
+    post:
+      operationId: addToContentPlan
+      summary: Add a Reel to the content plan
+      description: >
+        New items start as not_started. If the Reel is already in the plan, the
+        existing item is returned with status 200 instead of creating a duplicate.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AddToPlanRequest"
+      responses:
+        "201":
+          description: Item added
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ContentPlanItem"
+        "200":
+          description: Reel already in the plan
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ContentPlanItem"
+        "404":
+          $ref: "#/components/responses/Error"
+
+  /api/content-plan/{plan_item_id}:
+    parameters:
+      - $ref: "#/components/parameters/PlanItemId"
+    patch:
+      operationId: updateContentPlanItem
+      summary: Change the filming status of a plan item
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdatePlanItemRequest"
+      responses:
+        "200":
+          description: Updated item
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ContentPlanItem"
+        "404":
+          $ref: "#/components/responses/Error"
+    delete:
+      operationId: removeFromContentPlan
+      summary: Remove a Reel from the content plan
+      responses:
+        "204":
+          description: Removed
+        "404":
+          $ref: "#/components/responses/Error"
+
 components:
   parameters:
     CompetitorId:
@@ -189,6 +260,13 @@ components:
         type: string
     RemixId:
       name: remix_id
+      in: path
+      required: true
+      schema:
+        type: string
+
+    PlanItemId:
+      name: plan_item_id
       in: path
       required: true
       schema:
@@ -269,6 +347,41 @@ components:
         hook: { type: string }
         script: { type: string }
         cta: { type: string }
+
+    PlanStatus:
+      type: string
+      description: >
+        not_started: nothing ready yet (❌). ready: script is done and the video
+        is ready to film (⏳). filmed: filmed and posted (✅).
+      enum: [not_started, ready, filmed]
+
+    ContentPlanItem:
+      type: object
+      required: [id, reelId, status, competitorUsername, caption, thumbnailUrl, permalink, postedAt, addedAt, updatedAt]
+      properties:
+        id: { type: string }
+        reelId: { type: string, description: The Reel this item was added from }
+        status: { $ref: "#/components/schemas/PlanStatus" }
+        competitorUsername: { type: string }
+        caption: { type: string }
+        thumbnailUrl: { type: string, format: uri }
+        permalink: { type: string, format: uri }
+        postedAt: { type: string, format: date-time }
+        addedAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    AddToPlanRequest:
+      type: object
+      required: [reelId]
+      properties:
+        reelId: { type: string }
+
+    UpdatePlanItemRequest:
+      type: object
+      required: [status]
+      additionalProperties: false
+      properties:
+        status: { $ref: "#/components/schemas/PlanStatus" }
 
     ErrorResponse:
       type: object

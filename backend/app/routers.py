@@ -6,7 +6,16 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy.orm import Session
 
 from app import generator, store
-from app.schemas import AddCompetitorRequest, Competitor, Reel, RemixedReel, UpdateRemixRequest
+from app.schemas import (
+    AddCompetitorRequest,
+    AddToPlanRequest,
+    Competitor,
+    ContentPlanItem,
+    Reel,
+    RemixedReel,
+    UpdatePlanItemRequest,
+    UpdateRemixRequest,
+)
 
 router = APIRouter(prefix="/api")
 
@@ -114,3 +123,48 @@ def update_remix(remix_id: str, payload: UpdateRemixRequest, db: Session = Depen
         raise not_found("Remix not found.")
     changes = payload.model_dump(exclude_unset=True, exclude_none=True)
     return store.update_remix(db, remix, changes)
+
+
+@router.get("/content-plan", response_model=list[ContentPlanItem])
+def list_content_plan(db: Session = Depends(get_db)):
+    return store.list_plan_items(db)
+
+
+@router.post(
+    "/content-plan",
+    response_model=ContentPlanItem,
+    status_code=status.HTTP_201_CREATED,
+    responses={200: {"model": ContentPlanItem, "description": "Reel already in the plan"}},
+)
+def add_to_content_plan(payload: AddToPlanRequest, response: Response, db: Session = Depends(get_db)):
+    reel = store.get_reel(db, payload.reel_id)
+    if not reel:
+        raise not_found("Reel not found.")
+    existing = store.get_plan_item_for_reel(db, reel.id)
+    if existing:
+        response.status_code = status.HTTP_200_OK
+        return existing
+    return store.add_plan_item(db, reel)
+
+
+@router.patch("/content-plan/{plan_item_id}", response_model=ContentPlanItem)
+def update_content_plan_item(
+    plan_item_id: str, payload: UpdatePlanItemRequest, db: Session = Depends(get_db)
+):
+    item = store.get_plan_item(db, plan_item_id)
+    if not item:
+        raise not_found("Plan item not found.")
+    return store.update_plan_status(db, item, payload.status)
+
+
+@router.delete(
+    "/content-plan/{plan_item_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    response_class=Response,
+)
+def remove_from_content_plan(plan_item_id: str, db: Session = Depends(get_db)):
+    item = store.get_plan_item(db, plan_item_id)
+    if not item:
+        raise not_found("Plan item not found.")
+    store.delete_plan_item(db, item)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

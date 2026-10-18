@@ -1,5 +1,7 @@
 import type {
   Competitor,
+  ContentPlanItem,
+  PlanStatus,
   Reel,
   ReelsApi,
   RemixedReel,
@@ -15,6 +17,7 @@ import type {
 const COMPETITORS_KEY = 'mock.competitors';
 const REELS_KEY = 'mock.reels';
 const REMIXES_KEY = 'mock.remixes';
+const PLAN_KEY = 'mock.plan';
 const MAX_REELS = 20;
 
 const ok = <T>(data: T): ServiceResult<T> => ({ data, error: null });
@@ -287,5 +290,66 @@ export class MockReelsApi implements ReelsApi {
     remixes[idx] = updated;
     write(REMIXES_KEY, remixes);
     return delay(ok(updated), 200);
+  }
+
+  async listContentPlan(): Promise<ServiceResult<ContentPlanItem[]>> {
+    const items = read<ContentPlanItem[]>(PLAN_KEY, []);
+    return delay(ok(items), 150);
+  }
+
+  async addToContentPlan(reelId: string): Promise<ServiceResult<ContentPlanItem>> {
+    const reels = read<Reel[]>(REELS_KEY, []);
+    const reel = reels.find((r) => r.id === reelId);
+    if (!reel) return fail<ContentPlanItem>('Reel not found.');
+
+    const items = read<ContentPlanItem[]>(PLAN_KEY, []);
+    const existing = items.find((item) => item.reelId === reelId);
+    if (existing) return delay(ok(existing), 150);
+
+    const now = new Date().toISOString();
+    const item: ContentPlanItem = {
+      id: uid('plan'),
+      reelId,
+      status: 'not_started',
+      competitorUsername: reel.competitorUsername,
+      caption: reel.caption,
+      thumbnailUrl: reel.thumbnailUrl,
+      permalink: reel.permalink,
+      postedAt: reel.postedAt,
+      addedAt: now,
+      updatedAt: now,
+    };
+    items.unshift(item);
+    write(PLAN_KEY, items);
+    return delay(ok(item), 200);
+  }
+
+  async updateContentPlanStatus(
+    id: string,
+    status: PlanStatus
+  ): Promise<ServiceResult<ContentPlanItem>> {
+    const items = read<ContentPlanItem[]>(PLAN_KEY, []);
+    const idx = items.findIndex((item) => item.id === id);
+    if (idx === -1) return fail<ContentPlanItem>('Plan item not found.');
+    const updated: ContentPlanItem = {
+      ...items[idx],
+      status,
+      updatedAt: new Date().toISOString(),
+    };
+    items[idx] = updated;
+    write(PLAN_KEY, items);
+    return delay(ok(updated), 150);
+  }
+
+  async removeFromContentPlan(id: string): Promise<ServiceResult<void>> {
+    const items = read<ContentPlanItem[]>(PLAN_KEY, []);
+    if (!items.some((item) => item.id === id)) {
+      return fail<void>('Plan item not found.');
+    }
+    write(
+      PLAN_KEY,
+      items.filter((item) => item.id !== id)
+    );
+    return delay(ok(undefined), 150);
   }
 }

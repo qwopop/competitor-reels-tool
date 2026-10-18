@@ -2,7 +2,14 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
-import type { ReelsApi, Reel, Competitor, RemixedReel, ServiceResult } from '@/types';
+import type {
+  ReelsApi,
+  Reel,
+  Competitor,
+  ContentPlanItem,
+  RemixedReel,
+  ServiceResult,
+} from '@/types';
 
 // A stub service whose returns we control per-test. This keeps component tests
 // deterministic and fast, and proves the UI only depends on the ReelsApi
@@ -44,11 +51,28 @@ class StubApi implements Partial<ReelsApi> {
     data: null,
     error: 'nope',
   }));
+  listContentPlan = vi.fn(async (): Promise<ServiceResult<ContentPlanItem[]>> => ({
+    data: [],
+    error: null,
+  }));
+  addToContentPlan = vi.fn(async (): Promise<ServiceResult<ContentPlanItem>> => ({
+    data: null,
+    error: 'nope',
+  }));
+  updateContentPlanStatus = vi.fn(async (): Promise<ServiceResult<ContentPlanItem>> => ({
+    data: null,
+    error: 'nope',
+  }));
+  removeFromContentPlan = vi.fn(async (): Promise<ServiceResult<void>> => ({
+    data: undefined,
+    error: null,
+  }));
 }
 
 import { ApiProvider } from '@/services/ApiContext';
 import { DashboardPage } from '@/pages/DashboardPage';
 import { CompetitorsPage } from '@/pages/CompetitorsPage';
+import { ContentPlanPage } from '@/pages/ContentPlanPage';
 
 function reel(overrides: Partial<Reel> = {}): Reel {
   return {
@@ -75,6 +99,7 @@ function renderWithRouter(stub: StubApi, initial = '/') {
         <Routes>
           <Route index element={<DashboardPage />} />
           <Route path="/competitors" element={<CompetitorsPage />} />
+          <Route path="/content-plan" element={<ContentPlanPage />} />
         </Routes>
       </MemoryRouter>
     </ApiProvider>
@@ -273,3 +298,95 @@ describe('CompetitorsPage', () => {
     );
   });
 });
+
+function planItem(overrides: Partial<ContentPlanItem> = {}): ContentPlanItem {
+  return {
+    id: 'plan_1',
+    reelId: 'reel_1',
+    status: 'not_started',
+    competitorUsername: 'vibecoder',
+    caption: 'I let AI build my SaaS in 48 hours',
+    thumbnailUrl: 'https://example.com/thumb.jpg',
+    permalink: 'https://instagram.com/vibecoder/',
+    postedAt: new Date(Date.now() - 86_400_000).toISOString(),
+    addedAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    ...overrides,
+  };
+}
+
+describe('Content plan', () => {
+  it('adds a Reel to the plan from the Reels grid', async () => {
+    const user = userEvent.setup();
+    const stub = new StubApi();
+    stub.listReels.mockResolvedValue({ data: [reel()], error: null });
+    stub.addToContentPlan.mockResolvedValue({
+      data: planItem(),
+      error: null,
+    });
+    renderWithRouter(stub);
+
+    await user.click(await screen.findByRole('button', { name: /add to plan/i }));
+
+    expect(stub.addToContentPlan).toHaveBeenCalledWith('reel_1');
+    await waitFor(() =>
+      expect(screen.getByText(/in content plan/i)).toBeInTheDocument()
+    );
+  });
+
+  it('shows Reels already in the plan as in the plan', async () => {
+    const stub = new StubApi();
+    stub.listReels.mockResolvedValue({ data: [reel()], error: null });
+    stub.listContentPlan.mockResolvedValue({
+      data: [planItem({ status: 'ready' })],
+      error: null,
+    });
+    renderWithRouter(stub);
+
+    expect(await screen.findByText(/in content plan/i)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /add to plan/i })).toBeNull();
+  });
+
+  it('changes an item status from the plan page', async () => {
+    const user = userEvent.setup();
+    const stub = new StubApi();
+    stub.listContentPlan.mockResolvedValue({ data: [planItem()], error: null });
+    stub.updateContentPlanStatus.mockResolvedValue({
+      data: planItem({ status: 'ready' }),
+      error: null,
+    });
+    render(
+      <ApiProvider api={stub as unknown as ReelsApi}>
+        <MemoryRouter initialEntries={['/content-plan']}>
+          <Routes>
+            <Route path="/content-plan" element={<ContentPlanPage />} />
+          </Routes>
+        </MemoryRouter>
+      </ApiProvider>
+    );
+
+    const group = await screen.findByRole('group', { name: /status for/i });
+    await user.click(within(group).getByRole('button', { name: /ready to film/i }));
+
+    expect(stub.updateContentPlanStatus).toHaveBeenCalledWith('plan_1', 'ready');
+    await waitFor(() =>
+      expect(
+        within(group).getByRole('button', { name: /ready to film/i })
+      ).toHaveAttribute('aria-pressed', 'true')
+    );
+  });
+
+  it('shows the empty state when nothing is planned', async () => {
+    const stub = new StubApi();
+    render(
+      <ApiProvider api={stub as unknown as ReelsApi}>
+        <MemoryRouter initialEntries={['/content-plan']}>
+          <Routes>
+            <Route path="/content-plan" element={<ContentPlanPage />} />
+          </Routes>
+        </MemoryRouter>
+      </ApiProvider>
+    );
+    expect(await screen.findByText(/nothing planned yet/i)).toBeInTheDocument();
+  });
+})

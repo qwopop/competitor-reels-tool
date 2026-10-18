@@ -1,5 +1,7 @@
 import type {
   Competitor,
+  ContentPlanItem,
+  PlanStatus,
   Reel,
   ReelsApi,
   RemixedReel,
@@ -86,5 +88,21 @@ export class HttpReelsApi implements ReelsApi {
     patch: Partial<Pick<RemixedReel, 'title' | 'hook' | 'script' | 'cta'>>
   ) {
     return request<RemixedReel>('PATCH', `/remixes/${enc(id)}`, patch);
+  }
+
+  listContentPlan() {
+    return request<ContentPlanItem[]>('GET', '/content-plan');
+  }
+
+  addToContentPlan(reelId: string) {
+    return request<ContentPlanItem>('POST', '/content-plan', { reelId });
+  }
+
+  updateContentPlanStatus(id: string, status: PlanStatus) {
+    return request<ContentPlanItem>('PATCH', `/content-plan/${enc(id)}`, { status });
+  }
+
+  removeFromContentPlan(id: string) {
+    return request<void>('DELETE', `/content-plan/${enc(id)}`);
   }
 }

@@ -26,7 +26,8 @@ Open **http://localhost:5173**.
 
 1. Go to **Competitors** and paste an Instagram profile URL (or `@username`).
 2. Click **Fetch reels** to pull 20 Reels into the library.
-3. On the **Reels Library** page, click **Remix** on any Reel to generate a breakdown, then edit it and save.
+3. On the **Reels** page, click **Remix** on any Reel to generate a breakdown, then edit it and save.
+4. Click **Add to plan** on any Reel to queue it for filming. Track each one on the **Content Plan** page with ❌ not started, ⏳ ready to film, or ✅ filmed.
 
 Data is stored in `backend/data/app.db` and survives restarts. Delete that file to start fresh.
 

@@ -1,5 +1,7 @@
 """Pydantic models that define the JSON shape of the API (camelCase on the wire)."""
 
+from typing import Literal
+
 from pydantic import BaseModel, ConfigDict, Field
 from pydantic.alias_generators import to_camel
 
@@ -49,6 +51,30 @@ class RemixedReel(ApiModel):
     cta: str
     created_at: str
     updated_at: str
+
+
+PlanStatus = Literal["not_started", "ready", "filmed"]
+
+
+class ContentPlanItem(ApiModel):
+    id: str
+    reel_id: str
+    status: PlanStatus
+    competitor_username: str
+    caption: str
+    thumbnail_url: str
+    permalink: str
+    posted_at: str
+    added_at: str
+    updated_at: str
+
+
+class AddToPlanRequest(ApiModel):
+    reel_id: str
+
+
+class UpdatePlanItemRequest(ApiModel):
+    status: PlanStatus
 
 
 class UpdateRemixRequest(ApiModel):

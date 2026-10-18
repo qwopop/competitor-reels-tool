@@ -26,6 +26,13 @@ A single user with no login. Anyone who can reach the app can use it.
 5. **Edit a remix.** The user edits the title, hook, script, or CTA and saves.
    Only changed fields are sent to the server.
 6. **Stop tracking.** Removing a competitor deletes its Reels and their remixes.
+7. **Plan filming.** From the Reels page or a remix, the user adds a Reel to the
+   content plan. Each item has a status shown as an emoji: ❌ not started (the
+   default, nothing ready yet), ⏳ ready to film (script done, video ready to
+   go), or ✅ filmed (filmed and posted). The Content Plan page lists the items
+   with their status and counts, and the user changes status there. Plan items
+   keep their own copy of the Reel's details, so they survive re-fetching a
+   competitor's Reels.
 
 ## Data
 
@@ -33,6 +40,7 @@ A single user with no login. Anyone who can reach the app can use it.
 - **Reel:** id, competitor, shortcode, permalink, caption, thumbnail URL, view,
   like, and comment counts, posted time, fetched time.
 - **Remix:** id, Reel, title, hook, script, CTA, created and updated times.
+- **Plan item:** id, source Reel id, status, a copy of the Reel's details, added and updated times.
 
 Data survives restarts (SQLite). The contract is in `openapi.yaml`.
 

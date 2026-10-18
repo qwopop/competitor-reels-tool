@@ -159,3 +159,68 @@ def test_data_persists_across_app_restarts(tmp_path):
     with TestClient(create_app(db_url)) as client:
         competitors = client.get("/api/competitors").json()
         assert [c["username"] for c in competitors] == ["vibecoder"]
+
+
+def seed_reel(client):
+    comp = add(client).json()
+    return client.post(f"/api/competitors/{comp['id']}/reels/fetch").json()[0]
+
+
+def test_add_reel_to_content_plan_starts_as_not_started(client):
+    reel = seed_reel(client)
+    res = client.post("/api/content-plan", json={"reelId": reel["id"]})
+    assert res.status_code == 201
+    item = res.json()
+    assert item["reelId"] == reel["id"]
+    assert item["status"] == "not_started"
+    assert item["caption"] == reel["caption"]
+    assert item["competitorUsername"] == "creator"
+
+
+def test_adding_the_same_reel_twice_returns_existing_item(client):
+    reel = seed_reel(client)
+    first = client.post("/api/content-plan", json={"reelId": reel["id"]}).json()
+    second = client.post("/api/content-plan", json={"reelId": reel["id"]})
+    assert second.status_code == 200
+    assert second.json()["id"] == first["id"]
+    assert len(client.get("/api/content-plan").json()) == 1
+
+
+def test_add_unknown_reel_to_plan_is_404(client):
+    res = client.post("/api/content-plan", json={"reelId": "nope"})
+    assert res.status_code == 404
+
+
+def test_update_plan_status(client):
+    reel = seed_reel(client)
+    item = client.post("/api/content-plan", json={"reelId": reel["id"]}).json()
+    for status in ["ready", "filmed", "not_started"]:
+        res = client.patch(f"/api/content-plan/{item['id']}", json={"status": status})
+        assert res.status_code == 200
+        assert res.json()["status"] == status
+
+
+def test_update_plan_status_rejects_unknown_status(client):
+    reel = seed_reel(client)
+    item = client.post("/api/content-plan", json={"reelId": reel["id"]}).json()
+    res = client.patch(f"/api/content-plan/{item['id']}", json={"status": "done"})
+    assert res.status_code == 422
+
+
+def test_remove_from_content_plan(client):
+    reel = seed_reel(client)
+    item = client.post("/api/content-plan", json={"reelId": reel["id"]}).json()
+    assert client.delete(f"/api/content-plan/{item['id']}").status_code == 204
+    assert client.get("/api/content-plan").json() == []
+    assert client.delete(f"/api/content-plan/{item['id']}").status_code == 404
+
+
+def test_plan_survives_refetching_the_competitor_reels(client):
+    """Refetching replaces Reel rows, so plan items must keep their own copy."""
+    reel = seed_reel(client)
+    item = client.post("/api/content-plan", json={"reelId": reel["id"]}).json()
+    comp_id = client.get("/api/competitors").json()[0]["id"]
+    client.post(f"/api/competitors/{comp_id}/reels/fetch")
+    plan = client.get("/api/content-plan").json()
+    assert [p["id"] for p in plan] == [item["id"]]
+    assert plan[0]["caption"] == reel["caption"]

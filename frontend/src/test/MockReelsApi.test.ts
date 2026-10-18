@@ -186,3 +186,40 @@ describe('MockReelsApi persistence', () => {
     expect(list.data?.[0].username).toBe('creator');
   });
 });
+
+describe('MockReelsApi content plan', () => {
+  async function seededReel() {
+    const api = freshApi();
+    const comp = await api.addCompetitor('https://instagram.com/creator');
+    const reels = await api.fetchReelsForCompetitor(comp.data!.id);
+    return { api, reel: reels.data![0] };
+  }
+
+  it('adds a Reel as not_started and returns the existing item on repeat', async () => {
+    const { api, reel } = await seededReel();
+    const first = await api.addToContentPlan(reel.id);
+    expect(first.data?.status).toBe('not_started');
+    expect(first.data?.reelId).toBe(reel.id);
+
+    const second = await api.addToContentPlan(reel.id);
+    expect(second.data?.id).toBe(first.data?.id);
+    expect((await api.listContentPlan()).data).toHaveLength(1);
+  });
+
+  it('updates status and removes items', async () => {
+    const { api, reel } = await seededReel();
+    const item = (await api.addToContentPlan(reel.id)).data!;
+
+    const updated = await api.updateContentPlanStatus(item.id, 'filmed');
+    expect(updated.data?.status).toBe('filmed');
+
+    await api.removeFromContentPlan(item.id);
+    expect((await api.listContentPlan()).data).toEqual([]);
+  });
+
+  it('errors for an unknown Reel', async () => {
+    const res = await freshApi().addToContentPlan('nope');
+    expect(res.error).toMatch(/not found/);
+  });
+});
+

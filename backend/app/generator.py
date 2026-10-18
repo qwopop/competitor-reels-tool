@@ -11,7 +11,7 @@ from datetime import UTC, datetime, timedelta
 from urllib.parse import urlparse
 from uuid import uuid4
 
-from app.models import CompetitorRow, ReelRow, RemixRow
+from app.models import ContentPlanRow, CompetitorRow, ReelRow, RemixRow
 
 REELS_PER_FETCH = 20
 
@@ -139,5 +139,21 @@ def build_remix(reel: ReelRow) -> RemixRow:
         script=SCRIPT_BANK[seed % len(SCRIPT_BANK)],
         cta=CTA_BANK[seed % len(CTA_BANK)],
         created_at=stamp,
+        updated_at=stamp,
+    )
+
+
+def build_plan_item(reel: ReelRow) -> ContentPlanRow:
+    stamp = now_iso()
+    return ContentPlanRow(
+        id=new_id("plan"),
+        reel_id=reel.id,
+        status="not_started",
+        competitor_username=reel.competitor_username,
+        caption=reel.caption,
+        thumbnail_url=reel.thumbnail_url,
+        permalink=reel.permalink,
+        posted_at=reel.posted_at,
+        added_at=stamp,
         updated_at=stamp,
     )

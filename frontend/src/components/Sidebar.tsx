@@ -3,6 +3,7 @@ import { NavLink } from 'react-router-dom';
 const navItems = [
   { to: '/', label: 'Reels', end: true },
   { to: '/competitors', label: 'Competitors', end: false },
+  { to: '/content-plan', label: 'Content Plan', end: false },
 ];
 
 export function Sidebar() {
