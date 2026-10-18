@@ -9,9 +9,9 @@ Track Instagram competitors, pull their 20 most recent Reels into a library, and
 
 ## Screenshots
 
-| Reels library | Competitors | Remix editor |
-| --- | --- | --- |
-| ![Reels library](docs/screenshots/dashboard.png) | ![Competitors](docs/screenshots/competitors.png) | ![Remix editor](docs/screenshots/remix.png) |
+| Reels | Competitors | Content plan | Remix editor |
+| --- | --- | --- | --- |
+| ![Reels](docs/screenshots/dashboard.png) | ![Competitors](docs/screenshots/competitors.png) | ![Content plan](docs/screenshots/content-plan.png) | ![Remix editor](docs/screenshots/remix.png) |
 
 ## Run it locally
 
