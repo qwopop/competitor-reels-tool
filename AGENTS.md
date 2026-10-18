@@ -7,6 +7,10 @@
 - `openapi.yaml`: the API contract between frontend and backend. Change it first when an endpoint changes, then update both sides.
 - `docs/`: supporting docs, including `docs/spec.md`.
 
+## Design
+
+For any page or UI work in `frontend/`, follow the `design-taste-frontend` skill in `.claude/skills/design-taste-frontend/SKILL.md`. It is a copy of `skills/taste-skill` from https://github.com/Leonxlnx/taste-skill. Its scripts need Node 22+ and Chrome, Edge or Chromium.
+
 ## Backend (use uv)
 
 ```
