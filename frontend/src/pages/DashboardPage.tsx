@@ -53,12 +53,12 @@ export function DashboardPage() {
   }
 
   const stats = dashboardStats(data.competitors, data.reels, data.remixes, data.plan);
-  const tiles: { label: string; value: number }[] = [
+  const tiles: { label: string; value: number; highlight?: boolean }[] = [
     { label: 'Competitors', value: stats.totalCompetitors },
     { label: 'Reels', value: stats.totalReels },
     { label: 'Remixes', value: stats.totalRemixes },
     { label: 'Planned videos', value: stats.plannedVideos },
-    { label: 'Views', value: stats.totalViews },
+    { label: 'Views', value: stats.totalViews, highlight: true },
     { label: 'Likes', value: stats.totalLikes },
     { label: 'Comments', value: stats.totalComments },
   ];
@@ -76,7 +76,7 @@ export function DashboardPage() {
 
       <section aria-label="Totals" className="grid grid-cols-2 gap-px bg-ground sm:grid-cols-4">
         {tiles.map((tile) => (
-          <div key={tile.label} className="bg-surface p-6">
+          <div key={tile.label} className={tile.highlight ? 'bg-accent/15 p-6' : 'bg-surface p-6'}>
             <p className="text-3xl font-semibold tabular-nums tracking-[-0.02em] text-ink">
               {compactNumber(tile.value)}
             </p>
@@ -87,7 +87,9 @@ export function DashboardPage() {
 
       <div className="mt-14 grid gap-12 lg:grid-cols-2">
         <section aria-labelledby="top-reel">
-          <h2 id="top-reel" className="text-xl font-semibold text-ink">Top-performing Reel</h2>
+          <h2 id="top-reel" className="flex items-center gap-3 text-xl font-semibold text-ink">
+            <span aria-hidden="true" className="h-2 w-2 bg-accent" /> Top-performing Reel
+          </h2>
           <p className="mt-1 text-sm text-ink/60">The Reel with the most views.</p>
           {stats.topReel ? (
             <div className="mt-6 flex gap-5">
@@ -106,7 +108,9 @@ export function DashboardPage() {
             <p className="mt-6 text-base text-ink/70">No Reels yet. Fetch a competitor's Reels.</p>
           )}
 
-          <h2 className="mt-12 text-xl font-semibold text-ink">Most-viewed competitor</h2>
+          <h2 className="mt-12 flex items-center gap-3 text-xl font-semibold text-ink">
+            <span aria-hidden="true" className="h-2 w-2 bg-accent" /> Most-viewed competitor
+          </h2>
           <p className="mt-6 text-lg text-ink">
             {stats.mostViewedCompetitor
               ? <>@{stats.mostViewedCompetitor.username} <span className="stat">· {compactNumber(stats.mostViewedCompetitor.views)} views</span></>
@@ -115,7 +119,9 @@ export function DashboardPage() {
         </section>
 
         <section aria-labelledby="content-progress">
-          <h2 id="content-progress" className="text-xl font-semibold text-ink">Content plan progress</h2>
+          <h2 id="content-progress" className="flex items-center gap-3 text-xl font-semibold text-ink">
+            <span aria-hidden="true" className="h-2 w-2 bg-accent" /> Content plan progress
+          </h2>
           <ul className="mt-6 space-y-2">
             {PLAN_STATUSES.map((s) => (
               <li key={s.value} className="flex items-center justify-between bg-surface px-5 py-3 text-base">
@@ -133,13 +139,15 @@ export function DashboardPage() {
       </div>
 
       <section aria-labelledby="recent" className="mt-14">
-        <h2 id="recent" className="text-xl font-semibold text-ink">Recent Reels</h2>
+        <h2 id="recent" className="flex items-center gap-3 text-xl font-semibold text-ink">
+          <span aria-hidden="true" className="h-2 w-2 bg-accent" /> Recent Reels
+        </h2>
         {stats.recentReels.length === 0 ? (
           <p className="mt-6 text-base text-ink/70">No Reels yet.</p>
         ) : (
           <ul className="mt-6 max-w-4xl">
             {stats.recentReels.map((reel) => (
-              <li key={reel.id} className="flex flex-wrap items-center justify-between gap-4 bg-surface px-5 py-4 [&+&]:mt-2">
+              <li key={reel.id} className="flex flex-wrap items-center justify-between gap-4 bg-surface px-5 py-4 transition-colors duration-200 hover:bg-surface-2 [&+&]:mt-2">
                 <div className="min-w-0">
                   <p className="text-sm text-ink/60">@{reel.competitorUsername} · {relativeTime(reel.postedAt)}</p>
                   <p className="truncate text-base text-ink">{reel.caption}</p>

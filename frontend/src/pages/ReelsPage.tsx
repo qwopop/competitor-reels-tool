@@ -210,7 +210,7 @@ export function ReelsPage() {
       ) : (
         <ul className="max-w-5xl">
           {visible.map((reel) => (
-            <li key={reel.id} className="rise bg-surface p-4 [&+&]:mt-2">
+            <li key={reel.id} className="rise bg-surface p-4 transition-colors duration-200 hover:bg-surface-2 [&+&]:mt-2">
               <div className="flex flex-wrap items-center gap-5">
                 <img
                   src={reel.thumbnailUrl}

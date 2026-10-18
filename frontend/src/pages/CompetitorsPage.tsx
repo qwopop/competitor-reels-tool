@@ -117,7 +117,7 @@ export function CompetitorsPage() {
             const justFetched = fetchedId === c.id;
             const count = reelCounts[c.id] ?? 0;
             return (
-              <li key={c.id} className="rise bg-surface px-6 py-5 [&+&]:mt-2">
+              <li key={c.id} className="rise bg-surface px-6 py-5 transition-colors duration-200 hover:bg-surface-2 [&+&]:mt-2">
                 <div className="flex flex-wrap items-center gap-x-6 gap-y-4">
                   <img src={c.avatarUrl} alt={c.displayName} className="h-12 w-12 bg-surface-2 object-cover" />
                   <div className="min-w-0 flex-1">
