@@ -47,11 +47,10 @@ export function Sidebar() {
         <div className="rounded-xl border border-white/10 bg-ink-800/60 p-3">
           <div className="flex items-center gap-2 text-xs text-gray-400">
             <Film size={14} className="text-accent-400" />
-            <span>Mock backend active</span>
+            <span>Backend connected</span>
           </div>
           <p className="mt-1.5 text-[11px] leading-relaxed text-gray-500">
-            Data is stored locally in your browser. Swap the service layer to go
-            live.
+            Data is stored in the local API database (backend/data).
           </p>
         </div>
       </div>

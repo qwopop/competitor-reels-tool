@@ -7,6 +7,12 @@ Track Instagram competitors, pull their 20 most recent Reels into a library, and
 - **Contract:** [`openapi.yaml`](openapi.yaml)
 - **Agent guidance:** [`AGENTS.md`](AGENTS.md)
 
+## Screenshots
+
+| Reels library | Competitors | Remix editor |
+| --- | --- | --- |
+| ![Reels library](docs/screenshots/dashboard.png) | ![Competitors](docs/screenshots/competitors.png) | ![Remix editor](docs/screenshots/remix.png) |
+
 ## Run it locally
 
 Requirements: [uv](https://docs.astral.sh/uv/), Node.js 20+, and `make`.
