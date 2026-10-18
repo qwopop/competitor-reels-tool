@@ -13,7 +13,8 @@ export interface Reel {
   id: string;
   competitorId: string;
   competitorUsername: string;
-  // Instagram's short code used to build the permalink.
+  // Instagram's short code. Sample Reels have no real post, so `permalink`
+  // points at the competitor's profile instead.
   shortcode: string;
   permalink: string;
   caption: string;

@@ -121,7 +121,7 @@ export function DashboardPage() {
                     rel="noreferrer"
                     className="text-[11px] text-gray-500 underline-offset-2 hover:text-gray-300 hover:underline"
                   >
-                    View on Instagram
+                    View profile on Instagram
                   </a>
                   <button
                     onClick={() => handleRemix(reel)}

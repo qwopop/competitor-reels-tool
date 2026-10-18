@@ -75,7 +75,7 @@ describe('MockReelsApi.fetchReelsForCompetitor', () => {
     const reels = await api.fetchReelsForCompetitor(comp.data!.id);
     expect(reels.data).toHaveLength(20);
     expect(reels.data?.[0].competitorUsername).toBe('creator');
-    expect(reels.data?.[0].permalink).toMatch(/instagram\.com\/reel\//);
+    expect(reels.data?.[0].permalink).toBe(comp.data!.instagramUrl);
 
     const stored = await api.listReels();
     expect(stored.data).toHaveLength(20);

@@ -161,7 +161,7 @@ export function RemixPage() {
                   rel="noreferrer"
                   className="mt-3 inline-flex items-center gap-1 text-xs text-gray-400 hover:text-gray-200"
                 >
-                  Open on Instagram <ExternalLink size={12} />
+                  View profile on Instagram <ExternalLink size={12} />
                 </a>
               </div>
             </>

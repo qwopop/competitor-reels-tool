@@ -234,8 +234,11 @@ components:
         competitorUsername: { type: string }
         shortcode:
           type: string
-          description: Instagram short code used to build the permalink
-        permalink: { type: string, format: uri }
+          description: Instagram short code (sample Reels use generated values)
+        permalink:
+          type: string
+          format: uri
+          description: Link to the competitor's Instagram profile
         caption: { type: string }
         thumbnailUrl: { type: string, format: uri }
         viewCount: { type: integer, minimum: 0 }

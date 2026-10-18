@@ -58,7 +58,7 @@ def test_fetch_stores_exactly_20_reels_and_refetch_replaces_them(client):
     assert first.status_code == 200
     assert len(first.json()) == generator.REELS_PER_FETCH
     assert first.json()[0]["competitorUsername"] == "creator"
-    assert first.json()[0]["permalink"].startswith("https://www.instagram.com/reel/")
+    assert first.json()[0]["permalink"] == "https://www.instagram.com/creator/"
 
     client.post(f"/api/competitors/{comp['id']}/reels/fetch")
     assert len(client.get("/api/reels").json()) == generator.REELS_PER_FETCH

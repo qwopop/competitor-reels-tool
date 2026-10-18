@@ -135,7 +135,7 @@ function mockReelsFor(competitor: Competitor): Reel[] {
       competitorId: competitor.id,
       competitorUsername: competitor.username,
       shortcode,
-      permalink: `https://www.instagram.com/reel/${shortcode}/`,
+      permalink: competitor.instagramUrl,
       caption: pick(VIBECODING_TOPICS, i),
       thumbnailUrl: `https://picsum.photos/seed/${shortcode}/640/800`,
       viewCount: Math.round(50_000 + Math.random() * 900_000),

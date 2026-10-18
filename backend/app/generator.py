@@ -115,7 +115,7 @@ def build_reels(competitor: CompetitorRow) -> list[ReelRow]:
                 competitor_id=competitor.id,
                 competitor_username=competitor.username,
                 shortcode=shortcode,
-                permalink=f"https://www.instagram.com/reel/{shortcode}/",
+                permalink=competitor.instagram_url,
                 caption=VIBECODING_TOPICS[i % len(VIBECODING_TOPICS)],
                 thumbnail_url=f"https://picsum.photos/seed/{shortcode}/640/800",
                 view_count=random.randint(50_000, 950_000),
