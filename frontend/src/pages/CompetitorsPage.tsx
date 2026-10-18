@@ -1,14 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import {
-  Instagram,
-  Plus,
-  Trash2,
-  RefreshCw,
-  Film,
-  CheckCircle2,
-  ExternalLink,
-} from 'lucide-react';
+import { Plus, Trash2, RefreshCw, Check } from 'lucide-react';
 import { useApi } from '@/services';
 import type { Competitor } from '@/types';
 import { ErrorBanner, FullPageLoader, Spinner } from '@/components/ui';
@@ -41,10 +33,7 @@ export function CompetitorsPage() {
     let active = true;
     api.listReels().then((res) => {
       if (!active) return;
-      const reels = res.data ?? [];
-      const counts: Record<string, number> = {};
-      for (const r of reels) counts[r.competitorId] = (counts[r.competitorId] ?? 0) + 1;
-      setReelCounts(counts);
+      setReelCounts(countByCompetitor(res.data ?? []));
     });
     return () => {
       active = false;
@@ -79,9 +68,7 @@ export function CompetitorsPage() {
     }
     setFetchedId(c.id);
     const reels = await api.listReels();
-    const counts: Record<string, number> = {};
-    for (const r of reels.data ?? []) counts[r.competitorId] = (counts[r.competitorId] ?? 0) + 1;
-    setReelCounts(counts);
+    setReelCounts(countByCompetitor(reels.data ?? []));
   }
 
   async function handleRemove(c: Competitor) {
@@ -95,127 +82,111 @@ export function CompetitorsPage() {
   }
 
   return (
-    <div className="animate-fade-in">
-      <header className="mb-8">
-        <h1 className="text-2xl font-semibold tracking-tight text-white">
+    <div>
+      <header className="mb-14">
+        <h1 className="text-5xl font-semibold leading-[0.95] tracking-[-0.03em] text-ink sm:text-6xl">
           Competitors
         </h1>
-        <p className="mt-1 text-sm text-gray-400">
-          Paste any Instagram profile URL to track a competitor and pull their 20
-          most recent Reels into your library.
+        <p className="mt-5 max-w-md text-base text-ink/70">
+          Paste an Instagram profile to track it. Fetch its 20 most recent Reels
+          into your library.
         </p>
       </header>
 
-      <form onSubmit={handleAdd} className="card mb-8 p-5">
+      <form onSubmit={handleAdd} className="mb-14 max-w-2xl">
         <label htmlFor="ig-url" className="label">
           Instagram profile URL
         </label>
-        <div className="mt-2 flex flex-col gap-3 sm:flex-row">
-          <div className="relative flex-1">
-            <Instagram
-              size={16}
-              className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-500"
-            />
-            <input
-              id="ig-url"
-              type="text"
-              value={url}
-              onChange={(e) => setUrl(e.target.value)}
-              placeholder="https://instagram.com/vibecoder"
-              className="input pl-10"
-              autoComplete="off"
-            />
-          </div>
-          <button type="submit" disabled={adding || !url.trim()} className="btn-primary">
+        <div className="mt-3 flex flex-col gap-3 sm:flex-row">
+          <input
+            id="ig-url"
+            type="text"
+            value={url}
+            onChange={(e) => setUrl(e.target.value)}
+            placeholder="https://instagram.com/vibecoder"
+            className="input"
+            autoComplete="off"
+          />
+          <button
+            type="submit"
+            disabled={adding || !url.trim()}
+            className="btn-primary whitespace-nowrap"
+          >
             {adding ? <Spinner /> : <Plus size={15} />} Add competitor
           </button>
         </div>
-        <p className="mt-2 text-[11px] text-gray-500">
-          Tip: you can also paste a bare <span className="text-gray-300">@username</span>.
+        <p className="mt-3 text-sm text-ink/50">
+          A bare @username works too.
         </p>
       </form>
 
-      {error && <div className="mb-6"><ErrorBanner message={error} /></div>}
+      {error && (
+        <div className="mb-10 max-w-2xl">
+          <ErrorBanner message={error} />
+        </div>
+      )}
 
       {competitors === null ? (
         <FullPageLoader label="Loading competitors…" />
       ) : competitors.length === 0 ? (
-        <div className="card flex flex-col items-center justify-center px-6 py-14 text-center">
-          <div className="mb-3 grid h-12 w-12 place-items-center rounded-xl bg-brand-500/10 text-brand-300">
-            <Instagram size={20} />
-          </div>
-          <h3 className="text-base font-semibold text-white">No competitors yet</h3>
-          <p className="mt-1 max-w-sm text-sm text-gray-400">
-            Add your first Instagram account above to start collecting Reels.
-          </p>
-        </div>
+        <p className="text-base text-ink/70">
+          No competitors yet. Add your first Instagram account above.
+        </p>
       ) : (
-        <ul className="space-y-4">
+        <ul className="max-w-3xl">
           {competitors.map((c) => {
             const isFetching = fetchingId === c.id;
             const justFetched = fetchedId === c.id;
             const count = reelCounts[c.id] ?? 0;
             return (
-              <li key={c.id} className="card p-5">
-                <div className="flex flex-wrap items-center gap-4">
+              <li key={c.id} className="bg-surface px-6 py-5 [&+&]:mt-2">
+                <div className="flex flex-wrap items-center gap-x-6 gap-y-4">
                   <img
                     src={c.avatarUrl}
                     alt={c.displayName}
-                    className="h-12 w-12 rounded-full border border-white/10 object-cover"
+                    className="h-12 w-12 bg-surface-2 object-cover"
                   />
                   <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
-                      <h3 className="truncate text-sm font-semibold text-white">
-                        {c.displayName}
-                      </h3>
-                      <a
-                        href={c.instagramUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="text-gray-500 hover:text-gray-300"
-                        title="Open on Instagram"
-                      >
-                        <ExternalLink size={13} />
-                      </a>
-                    </div>
-                    <p className="truncate text-xs text-gray-500">
-                      @{c.username} · added {relativeTime(c.addedAt)}
+                    <h3 className="truncate text-lg font-medium text-ink">
+                      {c.displayName}
+                    </h3>
+                    <p className="truncate text-sm text-ink/60">
+                      @{c.username} · added {relativeTime(c.addedAt)} · {count}{' '}
+                      reels
                     </p>
                   </div>
 
                   <div className="flex items-center gap-2">
-                    <span className="chip border border-white/10 bg-white/5 text-gray-300">
-                      <Film size={12} /> {count} reels
-                    </span>
                     <button
                       onClick={() => handleFetch(c)}
                       disabled={isFetching}
-                      className="btn-outline px-3 py-1.5 text-xs"
+                      className="btn-outline px-3.5 py-2 text-sm"
                     >
                       {isFetching ? (
                         <Spinner />
                       ) : justFetched ? (
-                        <CheckCircle2 size={13} className="text-accent-400" />
+                        <Check size={14} className="text-accent" />
                       ) : (
-                        <RefreshCw size={13} />
+                        <RefreshCw size={14} />
                       )}
                       {isFetching ? 'Fetching…' : justFetched ? 'Fetched' : 'Fetch reels'}
                     </button>
                     <button
                       onClick={() => handleRemove(c)}
-                      className="btn-ghost px-2.5 py-1.5 text-xs text-gray-400 hover:text-danger-400"
+                      className="btn-ghost px-2.5 py-2 hover:text-danger"
                       title="Remove competitor"
+                      aria-label="Remove competitor"
                     >
-                      <Trash2 size={14} />
+                      <Trash2 size={15} />
                     </button>
                   </div>
                 </div>
 
                 {justFetched && (
-                  <div className="mt-4 flex items-center justify-between rounded-lg border border-accent-500/20 bg-accent-500/10 px-4 py-3 text-sm text-accent-200">
+                  <div className="mt-4 flex flex-wrap items-center justify-between gap-3 bg-accent/10 px-4 py-3 text-sm text-ink">
                     <span>Pulled 20 Reels into your library.</span>
-                    <Link to="/" className="font-medium underline-offset-2 hover:underline">
-                      View dashboard
+                    <Link to="/" className="font-medium underline-offset-4 hover:underline">
+                      View reels
                     </Link>
                   </div>
                 )}
@@ -226,4 +197,10 @@ export function CompetitorsPage() {
       )}
     </div>
   );
+}
+
+function countByCompetitor(reels: { competitorId: string }[]): Record<string, number> {
+  const counts: Record<string, number> = {};
+  for (const r of reels) counts[r.competitorId] = (counts[r.competitorId] ?? 0) + 1;
+  return counts;
 }

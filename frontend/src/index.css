@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -16,59 +16,70 @@ body,
 
 body {
   margin: 0;
-  background-color: #0a0b14;
-  color: #e7e9f3;
-  font-family: 'Inter', ui-sans-serif, system-ui, sans-serif;
+  background-color: #0e0f0d;
+  color: #f3f2ec;
+  font-family: 'Instrument Sans', ui-sans-serif, system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }
 
-/* Subtle scrollbars that match the dark theme. */
-*::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
-}
-*::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.08);
-  border-radius: 9999px;
-  border: 2px solid transparent;
-  background-clip: padding-box;
-}
-*::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.16);
-  background-clip: padding-box;
+::selection {
+  background-color: #d4ff3a;
+  color: #0e0f0d;
 }
 
 @layer components {
   .btn {
-    @apply inline-flex items-center justify-center gap-2 rounded-lg px-3.5 py-2 text-sm font-medium transition-all duration-200 disabled:cursor-not-allowed disabled:opacity-50;
+    @apply inline-flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium transition-colors duration-200 disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent;
   }
   .btn-primary {
-    @apply btn bg-accent-500 text-ink-950 hover:bg-accent-400 active:scale-[0.98] shadow-[0_8px_24px_-10px_rgba(63,199,135,0.6)];
-  }
-  .btn-ghost {
-    @apply btn text-gray-300 hover:bg-white/5 hover:text-white;
+    @apply btn bg-accent text-ground hover:bg-accent-hover active:translate-y-px;
   }
   .btn-outline {
-    @apply btn border border-white/10 text-gray-200 hover:border-white/25 hover:bg-white/5;
+    @apply btn bg-surface-2 text-ink hover:bg-surface-3;
   }
-  .card {
-    @apply rounded-2xl border border-white/10 bg-ink-800/70 backdrop-blur-sm;
+  .btn-ghost {
+    @apply btn text-ink/70 hover:text-ink;
+  }
+  .panel {
+    @apply bg-surface p-6;
   }
   .input {
-    @apply w-full rounded-lg border border-white/10 bg-ink-900/80 px-3.5 py-2.5 text-sm text-white placeholder:text-gray-500 outline-none transition focus:border-accent-400/60 focus:ring-2 focus:ring-accent-400/20;
+    @apply w-full bg-surface-2 px-4 py-3 text-[15px] text-ink placeholder:text-ink/40 outline-none transition-colors duration-200 focus:bg-surface-3 focus-visible:outline-2 focus-visible:outline-accent;
   }
   .label {
-    @apply text-xs font-medium uppercase tracking-wider text-gray-400;
+    @apply text-sm font-medium text-ink/70;
   }
-  .chip {
-    @apply inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium;
+  .stat {
+    @apply text-sm tabular-nums text-ink/60;
   }
-  .skeleton {
-    @apply relative overflow-hidden rounded-md bg-white/5;
+}
+
+/* Entrance motion: each item rises once, staggered by its --i index. */
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
   }
-  .skeleton::after {
-    content: '';
-    @apply absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/5 to-transparent animate-shimmer;
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.rise {
+  animation: rise 0.6s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+  animation-delay: calc(var(--i, 0) * 70ms);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rise,
+  .animate-fade-in {
+    animation: none;
+  }
+  *,
+  *::before,
+  *::after {
+    transition-duration: 1ms !important;
   }
 }

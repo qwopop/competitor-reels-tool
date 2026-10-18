@@ -1,16 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import {
-  Film,
-  Heart,
-  MessageCircle,
-  Play,
-  Sparkles,
-  Eye,
-  ArrowRight,
-} from 'lucide-react';
-import { useApi } from '@/services';
 import type { Reel } from '@/types';
+import { useApi } from '@/services';
 import { compactNumber, relativeTime } from '@/utils/format';
 import { EmptyState, ErrorBanner, FullPageLoader, Spinner } from '@/components/ui';
 
@@ -45,100 +36,88 @@ export function DashboardPage() {
   }
 
   return (
-    <div className="animate-fade-in">
-      <header className="mb-8 flex flex-wrap items-end justify-between gap-4">
+    <div>
+      <header className="mb-14 flex flex-wrap items-end justify-between gap-8">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight text-white">
-            Reels Library
+          <h1 className="text-5xl font-semibold leading-[0.95] tracking-[-0.03em] text-ink sm:text-6xl">
+            Reels
           </h1>
-          <p className="mt-1 text-sm text-gray-400">
-            Every Reel fetched from your tracked competitors. Remix any of them
-            into an AI breakdown.
+          <p className="mt-5 max-w-md text-base text-ink/70">
+            Every Reel from your tracked competitors, newest first. Remix any of
+            them into a breakdown you can edit.
           </p>
         </div>
         <Link to="/competitors" className="btn-outline">
-          <Sparkles size={15} /> Add a competitor
+          Add a competitor
         </Link>
       </header>
 
-      {error && <div className="mb-6"><ErrorBanner message={error} /></div>}
+      {error && (
+        <div className="mb-10">
+          <ErrorBanner message={error} />
+        </div>
+      )}
 
       {reels === null && !error ? (
         <FullPageLoader label="Loading your reels…" />
       ) : reels && reels.length === 0 ? (
         <EmptyState
-          icon={<Film size={22} />}
           title="No reels yet"
-          description="Add an Instagram competitor and fetch their latest Reels to see them here."
+          description="Track an Instagram competitor and fetch their latest Reels to fill this library."
           action={
             <Link to="/competitors" className="btn-primary">
-              Go to Competitors <ArrowRight size={15} />
+              Go to competitors
             </Link>
           }
         />
       ) : reels && reels.length > 0 ? (
-        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
-          {reels.map((reel) => (
+        <div className="grid grid-cols-1 gap-x-8 gap-y-14 sm:grid-cols-2 lg:grid-cols-3">
+          {reels.map((reel, index) => (
             <article
               key={reel.id}
-              className="card group overflow-hidden transition-all duration-300 hover:border-white/20 hover:shadow-card"
+              className="rise"
+              style={{ '--i': Math.min(index, 8) } as React.CSSProperties}
             >
-              <div className="relative aspect-[4/5] overflow-hidden bg-ink-900">
-                <img
-                  src={reel.thumbnailUrl}
-                  alt={reel.caption}
-                  loading="lazy"
-                  className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.04]"
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-ink-950 via-ink-950/30 to-transparent" />
-                <div className="absolute left-3 top-3 chip bg-black/50 text-white backdrop-blur-sm">
-                  <Play size={11} /> Reel
-                </div>
-                <div className="absolute bottom-3 left-3 flex items-center gap-3 text-[11px] text-white/90">
-                  <span className="inline-flex items-center gap-1">
-                    <Eye size={12} /> {compactNumber(reel.viewCount)}
-                  </span>
-                  <span className="inline-flex items-center gap-1">
-                    <Heart size={12} /> {compactNumber(reel.likeCount)}
-                  </span>
-                  <span className="inline-flex items-center gap-1">
-                    <MessageCircle size={12} /> {compactNumber(reel.commentCount)}
-                  </span>
-                </div>
-              </div>
-
-              <div className="p-4">
-                <p className="text-[11px] uppercase tracking-wider text-accent-300/80">
+              <img
+                src={reel.thumbnailUrl}
+                alt={reel.caption}
+                loading="lazy"
+                className="aspect-[4/5] w-full bg-surface-2 object-cover"
+              />
+              <div className="mt-5 space-y-2">
+                <p className="text-sm text-ink/60">
                   @{reel.competitorUsername} · {relativeTime(reel.postedAt)}
                 </p>
-                <h3 className="mt-1.5 line-clamp-2 min-h-[2.5rem] text-sm font-medium text-white">
+                <h3 className="line-clamp-2 min-h-[3.5rem] text-lg font-medium leading-snug text-ink">
                   {reel.caption}
                 </h3>
-                <div className="mt-4 flex items-center justify-between gap-2">
-                  <a
-                    href={reel.permalink}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="text-[11px] text-gray-500 underline-offset-2 hover:text-gray-300 hover:underline"
-                  >
-                    View profile on Instagram
-                  </a>
-                  <button
-                    onClick={() => handleRemix(reel)}
-                    disabled={remixingId === reel.id}
-                    className="btn-primary px-3 py-1.5 text-xs"
-                  >
-                    {remixingId === reel.id ? (
-                      <>
-                        <Spinner /> Remixing…
-                      </>
-                    ) : (
-                      <>
-                        <Sparkles size={13} /> Remix
-                      </>
-                    )}
-                  </button>
-                </div>
+                <p className="stat">
+                  {compactNumber(reel.viewCount)} views · {compactNumber(reel.likeCount)} likes
+                  · {compactNumber(reel.commentCount)} comments
+                </p>
+              </div>
+              <div className="mt-5 flex items-center justify-between gap-3">
+                <a
+                  href={reel.permalink}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-sm text-ink/60 underline-offset-4 transition-colors hover:text-ink hover:underline"
+                >
+                  View profile on Instagram
+                </a>
+                <button
+                  onClick={() => handleRemix(reel)}
+                  disabled={remixingId === reel.id}
+                  className="btn-primary px-4 py-2 text-sm"
+                >
+                  {remixingId === reel.id ? (
+                    <>
+                      <Spinner /> Remixing…
+                    </>
+                  ) : (
+                    'Remix'
+                  )}
+                </button>
               </div>
             </article>
           ))}

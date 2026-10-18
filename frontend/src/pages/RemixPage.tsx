@@ -1,18 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import {
-  ArrowLeft,
-  Sparkles,
-  Eye,
-  Heart,
-  MessageCircle,
-  Save,
-  Check,
-  Anchor,
-  FileText,
-  Megaphone,
-  ExternalLink,
-} from 'lucide-react';
+import { ArrowLeft } from 'lucide-react';
 import { useApi } from '@/services';
 import type { Reel, RemixedReel } from '@/types';
 import { compactNumber, relativeTime } from '@/utils/format';
@@ -86,9 +74,9 @@ export function RemixPage() {
   if (loading) return <FullPageLoader label="Loading remix…" />;
   if (error)
     return (
-      <div className="animate-fade-in">
+      <div>
         <BackLink />
-        <div className="mt-6">
+        <div className="mt-10 max-w-xl">
           <ErrorBanner message={error} />
         </div>
       </div>
@@ -96,94 +84,55 @@ export function RemixPage() {
   if (!remix) return null;
 
   return (
-    <div className="animate-fade-in">
-      <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
-        <BackLink />
-        <div className="flex items-center gap-2">
-          {dirty && (
-            <span className="text-xs text-warn-400">Unsaved changes</span>
-          )}
-          {savedAt && !dirty && (
-            <span className="inline-flex items-center gap-1 text-xs text-accent-300">
-              <Check size={13} /> Saved {relativeTime(savedAt)}
-            </span>
-          )}
-          <button
-            onClick={handleSave}
-            disabled={!dirty || saving}
-            className="btn-primary"
-          >
-            {saving ? <Spinner /> : <Save size={15} />} Save changes
-          </button>
-        </div>
-      </div>
+    <div>
+      <BackLink />
 
-      <h1 className="text-2xl font-semibold tracking-tight text-white">
-        {title || 'Untitled remix'}
-      </h1>
-      <p className="mt-1 text-sm text-gray-400">
-        AI breakdown of the source Reel — edit the hook, script, and CTA directly.
-      </p>
+      <header className="mt-10 max-w-3xl">
+        <h1 className="text-4xl font-semibold leading-[1.0] tracking-[-0.03em] text-ink sm:text-6xl">
+          {title || 'Untitled remix'}
+        </h1>
+        <p className="mt-5 max-w-md text-base text-ink/70">
+          An AI breakdown of the source Reel. Edit the hook, script and call to
+          action until it sounds like you.
+        </p>
+      </header>
 
-      <div className="mt-8 grid grid-cols-1 gap-6 lg:grid-cols-[380px_1fr]">
-        {/* Source Reel panel */}
-        <section className="card h-fit overflow-hidden">
+      <div className="mt-16 grid gap-14 lg:grid-cols-[320px_1fr]">
+        <section>
           {reel ? (
             <>
-              <div className="relative aspect-[4/5] overflow-hidden bg-ink-900">
-                <img
-                  src={reel.thumbnailUrl}
-                  alt={reel.caption}
-                  className="h-full w-full object-cover"
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-ink-950 to-transparent" />
-                <div className="absolute bottom-3 left-3 flex items-center gap-3 text-[11px] text-white/90">
-                  <span className="inline-flex items-center gap-1">
-                    <Eye size={12} /> {compactNumber(reel.viewCount)}
-                  </span>
-                  <span className="inline-flex items-center gap-1">
-                    <Heart size={12} /> {compactNumber(reel.likeCount)}
-                  </span>
-                  <span className="inline-flex items-center gap-1">
-                    <MessageCircle size={12} />{' '}
-                    {compactNumber(reel.commentCount)}
-                  </span>
-                </div>
-              </div>
-              <div className="p-4">
-                <p className="text-[11px] uppercase tracking-wider text-accent-300/80">
-                  @{reel.competitorUsername} · {relativeTime(reel.postedAt)}
-                </p>
-                <p className="mt-1.5 text-sm text-gray-200">{reel.caption}</p>
-                <a
-                  href={reel.permalink}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="mt-3 inline-flex items-center gap-1 text-xs text-gray-400 hover:text-gray-200"
-                >
-                  View profile on Instagram <ExternalLink size={12} />
-                </a>
-              </div>
+              <img
+                src={reel.thumbnailUrl}
+                alt={reel.caption}
+                className="aspect-[4/5] w-full bg-surface-2 object-cover"
+              />
+              <p className="mt-5 text-sm text-ink/60">
+                @{reel.competitorUsername} · {relativeTime(reel.postedAt)}
+              </p>
+              <p className="mt-2 text-lg leading-snug text-ink">{reel.caption}</p>
+              <p className="stat mt-3">
+                {compactNumber(reel.viewCount)} views · {compactNumber(reel.likeCount)} likes
+                · {compactNumber(reel.commentCount)} comments
+              </p>
+              <a
+                href={reel.permalink}
+                target="_blank"
+                rel="noreferrer"
+                className="mt-4 inline-block text-sm text-ink/60 underline-offset-4 transition-colors hover:text-ink hover:underline"
+              >
+                View profile on Instagram
+              </a>
             </>
           ) : (
-            <div className="p-5 text-sm text-gray-400">
-              Source Reel is no longer available.
-            </div>
+            <p className="text-base text-ink/70">Source Reel is no longer available.</p>
           )}
         </section>
 
-        {/* Editor panel */}
-        <section className="card p-6">
-          <div className="mb-5 flex items-center gap-2 text-accent-300">
-            <Sparkles size={16} />
-            <h2 className="text-sm font-semibold uppercase tracking-wider">
-              Remix editor
-            </h2>
-          </div>
-
-          <div className="space-y-6">
-            <Field label="Title" icon={<FileText size={14} />}>
+        <section className="panel sm:p-8">
+          <div className="space-y-8">
+            <Field id="remix-title" label="Title">
               <input
+                id="remix-title"
                 className="input"
                 value={title}
                 onChange={markDirty(setTitle)}
@@ -192,12 +141,13 @@ export function RemixPage() {
             </Field>
 
             <Field
+              id="remix-hook"
               label="Hook"
-              icon={<Anchor size={14} />}
               hint="The first line that stops the scroll."
             >
               <textarea
-                className="input min-h-[80px] resize-y"
+                id="remix-hook"
+                className="input min-h-[88px] resize-y"
                 value={hook}
                 onChange={markDirty(setHook)}
                 placeholder="Write a scroll-stopping hook…"
@@ -205,12 +155,13 @@ export function RemixPage() {
             </Field>
 
             <Field
+              id="remix-script"
               label="Script"
-              icon={<FileText size={14} />}
-              hint="Beat-by-beat what happens in the video."
+              hint="Beat by beat, what happens in the video."
             >
               <textarea
-                className="input min-h-[160px] resize-y font-mono text-[13px] leading-relaxed"
+                id="remix-script"
+                className="input min-h-[180px] resize-y leading-relaxed"
                 value={script}
                 onChange={markDirty(setScript)}
                 placeholder="Break the video into beats…"
@@ -218,12 +169,13 @@ export function RemixPage() {
             </Field>
 
             <Field
+              id="remix-cta"
               label="Call to action"
-              icon={<Megaphone size={14} />}
               hint="What the viewer should do next."
             >
               <textarea
-                className="input min-h-[72px] resize-y"
+                id="remix-cta"
+                className="input min-h-[80px] resize-y"
                 value={cta}
                 onChange={markDirty(setCta)}
                 placeholder="Tell the viewer what to do next…"
@@ -231,16 +183,20 @@ export function RemixPage() {
             </Field>
           </div>
 
-          <div className="mt-6 flex items-center justify-between border-t border-white/10 pt-4">
-            <span className="text-[11px] text-gray-500">
-              Created {relativeTime(remix.createdAt)}
-            </span>
+          <div className="mt-10 flex flex-wrap items-center justify-between gap-4">
+            <p className="text-sm text-ink/50">
+              {dirty
+                ? 'Unsaved changes'
+                : savedAt
+                  ? `Saved ${relativeTime(savedAt)}`
+                  : `Created ${relativeTime(remix.createdAt)}`}
+            </p>
             <button
               onClick={handleSave}
               disabled={!dirty || saving}
               className="btn-primary"
             >
-              {saving ? <Spinner /> : <Save size={15} />} Save changes
+              {saving ? <Spinner /> : null} Save changes
             </button>
           </div>
         </section>
@@ -253,33 +209,34 @@ function BackLink() {
   return (
     <Link
       to="/"
-      className="inline-flex items-center gap-1.5 text-sm text-gray-400 hover:text-white"
+      className="inline-flex items-center gap-2 text-sm text-ink/60 transition-colors hover:text-ink"
     >
-      <ArrowLeft size={15} /> Back to dashboard
+      <ArrowLeft size={15} /> Back to reels
     </Link>
   );
 }
 
 function Field({
+  id,
   label,
-  icon,
   hint,
   children,
 }: {
+  id: string;
   label: string;
-  icon: React.ReactNode;
   hint?: string;
   children: React.ReactNode;
 }) {
   return (
     <div>
-      <div className="mb-2 flex items-center gap-2">
-        <span className="text-accent-300">{icon}</span>
-        <label className="label">{label}</label>
-      </div>
-      {children}
+      <label htmlFor={id} className="label">
+        {label}
+      </label>
+      <div className="mt-3">{children}</div>
       {hint ? (
-        <p className="mt-1.5 text-[11px] text-gray-500">{hint}</p>
+        <p className="mt-2 text-sm text-ink/50">
+          {hint}
+        </p>
       ) : null}
     </div>
   );
