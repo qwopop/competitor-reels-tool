@@ -5,6 +5,7 @@ import type {
   Reel,
   ReelsApi,
   RemixedReel,
+  RemixTemplate,
   ServiceResult,
 } from '@/types';
 
@@ -75,8 +76,24 @@ export class HttpReelsApi implements ReelsApi {
     return request<Reel>('GET', `/reels/${enc(id)}`);
   }
 
-  remixReel(reelId: string) {
-    return request<RemixedReel>('POST', `/reels/${enc(reelId)}/remix`);
+  remixReel(reelId: string, template?: RemixTemplate) {
+    return request<RemixedReel>(
+      'POST',
+      `/reels/${enc(reelId)}/remix`,
+      template ? { template } : undefined
+    );
+  }
+
+  listRemixes() {
+    return request<RemixedReel[]>('GET', '/remixes');
+  }
+
+  getRemixForReel(reelId: string) {
+    return request<RemixedReel>('GET', `/reels/${enc(reelId)}/remix/current`);
+  }
+
+  applyRemixTemplate(id: string, template: RemixTemplate) {
+    return request<RemixedReel>('POST', `/remixes/${enc(id)}/apply-template`, { template });
   }
 
   getRemix(id: string) {

@@ -2,9 +2,11 @@ import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
 import { useApi } from '@/services';
-import type { ContentPlanItem, Reel, RemixedReel } from '@/types';
+import type { ContentPlanItem, Reel, RemixedReel, RemixTemplate } from '@/types';
 import { compactNumber, relativeTime } from '@/utils/format';
 import { ErrorBanner, FullPageLoader, Spinner } from '@/components/ui';
+import { ConfirmDialog } from '@/components/Modal';
+import { REMIX_TEMPLATES } from '@/utils/templates';
 import { planStatusMeta } from '@/utils/plan';
 
 export function RemixPage() {
@@ -24,6 +26,8 @@ export function RemixPage() {
   const [saving, setSaving] = useState(false);
   const [savedAt, setSavedAt] = useState<string | null>(null);
   const [planItem, setPlanItem] = useState<ContentPlanItem | null>(null);
+  const [template, setTemplate] = useState<RemixTemplate>('default');
+  const [confirmApply, setConfirmApply] = useState(false);
 
   useEffect(() => {
     if (!id) return;
@@ -86,6 +90,29 @@ export function RemixPage() {
     setPlanItem(res.data);
   }
 
+  async function applyTemplate() {
+    if (!remix) return;
+    setConfirmApply(false);
+    const res = await api.applyRemixTemplate(remix.id, template);
+    if (res.error || !res.data) {
+      setError(res.error ?? 'Could not apply the template.');
+      return;
+    }
+    const updated = res.data;
+    setRemix(updated);
+    setTitle(updated.title);
+    setHook(updated.hook);
+    setScript(updated.script);
+    setCta(updated.cta);
+    setSavedAt(updated.updatedAt);
+    setDirty(false);
+  }
+
+  function handleApplyClick() {
+    if (dirty) setConfirmApply(true);
+    else applyTemplate();
+  }
+
   if (loading) return <FullPageLoader label="Loading remix…" />;
   if (error)
     return (
@@ -100,6 +127,15 @@ export function RemixPage() {
 
   return (
     <div>
+      {confirmApply && (
+        <ConfirmDialog
+          title="Replace your edits?"
+          message="Applying a template overwrites the title, hook, script and call to action. Unsaved edits will be lost."
+          confirmLabel="Apply template"
+          onConfirm={applyTemplate}
+          onCancel={() => setConfirmApply(false)}
+        />
+      )}
       <BackLink />
 
       <header className="mt-10 max-w-3xl">
@@ -144,6 +180,29 @@ export function RemixPage() {
         </section>
 
         <section className="panel sm:p-8">
+          <div className="mb-10">
+            <p className="label">Template</p>
+            <div className="mt-3 flex flex-wrap items-center gap-3">
+              <select
+                className="input max-w-xs"
+                value={template}
+                onChange={(e) => setTemplate(e.target.value as RemixTemplate)}
+                aria-label="Remix template"
+              >
+                {REMIX_TEMPLATES.map((t) => (
+                  <option key={t.value} value={t.value}>{t.label}</option>
+                ))}
+              </select>
+              <button type="button" onClick={handleApplyClick} className="btn-outline">
+                Apply template
+              </button>
+            </div>
+            <p className="mt-2 text-sm text-ink/50">
+              {REMIX_TEMPLATES.find((t) => t.value === template)?.description} Drafts are
+              built from the Reel's details, not AI analysis.
+            </p>
+          </div>
+
           <div className="space-y-8">
             <Field id="remix-title" label="Title">
               <input

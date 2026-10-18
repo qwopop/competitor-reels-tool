@@ -56,8 +56,13 @@ def get_remix_for_reel(db: Session, reel_id: str) -> RemixRow | None:
     return db.scalars(select(RemixRow).where(RemixRow.reel_id == reel_id)).first()
 
 
-def add_remix(db: Session, reel: ReelRow) -> RemixRow:
-    remix = generator.build_remix(reel)
+def list_remixes(db: Session) -> list[RemixRow]:
+    stmt = select(RemixRow).order_by(RemixRow.updated_at.desc())
+    return list(db.scalars(stmt))
+
+
+def add_remix(db: Session, reel: ReelRow, template: str = "default") -> RemixRow:
+    remix = generator.build_remix(reel, template)
     db.add(remix)
     db.commit()
     return remix
@@ -65,6 +70,10 @@ def add_remix(db: Session, reel: ReelRow) -> RemixRow:
 
 def get_remix(db: Session, remix_id: str) -> RemixRow | None:
     return db.get(RemixRow, remix_id)
+
+
+def apply_remix_template(db: Session, remix: RemixRow, reel: ReelRow, template: str) -> RemixRow:
+    return update_remix(db, remix, generator.template_fields(reel, template))
 
 
 def update_remix(db: Session, remix: RemixRow, changes: dict[str, str]) -> RemixRow:

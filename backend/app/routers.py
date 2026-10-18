@@ -2,7 +2,7 @@
 
 from collections.abc import Iterator
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from fastapi import APIRouter, Body, Depends, HTTPException, Request, Response, status
 from sqlalchemy.orm import Session
 
 from app import generator, store
@@ -13,6 +13,7 @@ from app.schemas import (
     ContentPlanItem,
     Reel,
     RemixedReel,
+    RemixRequest,
     UpdatePlanItemRequest,
     UpdateRemixRequest,
 )
@@ -97,7 +98,12 @@ def get_reel(reel_id: str, db: Session = Depends(get_db)):
     status_code=status.HTTP_201_CREATED,
     responses={200: {"model": RemixedReel, "description": "Existing remix returned"}},
 )
-def remix_reel(reel_id: str, response: Response, db: Session = Depends(get_db)):
+def remix_reel(
+    reel_id: str,
+    response: Response,
+    payload: RemixRequest | None = Body(default=None),
+    db: Session = Depends(get_db),
+):
     reel = store.get_reel(db, reel_id)
     if not reel:
         raise not_found("Reel not found.")
@@ -105,7 +111,32 @@ def remix_reel(reel_id: str, response: Response, db: Session = Depends(get_db)):
     if existing:
         response.status_code = status.HTTP_200_OK
         return existing
-    return store.add_remix(db, reel)
+    template = payload.template if payload else "default"
+    return store.add_remix(db, reel, template)
+
+
+@router.get("/reels/{reel_id}/remix/current", response_model=RemixedReel)
+def get_remix_for_reel(reel_id: str, db: Session = Depends(get_db)):
+    remix = store.get_remix_for_reel(db, reel_id)
+    if not remix:
+        raise not_found("No remix for this Reel yet.")
+    return remix
+
+
+@router.get("/remixes", response_model=list[RemixedReel])
+def list_remixes(db: Session = Depends(get_db)):
+    return store.list_remixes(db)
+
+
+@router.post("/remixes/{remix_id}/apply-template", response_model=RemixedReel)
+def apply_remix_template(remix_id: str, payload: RemixRequest, db: Session = Depends(get_db)):
+    remix = store.get_remix(db, remix_id)
+    if not remix:
+        raise not_found("Remix not found.")
+    reel = store.get_reel(db, remix.reel_id)
+    if not reel:
+        raise not_found("Reel not found.")
+    return store.apply_remix_template(db, remix, reel, payload.template)
 
 
 @router.get("/remixes/{remix_id}", response_model=RemixedReel)

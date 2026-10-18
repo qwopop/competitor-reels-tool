@@ -12,9 +12,10 @@ export default {
           3: '#2a2b27',
         },
         ink: '#f3f2ec',
+        // Vibrant purple, per the MVP plan. Buttons on it use white text.
         accent: {
-          DEFAULT: '#d4ff3a',
-          hover: '#e2ff6e',
+          DEFAULT: '#8b5cf6', // taste-skill-ignore: purple accent is a product requirement
+          hover: '#a78bfa', // taste-skill-ignore: purple accent is a product requirement
         },
         danger: '#ff7a66',
       },

@@ -5,6 +5,7 @@ import type {
   Reel,
   ReelsApi,
   RemixedReel,
+  RemixTemplate,
   ServiceResult,
 } from '@/types';
 
@@ -120,6 +121,30 @@ const NOTES_BANK = [
   'Single strong visual payoff at the end before the CTA card.',
   'Tone is casual but confident, leaning into "you can do this too".',
 ];
+
+const TEMPLATE_TITLES: Record<RemixTemplate, string> = {
+  default: 'Remix',
+  educational: 'Lesson',
+  storytelling: 'Story',
+  promotional: 'Promo',
+};
+
+// Mirrors the backend templates in spirit: a title prefix and one line per field.
+function templateText(template: RemixTemplate, reel: Reel, seedIndex: number) {
+  const topic = reel.caption;
+  const hooks: Record<RemixTemplate, string[]> = {
+    default: HOOK_BANK,
+    educational: [`Most people get ${topic} wrong. Here is the fix.`],
+    storytelling: [`Last year I tried ${topic} and it went badly.`],
+    promotional: [`Stop struggling with ${topic}. There is an easier way.`],
+  };
+  return {
+    title: `${TEMPLATE_TITLES[template]}: ${topic}`,
+    hook: pick(hooks[template], seedIndex),
+    script: pick(SCRIPT_BANK, seedIndex),
+    cta: pick(CTA_BANK, seedIndex),
+  };
+}
 
 function pick<T>(arr: T[], i: number): T {
   return arr[i % arr.length];
@@ -237,7 +262,7 @@ export class MockReelsApi implements ReelsApi {
     return delay(ok(reel), 150);
   }
 
-  async remixReel(reelId: string): Promise<ServiceResult<RemixedReel>> {
+  async remixReel(reelId: string, template: RemixTemplate = 'default'): Promise<ServiceResult<RemixedReel>> {
     const reels = read<Reel[]>(REELS_KEY, []);
     const reel = reels.find((r) => r.id === reelId);
     if (!reel) return fail<RemixedReel>('Reel not found.');
@@ -255,10 +280,7 @@ export class MockReelsApi implements ReelsApi {
     const remix: RemixedReel = {
       id: uid('remix'),
       reelId,
-      title: `Remix: ${reel.caption}`,
-      hook: pick(HOOK_BANK, seedIndex),
-      script: pick(SCRIPT_BANK, seedIndex),
-      cta: pick(CTA_BANK, seedIndex),
+      ...templateText(template, reel, seedIndex),
       createdAt: now,
       updatedAt: now,
     };
@@ -273,6 +295,36 @@ export class MockReelsApi implements ReelsApi {
     const remix = remixes.find((rm) => rm.id === id);
     if (!remix) return fail<RemixedReel>('Remix not found.');
     return delay(ok(remix), 150);
+  }
+
+  async listRemixes(): Promise<ServiceResult<RemixedReel[]>> {
+    const remixes = read<RemixedReel[]>(REMIXES_KEY, []);
+    return delay(ok(remixes), 150);
+  }
+
+  async getRemixForReel(reelId: string): Promise<ServiceResult<RemixedReel>> {
+    const remixes = read<RemixedReel[]>(REMIXES_KEY, []);
+    const remix = remixes.find((rm) => rm.reelId === reelId);
+    if (!remix) return fail<RemixedReel>('No remix for this Reel yet.');
+    return delay(ok(remix), 100);
+  }
+
+  async applyRemixTemplate(id: string, template: RemixTemplate): Promise<ServiceResult<RemixedReel>> {
+    const remixes = read<RemixedReel[]>(REMIXES_KEY, []);
+    const idx = remixes.findIndex((rm) => rm.id === id);
+    if (idx === -1) return fail<RemixedReel>('Remix not found.');
+    const reels = read<Reel[]>(REELS_KEY, []);
+    const reel = reels.find((r) => r.id === remixes[idx].reelId);
+    if (!reel) return fail<RemixedReel>('Reel not found.');
+    const seedIndex = Math.abs(Array.from(reel.shortcode).reduce((acc, ch) => acc + ch.charCodeAt(0), 0));
+    const updated: RemixedReel = {
+      ...remixes[idx],
+      ...templateText(template, reel, seedIndex),
+      updatedAt: new Date().toISOString(),
+    };
+    remixes[idx] = updated;
+    write(REMIXES_KEY, remixes);
+    return delay(ok(updated), 200);
   }
 
   async updateRemix(

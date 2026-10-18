@@ -62,6 +62,8 @@ export interface ContentPlanItem {
   updatedAt: string;
 }
 
+export type RemixTemplate = 'default' | 'educational' | 'storytelling' | 'promotional';
+
 export interface ServiceResult<T> {
   data: T | null;
   error: string | null;
@@ -76,7 +78,10 @@ export interface ReelsApi {
   listReels(): Promise<ServiceResult<Reel[]>>;
   getReel(id: string): Promise<ServiceResult<Reel>>;
   // AI-powered: builds the breakdown (hook / script / cta) for a Reel.
-  remixReel(reelId: string): Promise<ServiceResult<RemixedReel>>;
+  remixReel(reelId: string, template?: RemixTemplate): Promise<ServiceResult<RemixedReel>>;
+  listRemixes(): Promise<ServiceResult<RemixedReel[]>>;
+  getRemixForReel(reelId: string): Promise<ServiceResult<RemixedReel>>;
+  applyRemixTemplate(id: string, template: RemixTemplate): Promise<ServiceResult<RemixedReel>>;
   getRemix(id: string): Promise<ServiceResult<RemixedReel>>;
   updateRemix(
     id: string,

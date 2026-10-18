@@ -2,8 +2,10 @@ import { NavLink } from 'react-router-dom';
 import { USING_MOCK } from '@/services';
 
 const navItems = [
-  { to: '/', label: 'Reels', end: true },
+  { to: '/', label: 'Dashboard', end: true },
   { to: '/competitors', label: 'Competitors', end: false },
+  { to: '/reels', label: 'Reels', end: false },
+  { to: '/remixes', label: 'Remixes', end: false },
   { to: '/content-plan', label: 'Content Plan', end: false },
 ];
 

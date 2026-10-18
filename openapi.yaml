@@ -119,10 +119,17 @@ paths:
       - $ref: "#/components/parameters/ReelId"
     post:
       operationId: remixReel
-      summary: Generate an AI breakdown (hook, script, CTA) for a Reel
+      summary: Generate a breakdown (title, hook, script, CTA) for a Reel from a template
       description: >
         Returns the existing remix with status 200 if one was already generated
-        for this Reel, otherwise generates a new one and returns it with 201.
+        for this Reel, otherwise generates a new one from the chosen template
+        (default: default) and returns it with 201.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RemixRequest"
       responses:
         "201":
           description: Remix generated
@@ -163,6 +170,61 @@ paths:
           application/json:
             schema:
               $ref: "#/components/schemas/UpdateRemixRequest"
+      responses:
+        "200":
+          description: Updated remix
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RemixedReel"
+        "404":
+          $ref: "#/components/responses/Error"
+
+  /api/reels/{reel_id}/remix/current:
+    parameters:
+      - $ref: "#/components/parameters/ReelId"
+    get:
+      operationId: getRemixForReel
+      summary: Get the remix that already exists for a Reel
+      responses:
+        "200":
+          description: Remix
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RemixedReel"
+        "404":
+          $ref: "#/components/responses/Error"
+
+  /api/remixes:
+    get:
+      operationId: listRemixes
+      summary: List all remixes, most recently updated first
+      responses:
+        "200":
+          description: Remixes
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/RemixedReel"
+
+  /api/remixes/{remix_id}/apply-template:
+    parameters:
+      - $ref: "#/components/parameters/RemixId"
+    post:
+      operationId: applyRemixTemplate
+      summary: Replace a remix's title, hook, script and CTA with a template's text
+      description: >
+        Overwrites the four text fields. The client should confirm first when
+        the user has unsaved edits.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RemixRequest"
       responses:
         "200":
           description: Updated remix
@@ -337,6 +399,20 @@ components:
         cta: { type: string }
         createdAt: { type: string, format: date-time }
         updatedAt: { type: string, format: date-time }
+
+    RemixTemplate:
+      type: string
+      description: >
+        default, educational, storytelling or promotional. Each produces
+        template-generated drafts from the Reel's details, not AI analysis.
+      enum: [default, educational, storytelling, promotional]
+
+    RemixRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        template:
+          $ref: "#/components/schemas/RemixTemplate"
 
     UpdateRemixRequest:
       type: object

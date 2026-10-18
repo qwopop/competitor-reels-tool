@@ -237,3 +237,54 @@ def test_cors_origins_come_from_environment(tmp_path, monkeypatch):
         assert allowed.headers["access-control-allow-origin"] == "https://reels.example.com"
         blocked = client.get("/api/competitors", headers={"Origin": "https://evil.example.com"})
         assert "access-control-allow-origin" not in blocked.headers
+
+
+def first_reel(client):
+    comp = add(client).json()
+    return client.post(f"/api/competitors/{comp['id']}/reels/fetch").json()[0]
+
+
+@pytest.mark.parametrize("template", ["default", "educational", "storytelling", "promotional"])
+def test_remix_uses_the_chosen_template(client, template):
+    reel = first_reel(client)
+    res = client.post(f"/api/reels/{reel['id']}/remix", json={"template": template})
+    assert res.status_code == 201
+    remix = res.json()
+    assert remix["title"].startswith(generator.TEMPLATE_BANKS[template]["title"])
+    assert remix["hook"] and remix["script"] and remix["cta"]
+
+
+def test_remix_rejects_unknown_template(client):
+    reel = first_reel(client)
+    assert client.post(f"/api/reels/{reel['id']}/remix", json={"template": "pirate"}).status_code == 422
+
+
+def test_get_remix_for_reel_returns_existing_or_404(client):
+    reel = first_reel(client)
+    assert client.get(f"/api/reels/{reel['id']}/remix/current").status_code == 404
+    remix = client.post(f"/api/reels/{reel['id']}/remix").json()
+    assert client.get(f"/api/reels/{reel['id']}/remix/current").json()["id"] == remix["id"]
+
+
+def test_list_remixes(client):
+    reel = first_reel(client)
+    assert client.get("/api/remixes").json() == []
+    remix = client.post(f"/api/reels/{reel['id']}/remix").json()
+    assert [r["id"] for r in client.get("/api/remixes").json()] == [remix["id"]]
+
+
+def test_apply_template_overwrites_text_fields(client):
+    reel = first_reel(client)
+    remix = client.post(f"/api/reels/{reel['id']}/remix").json()
+    client.patch(f"/api/remixes/{remix['id']}", json={"hook": "my own hook"})
+    res = client.post(f"/api/remixes/{remix['id']}/apply-template", json={"template": "promotional"})
+    assert res.status_code == 200
+    updated = res.json()
+    assert updated["title"].startswith("Promo:")
+    assert updated["hook"] != "my own hook"
+    assert updated["id"] == remix["id"]
+
+
+def test_apply_template_unknown_remix_is_404(client):
+    res = client.post("/api/remixes/nope/apply-template", json={"template": "default"})
+    assert res.status_code == 404

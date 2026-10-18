@@ -54,6 +54,7 @@ class RemixedReel(ApiModel):
 
 
 PlanStatus = Literal["not_started", "ready", "filmed"]
+RemixTemplate = Literal["default", "educational", "storytelling", "promotional"]
 
 
 class ContentPlanItem(ApiModel):
@@ -75,6 +76,10 @@ class AddToPlanRequest(ApiModel):
 
 class UpdatePlanItemRequest(ApiModel):
     status: PlanStatus
+
+
+class RemixRequest(ApiModel):
+    template: RemixTemplate = "default"
 
 
 class UpdateRemixRequest(ApiModel):

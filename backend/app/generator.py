@@ -128,18 +128,81 @@ def build_reels(competitor: CompetitorRow) -> list[ReelRow]:
     return reels
 
 
-def build_remix(reel: ReelRow) -> RemixRow:
+TEMPLATE_BANKS: dict[str, dict] = {
+    "default": {
+        "title": "Remix",
+        "hook": HOOK_BANK,
+        "script": SCRIPT_BANK,
+        "cta": CTA_BANK,
+    },
+    "educational": {
+        "title": "Lesson",
+        "hook": [
+            "Most people get {topic} wrong. Here is the fix.",
+            "Three things you need to know about {topic}.",
+        ],
+        "script": [
+            "Step 1: state the problem. Step 2: show one concrete example. Step 3: give the takeaway.",
+            "Explain the core idea in one sentence, then walk through a worked example.",
+        ],
+        "cta": [
+            "Save this so you can practise it later.",
+            "Follow for one lesson like this every week.",
+        ],
+    },
+    "storytelling": {
+        "title": "Story",
+        "hook": [
+            "Last year I tried {topic} and it went badly.",
+            "Here is what happened when I stopped doing {topic} the old way.",
+        ],
+        "script": [
+            "Setup: where I started. Conflict: what broke. Resolution: what changed.",
+            "Open on the moment things went wrong, then rewind to show how I got there.",
+        ],
+        "cta": [
+            "Tell me your version of this story in the comments.",
+            "Follow to see how the next chapter ends.",
+        ],
+    },
+    "promotional": {
+        "title": "Promo",
+        "hook": [
+            "Stop struggling with {topic}. There is an easier way.",
+            "If you want results from {topic}, watch this first.",
+        ],
+        "script": [
+            "Show the problem, present the product as the fix, then show one result.",
+            "Lead with the benefit, show proof in ten seconds, end with the offer.",
+        ],
+        "cta": [
+            "Link in bio to get started today.",
+            "Comment READY and I will send you the details.",
+        ],
+    },
+}
+
+
+def template_fields(reel: ReelRow, template: str) -> dict[str, str]:
+    """Title, hook, script and CTA for a Reel, chosen deterministically from its shortcode."""
+    bank = TEMPLATE_BANKS[template]
     seed = sum(ord(ch) for ch in reel.shortcode)
+    return {
+        "title": f"{bank['title']}: {reel.caption}",
+        "hook": bank["hook"][seed % len(bank["hook"])].replace("{topic}", reel.caption),
+        "script": bank["script"][seed % len(bank["script"])].replace("{topic}", reel.caption),
+        "cta": bank["cta"][seed % len(bank["cta"])].replace("{topic}", reel.caption),
+    }
+
+
+def build_remix(reel: ReelRow, template: str = "default") -> RemixRow:
     stamp = now_iso()
     return RemixRow(
         id=new_id("remix"),
         reel_id=reel.id,
-        title=f"Remix: {reel.caption}",
-        hook=HOOK_BANK[seed % len(HOOK_BANK)],
-        script=SCRIPT_BANK[seed % len(SCRIPT_BANK)],
-        cta=CTA_BANK[seed % len(CTA_BANK)],
         created_at=stamp,
         updated_at=stamp,
+        **template_fields(reel, template),
     )
 
 

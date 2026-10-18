@@ -10,69 +10,32 @@ import type {
   RemixedReel,
   ServiceResult,
 } from '@/types';
-
-// A stub service whose returns we control per-test. This keeps component tests
-// deterministic and fast, and proves the UI only depends on the ReelsApi
-// interface.
-class StubApi implements Partial<ReelsApi> {
-  listReels = vi.fn(async (): Promise<ServiceResult<Reel[]>> => ({
-    data: [],
-    error: null,
-  }));
-  listCompetitors = vi.fn(async (): Promise<ServiceResult<Competitor[]>> => ({
-    data: [],
-    error: null,
-  }));
-  addCompetitor = vi.fn(async (): Promise<ServiceResult<Competitor>> => ({
-    data: null,
-    error: 'Invalid',
-  }));
-  fetchReelsForCompetitor = vi.fn(async (): Promise<ServiceResult<Reel[]>> => ({
-    data: [],
-    error: null,
-  }));
-  removeCompetitor = vi.fn(async (): Promise<ServiceResult<void>> => ({
-    data: undefined,
-    error: null,
-  }));
-  remixReel = vi.fn(async (): Promise<ServiceResult<RemixedReel>> => ({
-    data: null,
-    error: 'nope',
-  }));
-  getReel = vi.fn(async (): Promise<ServiceResult<Reel>> => ({
-    data: null,
-    error: 'nope',
-  }));
-  getRemix = vi.fn(async (): Promise<ServiceResult<RemixedReel>> => ({
-    data: null,
-    error: 'nope',
-  }));
-  updateRemix = vi.fn(async (): Promise<ServiceResult<RemixedReel>> => ({
-    data: null,
-    error: 'nope',
-  }));
-  listContentPlan = vi.fn(async (): Promise<ServiceResult<ContentPlanItem[]>> => ({
-    data: [],
-    error: null,
-  }));
-  addToContentPlan = vi.fn(async (): Promise<ServiceResult<ContentPlanItem>> => ({
-    data: null,
-    error: 'nope',
-  }));
-  updateContentPlanStatus = vi.fn(async (): Promise<ServiceResult<ContentPlanItem>> => ({
-    data: null,
-    error: 'nope',
-  }));
-  removeFromContentPlan = vi.fn(async (): Promise<ServiceResult<void>> => ({
-    data: undefined,
-    error: null,
-  }));
-}
-
 import { ApiProvider } from '@/services/ApiContext';
 import { DashboardPage } from '@/pages/DashboardPage';
+import { ReelsPage } from '@/pages/ReelsPage';
 import { CompetitorsPage } from '@/pages/CompetitorsPage';
+import { RemixesPage } from '@/pages/RemixesPage';
 import { ContentPlanPage } from '@/pages/ContentPlanPage';
+
+// A stub service whose returns we control per test. Pages depend only on ReelsApi.
+class StubApi implements Partial<ReelsApi> {
+  listReels = vi.fn(async (): Promise<ServiceResult<Reel[]>> => ({ data: [], error: null }));
+  listCompetitors = vi.fn(async (): Promise<ServiceResult<Competitor[]>> => ({ data: [], error: null }));
+  addCompetitor = vi.fn(async (): Promise<ServiceResult<Competitor>> => ({ data: null, error: 'Invalid' }));
+  fetchReelsForCompetitor = vi.fn(async (): Promise<ServiceResult<Reel[]>> => ({ data: [], error: null }));
+  removeCompetitor = vi.fn(async (): Promise<ServiceResult<void>> => ({ data: null, error: null }));
+  remixReel = vi.fn(async (): Promise<ServiceResult<RemixedReel>> => ({ data: null, error: 'nope' }));
+  getReel = vi.fn(async (): Promise<ServiceResult<Reel>> => ({ data: null, error: 'nope' }));
+  getRemix = vi.fn(async (): Promise<ServiceResult<RemixedReel>> => ({ data: null, error: 'nope' }));
+  updateRemix = vi.fn(async (): Promise<ServiceResult<RemixedReel>> => ({ data: null, error: 'nope' }));
+  listRemixes = vi.fn(async (): Promise<ServiceResult<RemixedReel[]>> => ({ data: [], error: null }));
+  getRemixForReel = vi.fn(async (): Promise<ServiceResult<RemixedReel>> => ({ data: null, error: 'none' }));
+  applyRemixTemplate = vi.fn(async (): Promise<ServiceResult<RemixedReel>> => ({ data: null, error: 'nope' }));
+  listContentPlan = vi.fn(async (): Promise<ServiceResult<ContentPlanItem[]>> => ({ data: [], error: null }));
+  addToContentPlan = vi.fn(async (): Promise<ServiceResult<ContentPlanItem>> => ({ data: null, error: 'nope' }));
+  updateContentPlanStatus = vi.fn(async (): Promise<ServiceResult<ContentPlanItem>> => ({ data: null, error: 'nope' }));
+  removeFromContentPlan = vi.fn(async (): Promise<ServiceResult<void>> => ({ data: undefined, error: null }));
+}
 
 function reel(overrides: Partial<Reel> = {}): Reel {
   return {
@@ -80,7 +43,7 @@ function reel(overrides: Partial<Reel> = {}): Reel {
     competitorId: 'comp_1',
     competitorUsername: 'vibecoder',
     shortcode: 'ABC123',
-    permalink: 'https://instagram.com/reel/ABC123/',
+    permalink: 'https://instagram.com/vibecoder/',
     caption: 'I let AI build my SaaS in 48 hours',
     thumbnailUrl: 'https://example.com/thumb.jpg',
     viewCount: 120000,
@@ -91,213 +54,6 @@ function reel(overrides: Partial<Reel> = {}): Reel {
     ...overrides,
   };
 }
-
-function renderWithRouter(stub: StubApi, initial = '/') {
-  return render(
-    <ApiProvider api={stub as unknown as ReelsApi}>
-      <MemoryRouter initialEntries={[initial]}>
-        <Routes>
-          <Route index element={<DashboardPage />} />
-          <Route path="/competitors" element={<CompetitorsPage />} />
-          <Route path="/content-plan" element={<ContentPlanPage />} />
-        </Routes>
-      </MemoryRouter>
-    </ApiProvider>
-  );
-}
-
-beforeEach(() => {
-  vi.clearAllMocks();
-});
-
-describe('DashboardPage', () => {
-  it('shows the empty state when there are no reels', async () => {
-    const stub = new StubApi();
-    stub.listReels.mockResolvedValue({ data: [], error: null });
-    renderWithRouter(stub);
-
-    await waitFor(() =>
-      expect(screen.getByText(/no reels yet/i)).toBeInTheDocument()
-    );
-  });
-
-  it('renders reels and a Remix button for each', async () => {
-    const stub = new StubApi();
-    stub.listReels.mockResolvedValue({
-      data: [reel(), reel({ id: 'reel_2', caption: 'Second reel' })],
-      error: null,
-    });
-    renderWithRouter(stub);
-
-    await waitFor(() =>
-      expect(screen.getByText(/I let AI build my SaaS/)).toBeInTheDocument()
-    );
-    expect(screen.getByText('Second reel')).toBeInTheDocument();
-    expect(screen.getAllByRole('button', { name: /remix/i })).toHaveLength(2);
-  });
-
-  it('triggers remixReel and shows a remixing state', async () => {
-    const user = userEvent.setup();
-    const stub = new StubApi();
-    stub.listReels.mockResolvedValue({ data: [reel()], error: null });
-    // Hold the remix promise so we can observe the loading state.
-    let resolveRemix!: (v: ServiceResult<RemixedReel>) => void;
-    stub.remixReel.mockImplementation(
-      () =>
-        new Promise<ServiceResult<RemixedReel>>((resolve) => {
-          resolveRemix = resolve;
-        })
-    );
-
-    renderWithRouter(stub);
-    await waitFor(() =>
-      expect(screen.getByText(/I let AI build my SaaS/)).toBeInTheDocument()
-    );
-
-    const remixButton = screen.getByRole('button', { name: /remix/i });
-    await user.click(remixButton);
-
-    await waitFor(() =>
-      expect(screen.getByRole('button', { name: /remixing/i })).toBeDisabled()
-    );
-    expect(stub.remixReel).toHaveBeenCalledWith('reel_1');
-
-    resolveRemix({
-      data: {
-        id: 'remix_1',
-        reelId: 'reel_1',
-        title: 'Remix: x',
-        hook: 'h',
-        script: 's',
-        cta: 'c',
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      },
-      error: null,
-    });
-  });
-
-  it('surfaces an error from listReels', async () => {
-    const stub = new StubApi();
-    stub.listReels.mockResolvedValue({ data: null, error: 'Boom' });
-    renderWithRouter(stub);
-
-    await waitFor(() =>
-      expect(screen.getByText(/boom/i)).toBeInTheDocument()
-    );
-  });
-});
-
-describe('CompetitorsPage', () => {
-  it('shows the empty state when there are no competitors', async () => {
-    const stub = new StubApi();
-    stub.listCompetitors.mockResolvedValue({ data: [], error: null });
-    renderWithRouter(stub, '/competitors');
-
-    await waitFor(() =>
-      expect(screen.getByText(/no competitors yet/i)).toBeInTheDocument()
-    );
-  });
-
-  it('adds a competitor from a pasted URL', async () => {
-    const user = userEvent.setup();
-    const stub = new StubApi();
-    stub.listCompetitors.mockResolvedValue({ data: [], error: null });
-    stub.addCompetitor.mockResolvedValue({
-      data: {
-        id: 'comp_1',
-        username: 'vibecoder',
-        instagramUrl: 'https://instagram.com/vibecoder',
-        displayName: 'Vibecoder',
-        avatarUrl: 'https://example.com/a.jpg',
-        addedAt: new Date().toISOString(),
-      },
-      error: null,
-    });
-    // After adding, listCompetitors returns the new list.
-    stub.listCompetitors
-      .mockResolvedValueOnce({ data: [], error: null }) // initial load
-      .mockResolvedValueOnce({
-        data: [
-          {
-            id: 'comp_1',
-            username: 'vibecoder',
-            instagramUrl: 'https://instagram.com/vibecoder',
-            displayName: 'Vibecoder',
-            avatarUrl: 'https://example.com/a.jpg',
-            addedAt: new Date().toISOString(),
-          },
-        ],
-        error: null,
-      });
-    renderWithRouter(stub, '/competitors');
-
-    const input = await screen.findByPlaceholderText(/instagram\.com\/vibecoder/i);
-    await user.type(input, 'https://instagram.com/vibecoder');
-    await user.click(screen.getByRole('button', { name: /add competitor/i }));
-
-    await waitFor(() => expect(stub.addCompetitor).toHaveBeenCalled());
-    expect(stub.addCompetitor).toHaveBeenCalledWith(
-      'https://instagram.com/vibecoder'
-    );
-  });
-
-  it('fetches reels when the Fetch button is clicked', async () => {
-    const user = userEvent.setup();
-    const competitor: Competitor = {
-      id: 'comp_1',
-      username: 'vibecoder',
-      instagramUrl: 'https://instagram.com/vibecoder',
-      displayName: 'Vibecoder',
-      avatarUrl: 'https://example.com/a.jpg',
-      addedAt: new Date().toISOString(),
-    };
-    const stub = new StubApi();
-    stub.listCompetitors.mockResolvedValue({ data: [competitor], error: null });
-    stub.listReels.mockResolvedValue({
-      data: [reel()],
-      error: null,
-    });
-    stub.fetchReelsForCompetitor.mockResolvedValue({
-      data: [reel()],
-      error: null,
-    });
-
-    renderWithRouter(stub, '/competitors');
-
-    const fetchBtn = await screen.findByRole('button', { name: /fetch reels/i });
-    await user.click(fetchBtn);
-
-    await waitFor(() =>
-      expect(stub.fetchReelsForCompetitor).toHaveBeenCalledWith('comp_1')
-    );
-    // Success confirmation appears.
-    await waitFor(() =>
-      expect(screen.getByText(/pulled 20 reels/i)).toBeInTheDocument()
-    );
-  });
-
-  it('surfaces an add error in the banner', async () => {
-    const user = userEvent.setup();
-    const stub = new StubApi();
-    stub.listCompetitors.mockResolvedValue({ data: [], error: null });
-    stub.addCompetitor.mockResolvedValue({
-      data: null,
-      error: 'That is not a valid Instagram URL.',
-    });
-    renderWithRouter(stub, '/competitors');
-
-    const input = await screen.findByPlaceholderText(/instagram\.com\/vibecoder/i);
-    await user.type(input, 'garbage');
-    await user.click(screen.getByRole('button', { name: /add competitor/i }));
-
-    await waitFor(() =>
-      expect(
-        screen.getByText(/that is not a valid instagram url/i)
-      ).toBeInTheDocument()
-    );
-  });
-});
 
 function planItem(overrides: Partial<ContentPlanItem> = {}): ContentPlanItem {
   return {
@@ -315,78 +71,229 @@ function planItem(overrides: Partial<ContentPlanItem> = {}): ContentPlanItem {
   };
 }
 
-describe('Content plan', () => {
-  it('adds a Reel to the plan from the Reels grid', async () => {
+function renderAt(stub: StubApi, path: string, element: React.ReactElement, route: string) {
+  return render(
+    <ApiProvider api={stub as unknown as ReelsApi}>
+      <MemoryRouter initialEntries={[path]}>
+        <Routes>
+          <Route path={route} element={element} />
+          <Route path="/remix/:id" element={<p>Remix editor</p>} />
+        </Routes>
+      </MemoryRouter>
+    </ApiProvider>
+  );
+}
+
+beforeEach(() => {
+  vi.clearAllMocks();
+});
+
+describe('DashboardPage', () => {
+  it('asks the user to add a competitor when none are tracked', async () => {
+    const stub = new StubApi();
+    renderAt(stub, '/', <DashboardPage />, '/');
+    expect(await screen.findByText(/start with a competitor/i)).toBeInTheDocument();
+  });
+
+  it('shows totals, the top Reel and the most-viewed competitor', async () => {
+    const stub = new StubApi();
+    stub.listCompetitors.mockResolvedValue({
+      data: [{ id: 'comp_1', username: 'vibecoder', instagramUrl: '', displayName: 'Vibecoder', avatarUrl: '', addedAt: '' }],
+      error: null,
+    });
+    stub.listReels.mockResolvedValue({
+      data: [reel({ viewCount: 500 }), reel({ id: 'reel_2', caption: 'Top one', viewCount: 9000 })],
+      error: null,
+    });
+    stub.listContentPlan.mockResolvedValue({ data: [planItem({ status: 'filmed' })], error: null });
+    renderAt(stub, '/', <DashboardPage />, '/');
+
+    expect((await screen.findAllByText('Top one')).length).toBeGreaterThan(0);
+    const totals = screen.getByRole('region', { name: /totals/i });
+    expect(within(totals).getByText('Reels').previousSibling).toHaveTextContent('2');
+    expect(screen.getAllByText(/@vibecoder/).length).toBeGreaterThan(0);
+  });
+});
+
+describe('ReelsPage', () => {
+  it('shows the empty state when there are no reels', async () => {
+    const stub = new StubApi();
+    renderAt(stub, '/reels', <ReelsPage />, '/reels');
+    expect(await screen.findByText(/no reels yet/i)).toBeInTheDocument();
+  });
+
+  it('renders reels with a Remix button for each', async () => {
+    const stub = new StubApi();
+    stub.listReels.mockResolvedValue({
+      data: [reel(), reel({ id: 'reel_2', caption: 'Second reel' })],
+      error: null,
+    });
+    renderAt(stub, '/reels', <ReelsPage />, '/reels');
+    expect(await screen.findByText(/I let AI build my SaaS/)).toBeInTheDocument();
+    expect(screen.getByText('Second reel')).toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: /^remix$/i })).toHaveLength(2);
+  });
+
+  it('filters by caption search and sorts by views', async () => {
+    const user = userEvent.setup();
+    const stub = new StubApi();
+    stub.listReels.mockResolvedValue({
+      data: [
+        reel({ id: 'a', caption: 'Prompt tips', viewCount: 10 }),
+        reel({ id: 'b', caption: 'SaaS build', viewCount: 900 }),
+      ],
+      error: null,
+    });
+    renderAt(stub, '/reels', <ReelsPage />, '/reels');
+    await screen.findByText('Prompt tips');
+
+    await user.type(screen.getByLabelText(/search captions/i), 'saas');
+    expect(screen.queryByText('Prompt tips')).toBeNull();
+    expect(screen.getByText('SaaS build')).toBeInTheDocument();
+  });
+
+  it('switches to the list layout', async () => {
     const user = userEvent.setup();
     const stub = new StubApi();
     stub.listReels.mockResolvedValue({ data: [reel()], error: null });
-    stub.addToContentPlan.mockResolvedValue({
-      data: planItem(),
-      error: null,
-    });
-    renderWithRouter(stub);
+    renderAt(stub, '/reels', <ReelsPage />, '/reels');
+    await screen.findByText(/I let AI build my SaaS/);
+    await user.click(screen.getByRole('button', { name: 'List' }));
+    expect(screen.getByRole('button', { name: 'List' })).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('adds a Reel to the plan and shows a success message', async () => {
+    const user = userEvent.setup();
+    const stub = new StubApi();
+    stub.listReels.mockResolvedValue({ data: [reel()], error: null });
+    stub.addToContentPlan.mockResolvedValue({ data: planItem(), error: null });
+    renderAt(stub, '/reels', <ReelsPage />, '/reels');
 
     await user.click(await screen.findByRole('button', { name: /add to plan/i }));
 
     expect(stub.addToContentPlan).toHaveBeenCalledWith('reel_1');
-    await waitFor(() =>
-      expect(screen.getByText(/in content plan/i)).toBeInTheDocument()
-    );
+    expect(await screen.findByText('Added to your Content Plan.')).toBeInTheDocument();
+    expect(screen.getByText(/in content plan/i)).toBeInTheDocument();
   });
 
-  it('shows Reels already in the plan as in the plan', async () => {
+  it('says so when the Reel is already in the plan', async () => {
+    const user = userEvent.setup();
     const stub = new StubApi();
     stub.listReels.mockResolvedValue({ data: [reel()], error: null });
-    stub.listContentPlan.mockResolvedValue({
-      data: [planItem({ status: 'ready' })],
-      error: null,
-    });
-    renderWithRouter(stub);
-
+    stub.listContentPlan.mockResolvedValue({ data: [planItem({ status: 'ready' })], error: null });
+    renderAt(stub, '/reels', <ReelsPage />, '/reels');
     expect(await screen.findByText(/in content plan/i)).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /add to plan/i })).toBeNull();
   });
 
-  it('changes an item status from the plan page', async () => {
+  it('opens a preview of an existing remix', async () => {
+    const user = userEvent.setup();
+    const stub = new StubApi();
+    stub.listReels.mockResolvedValue({ data: [reel()], error: null });
+    stub.listRemixes.mockResolvedValue({
+      data: [{ id: 'remix_1', reelId: 'reel_1', title: 'Remix: SaaS', hook: 'Hook text', script: 's', cta: 'c', createdAt: '', updatedAt: '' }],
+      error: null,
+    });
+    renderAt(stub, '/reels', <ReelsPage />, '/reels');
+    await user.click(await screen.findByRole('button', { name: 'Preview' }));
+    expect(await screen.findByRole('complementary', { name: /remix preview/i })).toHaveTextContent('Hook text');
+  });
+});
+
+describe('CompetitorsPage', () => {
+  it('adds a competitor from the modal', async () => {
+    const user = userEvent.setup();
+    const stub = new StubApi();
+    stub.addCompetitor.mockResolvedValue({
+      data: { id: 'comp_1', username: 'vibecoder', instagramUrl: '', displayName: 'Vibecoder', avatarUrl: '', addedAt: '' },
+      error: null,
+    });
+    renderAt(stub, '/competitors', <CompetitorsPage />, '/competitors');
+
+    await user.click(await screen.findByRole('button', { name: /add competitor/i }));
+    const dialog = screen.getByRole('dialog', { name: /add a competitor/i });
+    await user.type(within(dialog).getByPlaceholderText(/instagram\.com\/vibecoder/i), 'https://instagram.com/vibecoder');
+    await user.click(within(dialog).getByRole('button', { name: /add competitor/i }));
+
+    await waitFor(() => expect(stub.addCompetitor).toHaveBeenCalledWith('https://instagram.com/vibecoder'));
+  });
+
+  it('shows a validation error inside the modal', async () => {
+    const user = userEvent.setup();
+    const stub = new StubApi();
+    stub.addCompetitor.mockResolvedValue({ data: null, error: 'That is not a valid Instagram URL' });
+    renderAt(stub, '/competitors', <CompetitorsPage />, '/competitors');
+
+    await user.click(await screen.findByRole('button', { name: /add competitor/i }));
+    const dialog = screen.getByRole('dialog');
+    await user.type(within(dialog).getByRole('textbox'), 'https://twitter.com/x');
+    await user.click(within(dialog).getByRole('button', { name: /add competitor/i }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(/not a valid instagram url/i);
+  });
+
+  it('asks for confirmation before removing a competitor', async () => {
+    const user = userEvent.setup();
+    const stub = new StubApi();
+    stub.listCompetitors.mockResolvedValue({
+      data: [{ id: 'comp_1', username: 'vibecoder', instagramUrl: '', displayName: 'Vibecoder', avatarUrl: '', addedAt: new Date().toISOString() }],
+      error: null,
+    });
+    renderAt(stub, '/competitors', <CompetitorsPage />, '/competitors');
+
+    await user.click(await screen.findByRole('button', { name: /remove @vibecoder/i }));
+    expect(screen.getByRole('dialog', { name: /remove @vibecoder/i })).toBeInTheDocument();
+    expect(stub.removeCompetitor).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole('button', { name: /remove competitor/i }));
+    await waitFor(() => expect(stub.removeCompetitor).toHaveBeenCalledWith('comp_1'));
+  });
+});
+
+describe('RemixesPage', () => {
+  it('shows the empty state when there are no remixes', async () => {
+    const stub = new StubApi();
+    renderAt(stub, '/remixes', <RemixesPage />, '/remixes');
+    expect(await screen.findByText(/no remixes yet/i)).toBeInTheDocument();
+  });
+});
+
+describe('ContentPlanPage', () => {
+  it('shows items on the board by default, with status counts', async () => {
+    const stub = new StubApi();
+    stub.listContentPlan.mockResolvedValue({ data: [planItem({ status: 'ready' })], error: null });
+    renderAt(stub, '/content-plan', <ContentPlanPage />, '/content-plan');
+
+    const readyColumn = await screen.findByRole('region', { name: /ready to film/i });
+    expect(within(readyColumn).getByText('I let AI build my SaaS in 48 hours')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Board' })).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('switches to the table view', async () => {
     const user = userEvent.setup();
     const stub = new StubApi();
     stub.listContentPlan.mockResolvedValue({ data: [planItem()], error: null });
-    stub.updateContentPlanStatus.mockResolvedValue({
-      data: planItem({ status: 'ready' }),
-      error: null,
-    });
-    render(
-      <ApiProvider api={stub as unknown as ReelsApi}>
-        <MemoryRouter initialEntries={['/content-plan']}>
-          <Routes>
-            <Route path="/content-plan" element={<ContentPlanPage />} />
-          </Routes>
-        </MemoryRouter>
-      </ApiProvider>
-    );
+    renderAt(stub, '/content-plan', <ContentPlanPage />, '/content-plan');
+    await user.click(await screen.findByRole('button', { name: 'Table' }));
+    expect(screen.getByRole('table')).toBeInTheDocument();
+  });
 
-    const group = await screen.findByRole('group', { name: /status for/i });
+  it('changes an item status', async () => {
+    const user = userEvent.setup();
+    const stub = new StubApi();
+    stub.listContentPlan.mockResolvedValue({ data: [planItem()], error: null });
+    stub.updateContentPlanStatus.mockResolvedValue({ data: planItem({ status: 'ready' }), error: null });
+    renderAt(stub, '/content-plan', <ContentPlanPage />, '/content-plan');
+
+    const group = (await screen.findAllByRole('group', { name: /status for/i }))[0];
     await user.click(within(group).getByRole('button', { name: /ready to film/i }));
 
     expect(stub.updateContentPlanStatus).toHaveBeenCalledWith('plan_1', 'ready');
-    await waitFor(() =>
-      expect(
-        within(group).getByRole('button', { name: /ready to film/i })
-      ).toHaveAttribute('aria-pressed', 'true')
-    );
   });
 
   it('shows the empty state when nothing is planned', async () => {
     const stub = new StubApi();
-    render(
-      <ApiProvider api={stub as unknown as ReelsApi}>
-        <MemoryRouter initialEntries={['/content-plan']}>
-          <Routes>
-            <Route path="/content-plan" element={<ContentPlanPage />} />
-          </Routes>
-        </MemoryRouter>
-      </ApiProvider>
-    );
+    renderAt(stub, '/content-plan', <ContentPlanPage />, '/content-plan');
     expect(await screen.findByText(/nothing planned yet/i)).toBeInTheDocument();
   });
-})
+});

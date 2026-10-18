@@ -24,8 +24,8 @@ body {
 }
 
 ::selection {
-  background-color: #d4ff3a;
-  color: #0e0f0d;
+  background-color: #8b5cf6; /* taste-skill-ignore: purple accent is a product requirement */
+  color: #ffffff;
 }
 
 @layer components {
@@ -33,7 +33,7 @@ body {
     @apply inline-flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium transition-colors duration-200 disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent;
   }
   .btn-primary {
-    @apply btn bg-accent text-ground hover:bg-accent-hover active:translate-y-px;
+    @apply btn bg-accent text-white hover:bg-accent-hover active:translate-y-px;
   }
   .btn-outline {
     @apply btn bg-surface-2 text-ink hover:bg-surface-3;
