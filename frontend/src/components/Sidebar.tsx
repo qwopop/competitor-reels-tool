@@ -33,7 +33,7 @@ export function Sidebar() {
       </nav>
 
       <p className="mt-auto px-6 py-6 text-xs leading-relaxed text-ink/50">
-        {USING_MOCK ? 'Demo: saved in this browser only.' : 'Saved by the local API.'}
+        {USING_MOCK ? 'Demo: saved in this browser only.' : 'Saved to the database.'}
       </p>
     </aside>
   );

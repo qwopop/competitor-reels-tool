@@ -33,6 +33,10 @@ Data is stored in `backend/data/app.db` and survives restarts. Delete that file 
 
 API docs are at http://localhost:8091/docs while the backend runs.
 
+## Deploying
+
+The frontend, API and database deploy to Render from `render.yaml`. See [`docs/deploy.md`](docs/deploy.md).
+
 ### Running the pieces separately
 
 ```bash

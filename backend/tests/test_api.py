@@ -224,3 +224,16 @@ def test_plan_survives_refetching_the_competitor_reels(client):
     plan = client.get("/api/content-plan").json()
     assert [p["id"] for p in plan] == [item["id"]]
     assert plan[0]["caption"] == reel["caption"]
+
+
+def test_cors_origins_come_from_environment(tmp_path, monkeypatch):
+    from fastapi.testclient import TestClient
+
+    from app.main import create_app
+
+    monkeypatch.setenv("CORS_ORIGINS", "https://reels.example.com")
+    with TestClient(create_app(f"sqlite:///{tmp_path / 'cors.db'}")) as client:
+        allowed = client.get("/api/competitors", headers={"Origin": "https://reels.example.com"})
+        assert allowed.headers["access-control-allow-origin"] == "https://reels.example.com"
+        blocked = client.get("/api/competitors", headers={"Origin": "https://evil.example.com"})
+        assert "access-control-allow-origin" not in blocked.headers

@@ -13,7 +13,7 @@ from app.models import Base, make_engine
 from app.routers import router
 
 DEFAULT_DATABASE_URL = "sqlite:///./data/app.db"
-DEV_CORS_ORIGINS = ["http://localhost:5173", "http://127.0.0.1:5173"]
+DEV_CORS_ORIGINS = "http://localhost:5173,http://127.0.0.1:5173"
 
 
 def create_app(database_url: str | None = None) -> FastAPI:
@@ -30,12 +30,14 @@ def create_app(database_url: str | None = None) -> FastAPI:
         yield
         engine.dispose()
 
+    # Comma-separated list. Set CORS_ORIGINS to the deployed frontend's URL.
+    origins = [o.strip() for o in os.getenv("CORS_ORIGINS", DEV_CORS_ORIGINS).split(",") if o.strip()]
     app = FastAPI(title="Competitor Reels API", version="0.1.0", lifespan=lifespan)
     app.state.session_factory = session_factory
     # The Vite dev server proxies /api, so CORS only matters if you call the API directly.
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=DEV_CORS_ORIGINS,
+        allow_origins=origins,
         allow_methods=["*"],
         allow_headers=["*"],
     )
