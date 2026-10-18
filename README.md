@@ -13,6 +13,10 @@ Track Instagram competitors, pull their 20 most recent Reels into a library, and
 | --- | --- | --- | --- |
 | ![Dashboard](docs/screenshots/dashboard.png) | ![Reels](docs/screenshots/reels.webp) | ![Content plan board](docs/screenshots/content-plan.png) | ![Content plan table](docs/screenshots/content-plan-table.png) |
 
+| Competitors | Remixes | Remix editor |
+| --- | --- | --- |
+| ![Competitors](docs/screenshots/competitors.png) | ![Remixes](docs/screenshots/remixes.png) | ![Remix editor](docs/screenshots/remix-editor.png) |
+
 ## Run it locally
 
 Requirements: [uv](https://docs.astral.sh/uv/), Node.js 20+, and `make`.
