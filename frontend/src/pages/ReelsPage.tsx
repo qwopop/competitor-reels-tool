@@ -5,6 +5,7 @@ import { useApi } from '@/services';
 import { compactNumber, relativeTime } from '@/utils/format';
 import { filterReels, type ReelSort } from '@/utils/reels';
 import { planStatusMeta } from '@/utils/plan';
+import { PageHeader } from '@/components/PageHeader';
 import { EmptyState, ErrorBanner, FullPageLoader, Spinner } from '@/components/ui';
 import { Notice } from '@/components/Notice';
 import { ViewToggle } from '@/components/ViewToggle';
@@ -92,15 +93,11 @@ export function ReelsPage() {
 
   return (
     <div>
-      <header className="mb-10">
-        <h1 className="text-5xl font-semibold leading-[0.95] tracking-[-0.03em] text-ink sm:text-6xl">
-          Reels
-        </h1>
-        <p className="mt-5 max-w-md text-base text-ink/70">
-          Every Reel from your tracked competitors. Search, filter and sort them,
-          then remix or queue the ones worth making.
-        </p>
-      </header>
+      <PageHeader
+        title="Browse"
+        accent="reels"
+        description="Every Reel from your tracked competitors. Search, filter and sort them, then remix or queue the ones worth making."
+      />
 
       <div className="mb-8 flex flex-wrap items-end gap-4">
         <div className="min-w-[12rem]">
@@ -181,7 +178,7 @@ export function ReelsPage() {
                 src={reel.thumbnailUrl}
                 alt={reel.caption}
                 loading="lazy"
-                className="aspect-[4/5] w-full bg-surface-2 object-cover"
+                className="aspect-[4/5] w-full rounded-2xl bg-surface-2 object-cover"
               />
               <div className="mt-5 space-y-2">
                 <p className="text-sm text-ink/60">
@@ -210,13 +207,13 @@ export function ReelsPage() {
       ) : (
         <ul className="max-w-5xl">
           {visible.map((reel) => (
-            <li key={reel.id} className="rise bg-surface p-4 transition-colors duration-200 hover:bg-surface-2 [&+&]:mt-2">
+            <li key={reel.id} className="rise rounded-2xl bg-surface p-4 transition-colors duration-200 hover:bg-surface-2 [&+&]:mt-3">
               <div className="flex flex-wrap items-center gap-5">
                 <img
                   src={reel.thumbnailUrl}
                   alt={reel.caption}
                   loading="lazy"
-                  className="aspect-[4/5] w-16 bg-surface-2 object-cover"
+                  className="aspect-[4/5] w-16 rounded-xl bg-surface-2 object-cover"
                 />
                 <div className="min-w-0 flex-1 basis-64">
                   <p className="text-sm text-ink/60">
@@ -300,7 +297,7 @@ function RemixPreview({ remix, onClose }: { remix: RemixedReel; onClose: () => v
   return (
     <aside
       aria-label="Remix preview"
-      className="fixed inset-y-0 right-0 z-40 flex w-full max-w-md flex-col gap-6 overflow-y-auto bg-surface p-8"
+      className="fixed inset-y-0 right-0 z-40 flex w-full max-w-md flex-col gap-6 overflow-y-auto rounded-l-3xl bg-surface p-8"
     >
       <div className="flex items-center justify-between">
         <p className="text-sm text-ink/60">Remix preview</p>

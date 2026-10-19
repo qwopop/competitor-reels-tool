@@ -9,7 +9,9 @@
 
 ## Design
 
-For any page or UI work in `frontend/`, follow the `design-taste-frontend` skill in `.claude/skills/design-taste-frontend/SKILL.md`. It is a copy of `skills/taste-skill` from https://github.com/Leonxlnx/taste-skill. Its scripts need Node 22+ and Chrome, Edge or Chromium.
+The UI follows the ViraClip-inspired look (see `docs/screenshots/`): near-black ground, a bold Inter headline with one italic Instrument Serif phrase, the orange-to-pink gradient (`bg-brand`) for primary actions, pill buttons and inputs, rounded panels, and a purple glow. Tokens are in `frontend/tailwind.config.js` and global styles in `frontend/src/index.css`.
+
+This look was chosen on purpose and breaks several house rules of the `design-taste-frontend` skill (gradients, glass, pills, an italic accent word). The skill's lint (`.claude/skills/design-taste-frontend/scripts/lint.mjs`) is therefore expected to report failures and is not part of the checks. Keep new UI consistent with the current pages.
 
 ## Backend (use uv)
 

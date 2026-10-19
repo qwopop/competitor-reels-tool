@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { Plus, Trash2, RefreshCw, Check } from 'lucide-react';
 import { useApi } from '@/services';
 import type { Competitor } from '@/types';
+import { PageHeader } from '@/components/PageHeader';
 import { ErrorBanner, FullPageLoader, Spinner } from '@/components/ui';
 import { Modal, ConfirmDialog } from '@/components/Modal';
 import { relativeTime } from '@/utils/format';
@@ -84,19 +85,16 @@ export function CompetitorsPage() {
 
   return (
     <div>
-      <header className="mb-14 flex flex-wrap items-end justify-between gap-8">
-        <div>
-          <h1 className="text-5xl font-semibold leading-[0.95] tracking-[-0.03em] text-ink sm:text-6xl">
-            Competitors
-          </h1>
-          <p className="mt-5 max-w-md text-base text-ink/70">
-            Track an Instagram profile, then fetch its 20 most recent Reels into your library.
-          </p>
-        </div>
-        <button type="button" onClick={() => setShowAdd(true)} className="btn-primary">
-          <Plus size={15} /> Add competitor
-        </button>
-      </header>
+      <PageHeader
+        title="Track your"
+        accent="competitors"
+        description="Track an Instagram profile, then fetch its 20 most recent Reels into your library."
+        actions={
+          <button type="button" onClick={() => setShowAdd(true)} className="btn-primary">
+            <Plus size={15} /> Add competitor
+          </button>
+        }
+      />
 
       {error && (
         <div className="mb-10 max-w-3xl">
@@ -117,9 +115,9 @@ export function CompetitorsPage() {
             const justFetched = fetchedId === c.id;
             const count = reelCounts[c.id] ?? 0;
             return (
-              <li key={c.id} className="rise bg-surface px-6 py-5 transition-colors duration-200 hover:bg-surface-2 [&+&]:mt-2">
+              <li key={c.id} className="rise rounded-2xl bg-surface px-6 py-5 transition-colors duration-200 hover:bg-surface-2 [&+&]:mt-3">
                 <div className="flex flex-wrap items-center gap-x-6 gap-y-4">
-                  <img src={c.avatarUrl} alt={c.displayName} className="h-12 w-12 bg-surface-2 object-cover" />
+                  <img src={c.avatarUrl} alt={c.displayName} className="h-12 w-12 rounded-full bg-surface-2 object-cover" />
                   <div className="min-w-0 flex-1">
                     <h3 className="truncate text-lg font-medium text-ink">{c.displayName}</h3>
                     <p className="truncate text-sm text-ink/60">
@@ -148,7 +146,7 @@ export function CompetitorsPage() {
                   </div>
                 </div>
                 {justFetched && (
-                  <div className="mt-4 flex flex-wrap items-center justify-between gap-3 bg-accent/10 px-4 py-3 text-sm text-ink">
+                  <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl bg-accent/10 px-4 py-3 text-sm text-ink">
                     <span>Pulled 20 Reels into your library.</span>
                     <Link to="/reels" className="font-medium underline-offset-4 hover:underline">View reels</Link>
                   </div>

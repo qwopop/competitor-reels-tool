@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Instrument+Serif:ital@0;1&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -11,47 +11,51 @@
 html,
 body,
 #root {
-  height: 100%;
+  min-height: 100%;
 }
 
 body {
   margin: 0;
-  background-color: #0e0f0d;
-  color: #f3f2ec;
-  font-family: 'Instrument Sans', ui-sans-serif, system-ui, sans-serif;
+  background-color: #07070b;
+  color: #f6f6f8;
+  font-family: 'Inter', ui-sans-serif, system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }
 
 ::selection {
-  background-color: #8b5cf6; /* taste-skill-ignore: purple accent is a product requirement */
-  color: #ffffff;
+  background-color: #ff8f7a;
+  color: #07070b;
 }
 
 @layer components {
   .btn {
-    @apply inline-flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium transition-colors duration-200 disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent;
+    @apply inline-flex items-center justify-center gap-2 rounded-full px-5 py-2.5 text-sm font-semibold transition duration-200 disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent;
   }
   .btn-primary {
-    @apply btn bg-accent text-white hover:bg-accent-hover active:translate-y-px;
+    @apply btn bg-brand text-ground hover:brightness-110 active:scale-[0.98];
   }
   .btn-outline {
-    @apply btn bg-surface-2 text-ink hover:bg-surface-3;
+    @apply btn border border-white/15 bg-transparent text-ink hover:border-accent/60 hover:bg-white/5;
   }
   .btn-ghost {
-    @apply btn text-ink/70 hover:text-ink;
+    @apply btn text-ink/70 hover:bg-white/5 hover:text-ink;
   }
   .panel {
-    @apply bg-surface p-6;
+    @apply rounded-3xl bg-surface p-6;
   }
   .input {
-    @apply w-full bg-surface-2 px-4 py-3 text-[15px] text-ink placeholder:text-ink/40 outline-none transition-colors duration-200 focus:bg-surface-3 focus-visible:outline-2 focus-visible:outline-accent;
+    @apply w-full rounded-2xl border border-white/10 bg-surface-2 px-4 py-3 text-[15px] text-ink placeholder:text-ink/40 outline-none transition duration-200 focus:border-accent/60 focus-visible:outline-2 focus-visible:outline-accent;
   }
   .label {
     @apply text-sm font-medium text-ink/70;
   }
   .stat {
     @apply text-sm tabular-nums text-ink/60;
+  }
+  /* The orange-to-pink brand gradient, applied to text. */
+  .text-gradient {
+    @apply bg-brand bg-clip-text text-transparent;
   }
 }
 
@@ -72,9 +76,17 @@ body {
   animation-delay: calc(var(--i, 0) * 70ms);
 }
 
+/* Scrolling creator strip. Pauses on hover. */
+.marquee:hover {
+  animation-play-state: paused;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .rise,
   .animate-fade-in {
+    animation: none;
+  }
+  .marquee {
     animation: none;
   }
   *,

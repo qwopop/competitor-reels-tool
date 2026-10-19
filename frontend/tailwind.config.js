@@ -1,26 +1,31 @@
 /** @type {import('tailwindcss').Config} */
-// Design tokens. One ground, three surface steps, one ink, one accent.
+// Design tokens for the ViraClip-inspired look: near-black ground, a bold sans
+// with one italic serif accent phrase, orange-to-pink gradient, pill shapes.
 export default {
   content: ['./index.html', './src/**/*.{js,ts,jsx,tsx}'],
   theme: {
     extend: {
       colors: {
-        ground: '#0e0f0d',
+        ground: '#07070b',
         surface: {
-          DEFAULT: '#161714',
-          2: '#1f201d',
-          3: '#2a2b27',
+          DEFAULT: '#0e0e15',
+          2: '#151520',
+          3: '#1f1f2d',
         },
-        ink: '#f3f2ec',
-        // Vibrant purple, per the MVP plan. Buttons on it use white text.
+        ink: '#f6f6f8',
         accent: {
-          DEFAULT: '#8b5cf6', // taste-skill-ignore: purple accent is a product requirement
-          hover: '#a78bfa', // taste-skill-ignore: purple accent is a product requirement
+          DEFAULT: '#ffab5e',
+          hover: '#ffc088',
         },
-        danger: '#ff7a66',
+        glow: '#7c3aed',
+        danger: '#ff7a8a',
       },
       fontFamily: {
-        sans: ['"Instrument Sans"', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+        sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+        serif: ['"Instrument Serif"', 'ui-serif', 'Georgia', 'serif'],
+      },
+      backgroundImage: {
+        brand: 'linear-gradient(90deg, #ffbd59 0%, #ff7f7f 55%, #ff6f9c 100%)',
       },
       keyframes: {
         'fade-in': {
@@ -31,10 +36,15 @@ export default {
           '0%, 100%': { opacity: '1' },
           '50%': { opacity: '0.5' },
         },
+        marquee: {
+          '0%': { transform: 'translateX(0)' },
+          '100%': { transform: 'translateX(-50%)' },
+        },
       },
       animation: {
         'fade-in': 'fade-in 0.4s ease-out both',
         'pulse-soft': 'pulse-soft 1.6s ease-in-out infinite',
+        marquee: 'marquee 45s linear infinite',
       },
     },
   },

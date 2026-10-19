@@ -14,7 +14,7 @@ export function Notice({
     error: 'bg-danger/10 text-danger',
   }[tone];
   return (
-    <div role="status" className={`flex items-center justify-between gap-4 px-4 py-3 text-sm ${toneClass}`}>
+    <div role="status" className={`flex items-center justify-between gap-4 rounded-xl px-4 py-3 text-sm ${toneClass}`}>
       <span>{message}</span>
       <button type="button" onClick={onDismiss} className="btn-ghost px-2 py-1 text-xs">
         Dismiss

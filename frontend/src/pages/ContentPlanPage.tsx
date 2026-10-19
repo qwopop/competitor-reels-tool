@@ -4,6 +4,7 @@ import type { ContentPlanItem, PlanStatus, RemixedReel } from '@/types';
 import { useApi } from '@/services';
 import { formatDate, relativeTime } from '@/utils/format';
 import { PLAN_STATUSES } from '@/utils/plan';
+import { PageHeader } from '@/components/PageHeader';
 import { EmptyState, ErrorBanner, FullPageLoader, Spinner } from '@/components/ui';
 import { ViewToggle } from '@/components/ViewToggle';
 
@@ -80,27 +81,24 @@ export function ContentPlanPage() {
 
   return (
     <div>
-      <header className="mb-10 flex flex-wrap items-end justify-between gap-8">
-        <div>
-          <h1 className="text-5xl font-semibold leading-[0.95] tracking-[-0.03em] text-ink sm:text-6xl">
-            Content plan
-          </h1>
-          <p className="mt-5 max-w-md text-base text-ink/70">
-            Reels you are filming. Move each one along as it gets scripted, filmed and posted.
-          </p>
-        </div>
-        {items && items.length > 0 && (
-          <ViewToggle<PlanView>
-            label="Plan layout"
-            value={view}
-            onChange={setView}
-            options={[
-              { value: 'board', label: 'Board' },
-              { value: 'table', label: 'Table' },
-            ]}
-          />
-        )}
-      </header>
+      <PageHeader
+        title="Your"
+        accent="content plan"
+        description="Reels you are filming. Move each one along as it gets scripted, filmed and posted."
+        actions={
+          items && items.length > 0 ? (
+            <ViewToggle<PlanView>
+              label="Plan layout"
+              value={view}
+              onChange={setView}
+              options={[
+                { value: 'board', label: 'Board' },
+                { value: 'table', label: 'Table' },
+              ]}
+            />
+          ) : undefined
+        }
+      />
 
       {items && items.length > 0 && (
         <ul className="mb-10 flex flex-wrap gap-x-8 gap-y-2 text-sm text-ink/70">
@@ -128,9 +126,9 @@ export function ContentPlanPage() {
           action={<Link to="/reels" className="btn-primary">Go to reels</Link>}
         />
       ) : items && view === 'board' ? (
-        <div className="grid grid-cols-1 gap-px bg-ground md:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
           {PLAN_STATUSES.map((column) => (
-            <section key={column.value} aria-labelledby={`col-${column.value}`} className="bg-surface-2/40 p-4">
+            <section key={column.value} aria-labelledby={`col-${column.value}`} className="rounded-3xl bg-surface p-4">
               <h2 id={`col-${column.value}`} className="px-2 pb-4 text-base font-medium text-ink">
                 <span aria-hidden="true">{column.emoji}</span> {column.label}{' '}
                 <span className="tabular-nums text-ink/60">{countsByStatus[column.value]}</span>
@@ -173,7 +171,7 @@ export function ContentPlanPage() {
                   <tr key={item.id} className="bg-surface">
                     <td className="px-4 py-4 align-top text-base text-ink">
                       <div className="flex items-center gap-3">
-                        <img src={item.thumbnailUrl} alt="" className="aspect-[4/5] w-10 bg-surface-2 object-cover" />
+                        <img src={item.thumbnailUrl} alt="" className="aspect-[4/5] w-10 rounded-lg bg-surface-2 object-cover" />
                         <span className="max-w-xs">{item.caption}</span>
                       </div>
                     </td>
@@ -213,9 +211,9 @@ function PlanCard({
   onRemove: () => void;
 }) {
   return (
-    <li className="rise bg-surface p-4">
+    <li className="rise rounded-2xl bg-surface-2 p-4">
       <div className="flex gap-4">
-        <img src={item.thumbnailUrl} alt="" className="aspect-[4/5] w-16 bg-surface-2 object-cover" />
+        <img src={item.thumbnailUrl} alt="" className="aspect-[4/5] w-16 rounded-xl bg-surface-3 object-cover" />
         <div className="min-w-0">
           <p className="text-xs text-ink/60">@{item.competitorUsername} · added {relativeTime(item.addedAt)}</p>
           <h3 className="mt-1 text-base font-medium leading-snug text-ink">{item.caption}</h3>
@@ -258,8 +256,8 @@ function StatusControl({
             disabled={busy}
             onClick={() => onChange(s.value)}
             className={[
-              'px-2.5 py-1.5 text-xs transition-colors duration-200',
-              active ? 'bg-surface-3 text-ink' : 'text-ink/60 hover:bg-surface-2 hover:text-ink',
+              'rounded-full px-2.5 py-1.5 text-xs transition-colors duration-200',
+              active ? 'bg-white/10 text-ink' : 'text-ink/60 hover:bg-white/5 hover:text-ink',
             ].join(' ')}
           >
             <span aria-hidden="true">{s.emoji}</span> {s.label}

@@ -89,10 +89,43 @@ beforeEach(() => {
 });
 
 describe('DashboardPage', () => {
-  it('asks the user to add a competitor when none are tracked', async () => {
+  it('shows the hero with a link field when nothing is tracked yet', async () => {
     const stub = new StubApi();
     renderAt(stub, '/', <DashboardPage />, '/');
-    expect(await screen.findByText(/start with a competitor/i)).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(/viral ideas/i);
+    expect(screen.getByLabelText(/instagram profile link/i)).toBeInTheDocument();
+    await waitFor(() => expect(stub.listCompetitors).toHaveBeenCalled());
+  });
+
+  it('adds a competitor and fetches its Reels in one step', async () => {
+    const user = userEvent.setup();
+    const stub = new StubApi();
+    stub.addCompetitor.mockResolvedValue({
+      data: { id: 'comp_1', username: 'vibecoder', instagramUrl: '', displayName: 'Vibecoder', avatarUrl: '', addedAt: '' },
+      error: null,
+    });
+    stub.fetchReelsForCompetitor.mockResolvedValue({ data: [reel(), reel({ id: 'reel_2' })], error: null });
+    renderAt(stub, '/', <DashboardPage />, '/');
+
+    await user.type(screen.getByLabelText(/instagram profile link/i), '@vibecoder');
+    await user.click(screen.getByRole('button', { name: /track & fetch/i }));
+
+    expect(stub.addCompetitor).toHaveBeenCalledWith('@vibecoder');
+    await waitFor(() => expect(stub.fetchReelsForCompetitor).toHaveBeenCalledWith('comp_1'));
+    expect(await screen.findByText('Pulled 2 Reels from @vibecoder.')).toBeInTheDocument();
+  });
+
+  it('shows the validation error and does not fetch when the link is invalid', async () => {
+    const user = userEvent.setup();
+    const stub = new StubApi();
+    stub.addCompetitor.mockResolvedValue({ data: null, error: 'That is not a valid Instagram URL' });
+    renderAt(stub, '/', <DashboardPage />, '/');
+
+    await user.type(screen.getByLabelText(/instagram profile link/i), 'https://twitter.com/x');
+    await user.click(screen.getByRole('button', { name: /track & fetch/i }));
+
+    expect(await screen.findByText(/not a valid instagram url/i)).toBeInTheDocument();
+    expect(stub.fetchReelsForCompetitor).not.toHaveBeenCalled();
   });
 
   it('shows totals, the top Reel and the most-viewed competitor', async () => {
@@ -108,9 +141,9 @@ describe('DashboardPage', () => {
     stub.listContentPlan.mockResolvedValue({ data: [planItem({ status: 'filmed' })], error: null });
     renderAt(stub, '/', <DashboardPage />, '/');
 
-    expect((await screen.findAllByText('Top one')).length).toBeGreaterThan(0);
-    const totals = screen.getByRole('region', { name: /totals/i });
+    const totals = await screen.findByRole('region', { name: /totals/i });
     expect(within(totals).getByText('Reels').previousSibling).toHaveTextContent('2');
+    expect((await screen.findAllByText('Top one')).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/@vibecoder/).length).toBeGreaterThan(0);
   });
 });

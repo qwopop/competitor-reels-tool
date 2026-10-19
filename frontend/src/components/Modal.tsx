@@ -31,7 +31,7 @@ export function Modal({
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        className="w-full max-w-lg bg-surface p-7"
+        className="w-full max-w-lg rounded-3xl bg-surface-2 p-7"
       >
         <h2 id={titleId} className="text-2xl font-semibold tracking-[-0.02em] text-ink">
           {title}

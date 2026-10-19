@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import type { RemixedReel, Reel } from '@/types';
 import { useApi } from '@/services';
 import { relativeTime } from '@/utils/format';
+import { PageHeader } from '@/components/PageHeader';
 import { EmptyState, ErrorBanner, FullPageLoader } from '@/components/ui';
 
 export function RemixesPage() {
@@ -26,14 +27,11 @@ export function RemixesPage() {
 
   return (
     <div>
-      <header className="mb-14">
-        <h1 className="text-5xl font-semibold leading-[0.95] tracking-[-0.03em] text-ink sm:text-6xl">
-          Remixes
-        </h1>
-        <p className="mt-5 max-w-md text-base text-ink/70">
-          Every breakdown you have generated. Open one to edit its hook, script and call to action.
-        </p>
-      </header>
+      <PageHeader
+        title="Your"
+        accent="remixes"
+        description="Every breakdown you have generated. Open one to edit its hook, script and call to action."
+      />
 
       {error && (
         <div className="mb-10 max-w-3xl">
@@ -54,7 +52,7 @@ export function RemixesPage() {
           {remixes.map((remix) => {
             const reel = reelById[remix.reelId];
             return (
-              <li key={remix.id} className="rise flex flex-wrap items-center justify-between gap-6 bg-surface px-6 py-5 [&+&]:mt-2">
+              <li key={remix.id} className="rise flex flex-wrap items-center justify-between gap-6 rounded-2xl bg-surface px-6 py-5 [&+&]:mt-3">
                 <div className="min-w-0 flex-1 basis-72">
                   <p className="text-sm text-ink/60">
                     {reel ? `@${reel.competitorUsername} · ` : ''}updated {relativeTime(remix.updatedAt)}

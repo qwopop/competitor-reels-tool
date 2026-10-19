@@ -155,7 +155,7 @@ export function RemixPage() {
               <img
                 src={reel.thumbnailUrl}
                 alt={reel.caption}
-                className="aspect-[4/5] w-full bg-surface-2 object-cover"
+                className="aspect-[4/5] w-full rounded-2xl bg-surface-2 object-cover"
               />
               <p className="mt-5 text-sm text-ink/60">
                 @{reel.competitorUsername} · {relativeTime(reel.postedAt)}

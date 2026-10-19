@@ -11,7 +11,7 @@ export function ViewToggle<T extends string>({
   onChange: (value: T) => void;
 }) {
   return (
-    <div role="group" aria-label={label} className="inline-flex bg-surface-2 p-1">
+    <div role="group" aria-label={label} className="inline-flex rounded-full bg-surface-2 p-1">
       {options.map((option) => {
         const active = option.value === value;
         return (
@@ -21,8 +21,8 @@ export function ViewToggle<T extends string>({
             aria-pressed={active}
             onClick={() => onChange(option.value)}
             className={[
-              'px-4 py-1.5 text-sm transition-colors duration-200',
-              active ? 'bg-surface-3 text-ink' : 'text-ink/60 hover:text-ink',
+              'rounded-full px-4 py-1.5 text-sm transition-colors duration-200',
+              active ? 'bg-white/10 text-ink' : 'text-ink/60 hover:text-ink',
             ].join(' ')}
           >
             {option.label}

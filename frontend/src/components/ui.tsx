@@ -34,5 +34,5 @@ export function EmptyState({
 }
 
 export function ErrorBanner({ message }: { message: string }) {
-  return <div className="bg-danger/10 px-4 py-3 text-sm text-danger">{message}</div>;
+  return <div className="rounded-xl bg-danger/10 px-4 py-3 text-sm text-danger">{message}</div>;
 }
