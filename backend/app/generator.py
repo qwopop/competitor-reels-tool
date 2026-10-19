@@ -60,7 +60,14 @@ CTA_BANK = [
     "Tag a founder who still hand-codes CRUD.",
 ]
 
-USERNAME_RE = re.compile(r"^@?([A-Za-z0-9._]+)$")
+# Instagram usernames are 1-30 characters: letters, digits, periods and underscores.
+USERNAME_RE = re.compile(r"^[A-Za-z0-9._]{1,30}$")
+INSTAGRAM_LINK_RE = re.compile(r"^(https?://)?([A-Za-z0-9-]+\.)*instagram\.com(/|$|\?)", re.IGNORECASE)
+# First path segments that are Instagram pages, not accounts.
+RESERVED_SEGMENTS = {
+    "p", "reel", "reels", "tv", "explore", "stories", "accounts", "direct",
+    "about", "web", "developer", "legal", "privacy", "press", "api", "directory",
+}
 
 
 def now_iso() -> str:
@@ -73,22 +80,28 @@ def new_id(prefix: str) -> str:
 
 
 def parse_username(raw: str) -> str | None:
-    """Accept an Instagram profile URL or a bare (optionally @-prefixed) username."""
+    """Return the username from a profile link or a bare (optionally @-prefixed) name.
+
+    Accepts links with or without a scheme, a www./m. host, a trailing slash,
+    a query string and a profile sub-path such as /name/reels/. Anything that
+    is not a profile (a post, Reel, explore page, another site) returns None.
+    """
     text = raw.strip()
     if not text:
         return None
-    parsed = urlparse(text)
-    if parsed.scheme in ("http", "https") and parsed.hostname:
-        host = parsed.hostname.lower()
-        if host != "instagram.com" and not host.endswith(".instagram.com"):
-            return None
+    if INSTAGRAM_LINK_RE.match(text):
+        parsed = urlparse(text if "://" in text else f"https://{text}")
         parts = [part for part in parsed.path.split("/") if part]
-        return parts[0] if parts else None
-    match = USERNAME_RE.match(text)
-    return match.group(1) if match else None
+        if not parts or parts[0].lower() in RESERVED_SEGMENTS:
+            return None
+        name = parts[0]
+    else:
+        name = text[1:] if text.startswith("@") else text
+    return name if USERNAME_RE.match(name) else None
 
 
 def build_competitor(username: str) -> CompetitorRow:
+    username = username.lower()
     return CompetitorRow(
         id=new_id("comp"),
         username=username,

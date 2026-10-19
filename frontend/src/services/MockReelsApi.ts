@@ -47,25 +47,33 @@ function write<T>(key: string, value: T): void {
 
 // ----- Instagram URL helpers -------------------------------------------------
 
-const USERNAME_RE = /^@?([A-Za-z0-9._]+)$/;
+// Same rules as backend/app/generator.py: 1-30 characters of letters, digits, . and _.
+const USERNAME_RE = /^[A-Za-z0-9._]{1,30}$/;
+const INSTAGRAM_LINK_RE = /^(https?:\/\/)?([A-Za-z0-9-]+\.)*instagram\.com(\/|$|\?)/i;
+// First path segments that are Instagram pages, not accounts.
+const RESERVED_SEGMENTS = new Set([
+  'p', 'reel', 'reels', 'tv', 'explore', 'stories', 'accounts', 'direct',
+  'about', 'web', 'developer', 'legal', 'privacy', 'press', 'api', 'directory',
+]);
 
-export function parseUsername(url: string): string | null {
-  const trimmed = url.trim();
-  if (!trimmed) return null;
-  try {
-    const u = new URL(trimmed);
-    if (!/instagram\.com$/i.test(u.hostname) && !u.hostname.endsWith('instagram.com')) {
+export function parseUsername(input: string): string | null {
+  const text = input.trim();
+  if (!text) return null;
+  let name: string;
+  if (INSTAGRAM_LINK_RE.test(text)) {
+    let url: URL;
+    try {
+      url = new URL(text.includes('://') ? text : `https://${text}`);
+    } catch {
       return null;
     }
-    // /username/ or /username
-    const parts = u.pathname.split('/').filter(Boolean);
-    if (parts.length === 0) return null;
-    return parts[0];
-  } catch {
-    // Not a URL — accept a bare @username for ergonomics.
-    const m = trimmed.match(USERNAME_RE);
-    return m ? m[1] : null;
+    const parts = url.pathname.split('/').filter(Boolean);
+    if (parts.length === 0 || RESERVED_SEGMENTS.has(parts[0].toLowerCase())) return null;
+    name = parts[0];
+  } else {
+    name = text.startsWith('@') ? text.slice(1) : text;
   }
+  return USERNAME_RE.test(name) ? name : null;
 }
 
 // ----- Mock data generation --------------------------------------------------
@@ -190,7 +198,8 @@ export class MockReelsApi implements ReelsApi {
   }
 
   async addCompetitor(instagramUrl: string): Promise<ServiceResult<Competitor>> {
-    const username = parseUsername(instagramUrl);
+    const parsed = parseUsername(instagramUrl);
+    const username = parsed ? parsed.toLowerCase() : null;
     if (!username) {
       return fail<Competitor>(
         'Please paste a valid Instagram profile URL like https://instagram.com/username'
@@ -240,10 +249,14 @@ export class MockReelsApi implements ReelsApi {
     }
     const newReels = mockReelsFor(competitor);
     const existing = read<Reel[]>(REELS_KEY, []);
-    // Replace any reels we already had for this competitor.
+    // Replace this competitor's Reels, but keep any that have a remix or a plan item.
+    const keep = new Set([
+      ...read<RemixedReel[]>(REMIXES_KEY, []).map((rm) => rm.reelId),
+      ...read<ContentPlanItem[]>(PLAN_KEY, []).map((item) => item.reelId),
+    ]);
     const merged = [
       ...newReels,
-      ...existing.filter((r) => r.competitorId !== competitorId),
+      ...existing.filter((r) => r.competitorId !== competitorId || keep.has(r.id)),
     ];
     write(REELS_KEY, merged);
     return delay(ok(newReels));

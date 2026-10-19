@@ -70,8 +70,10 @@ paths:
       operationId: fetchReelsForCompetitor
       summary: Fetch the 20 most recent Reels for a competitor
       description: >
-        Replaces any Reels previously stored for this competitor, so refetching
-        never duplicates rows.
+        Stores 20 new Reels for this competitor and removes the old ones, with one
+        exception: a Reel that has a remix or a content plan item is kept, so a
+        re-fetch never destroys the user's work. The library can therefore hold
+        more than 20 Reels for a competitor. The response lists only the new Reels.
       responses:
         "200":
           description: The freshly fetched Reels

@@ -1,4 +1,5 @@
-import { useEffect, useId, type ReactNode } from 'react';
+import { useId, useRef, type ReactNode } from 'react';
+import { useDialogFocus } from './useDialogFocus';
 
 // A dialog over the page. Escape and a click on the backdrop close it.
 export function Modal({
@@ -11,14 +12,8 @@ export function Modal({
   children: ReactNode;
 }) {
   const titleId = useId();
-
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useDialogFocus(dialogRef, onClose);
 
   return (
     <div
@@ -28,6 +23,8 @@ export function Modal({
       }}
     >
       <div
+        ref={dialogRef}
+        tabIndex={-1}
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}

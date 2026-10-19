@@ -73,3 +73,66 @@ describe('HttpReelsApi', () => {
     expect(JSON.parse(init.body)).toEqual({ hook: 'New hook' });
   });
 });
+
+
+describe('HttpReelsApi when the server is down', () => {
+  beforeEach(() => {
+    vi.stubGlobal('fetch', vi.fn());
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it.each([500, 502, 503, 504])('turns an empty %i into a clear message', async (status) => {
+    vi.mocked(fetch).mockResolvedValue(new Response(null, { status }));
+    const res = await new HttpReelsApi().listCompetitors();
+    expect(res.data).toBeNull();
+    expect(res.error).toBe('Could not reach the server. Check that the backend is running.');
+  });
+
+  it('still shows the detail the server sent with a 500', async () => {
+    vi.mocked(fetch).mockResolvedValue(jsonResponse(500, { detail: 'boom' }));
+    const res = await new HttpReelsApi().listCompetitors();
+    expect(res.error).toBe('boom');
+  });
+
+  it('keeps a plain message for other failures', async () => {
+    vi.mocked(fetch).mockResolvedValue(new Response(null, { status: 418 }));
+    const res = await new HttpReelsApi().listCompetitors();
+    expect(res.error).toBe('Request failed (418).');
+  });
+});
+
+describe('HttpReelsApi validation messages', () => {
+  beforeEach(() => {
+    vi.stubGlobal('fetch', vi.fn());
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('says which field is too long and the limit', async () => {
+    vi.mocked(fetch).mockResolvedValue(
+      jsonResponse(422, {
+        detail: [
+          {
+            type: 'string_too_long',
+            loc: ['body', 'script'],
+            msg: 'String should have at most 2000 characters',
+            ctx: { max_length: 2000 },
+          },
+        ],
+      })
+    );
+    const res = await new HttpReelsApi().updateRemix('remix_1', { script: 'x' });
+    expect(res.error).toBe('The script is too long (at most 2000 characters).');
+  });
+
+  it('falls back to the first message for other validation errors', async () => {
+    vi.mocked(fetch).mockResolvedValue(
+      jsonResponse(422, { detail: [{ type: 'missing', loc: ['body', 'instagramUrl'], msg: 'Field required' }] })
+    );
+    const res = await new HttpReelsApi().addCompetitor('');
+    expect(res.error).toBe('Field required');
+  });
+});

@@ -1,10 +1,28 @@
 """Data access. Every database read and write goes through these functions."""
 
+from collections.abc import Callable
+
 from sqlalchemy import delete, func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app import generator
 from app.models import ContentPlanRow, CompetitorRow, ReelRow, RemixRow
+
+
+def _add_or_get(db: Session, row, find: Callable[[], object | None]):
+    """Insert `row`. If a unique constraint says another request got there first,
+    return that existing row instead. Returns (row, created)."""
+    db.add(row)
+    try:
+        db.commit()
+        return row, True
+    except IntegrityError:
+        db.rollback()
+        existing = find()
+        if existing is None:
+            raise
+        return existing, False
 
 
 def list_competitors(db: Session) -> list[CompetitorRow]:
@@ -23,11 +41,9 @@ def find_competitor_by_username(db: Session, username: str) -> CompetitorRow | N
     return db.scalars(stmt).first()
 
 
-def add_competitor(db: Session, username: str) -> CompetitorRow:
+def add_competitor(db: Session, username: str) -> tuple[CompetitorRow, bool]:
     competitor = generator.build_competitor(username)
-    db.add(competitor)
-    db.commit()
-    return competitor
+    return _add_or_get(db, competitor, lambda: find_competitor_by_username(db, username))
 
 
 def delete_competitor(db: Session, competitor: CompetitorRow) -> None:
@@ -36,7 +52,19 @@ def delete_competitor(db: Session, competitor: CompetitorRow) -> None:
 
 
 def replace_reels_for_competitor(db: Session, competitor: CompetitorRow) -> list[ReelRow]:
-    db.execute(delete(ReelRow).where(ReelRow.competitor_id == competitor.id))
+    """Swap in 20 new Reels, keeping any Reel that has a remix or a plan item.
+
+    Deleting a remixed Reel would cascade to its remix and throw away the
+    user's edits, and a planned Reel could no longer be remixed.
+    """
+    keep_ids = set(db.scalars(select(RemixRow.reel_id))) | set(
+        db.scalars(select(ContentPlanRow.reel_id))
+    )
+    db.execute(
+        delete(ReelRow).where(
+            ReelRow.competitor_id == competitor.id, ReelRow.id.not_in(keep_ids)
+        )
+    )
     reels = generator.build_reels(competitor)
     db.add_all(reels)
     db.commit()
@@ -61,11 +89,10 @@ def list_remixes(db: Session) -> list[RemixRow]:
     return list(db.scalars(stmt))
 
 
-def add_remix(db: Session, reel: ReelRow, template: str = "default") -> RemixRow:
+def add_remix(db: Session, reel: ReelRow, template: str = "default") -> tuple[RemixRow, bool]:
     remix = generator.build_remix(reel, template)
-    db.add(remix)
-    db.commit()
-    return remix
+    reel_id = reel.id
+    return _add_or_get(db, remix, lambda: get_remix_for_reel(db, reel_id))
 
 
 def get_remix(db: Session, remix_id: str) -> RemixRow | None:
@@ -97,11 +124,10 @@ def get_plan_item_for_reel(db: Session, reel_id: str) -> ContentPlanRow | None:
     return db.scalars(select(ContentPlanRow).where(ContentPlanRow.reel_id == reel_id)).first()
 
 
-def add_plan_item(db: Session, reel: ReelRow) -> ContentPlanRow:
+def add_plan_item(db: Session, reel: ReelRow) -> tuple[ContentPlanRow, bool]:
     item = generator.build_plan_item(reel)
-    db.add(item)
-    db.commit()
-    return item
+    reel_id = reel.id
+    return _add_or_get(db, item, lambda: get_plan_item_for_reel(db, reel_id))
 
 
 def update_plan_status(db: Session, item: ContentPlanRow, status: str) -> ContentPlanRow:

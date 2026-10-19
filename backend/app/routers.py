@@ -55,7 +55,10 @@ def add_competitor(payload: AddCompetitorRequest, response: Response, db: Sessio
     if existing:
         response.status_code = status.HTTP_200_OK
         return existing
-    return store.add_competitor(db, username)
+    competitor, created = store.add_competitor(db, username)
+    if not created:
+        response.status_code = status.HTTP_200_OK
+    return competitor
 
 
 @router.delete(
@@ -112,7 +115,10 @@ def remix_reel(
         response.status_code = status.HTTP_200_OK
         return existing
     template = payload.template if payload else "default"
-    return store.add_remix(db, reel, template)
+    remix, created = store.add_remix(db, reel, template)
+    if not created:
+        response.status_code = status.HTTP_200_OK
+    return remix
 
 
 @router.get("/reels/{reel_id}/remix/current", response_model=RemixedReel)
@@ -175,7 +181,10 @@ def add_to_content_plan(payload: AddToPlanRequest, response: Response, db: Sessi
     if existing:
         response.status_code = status.HTTP_200_OK
         return existing
-    return store.add_plan_item(db, reel)
+    item, created = store.add_plan_item(db, reel)
+    if not created:
+        response.status_code = status.HTTP_200_OK
+    return item
 
 
 @router.patch("/content-plan/{plan_item_id}", response_model=ContentPlanItem)

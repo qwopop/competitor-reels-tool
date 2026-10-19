@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { ArrowRight, Link2 } from 'lucide-react';
 import type { Competitor, ContentPlanItem, Reel, RemixedReel } from '@/types';
 import { useApi } from '@/services';
-import { compactNumber, relativeTime } from '@/utils/format';
+import { compactNumber, countLabel, plural, relativeTime } from '@/utils/format';
 import { dashboardStats } from '@/utils/stats';
 import { PLAN_STATUSES } from '@/utils/plan';
 import { ErrorBanner, FullPageLoader, Spinner } from '@/components/ui';
@@ -173,8 +173,8 @@ export function DashboardPage() {
       {data && stats && data.competitors.length > 0 && (
         <>
           <p className="mt-14 text-center text-lg text-ink/70">
-            Tracking {stats.totalCompetitors} competitors · {compactNumber(stats.totalReels)} Reels ·{' '}
-            {compactNumber(stats.totalViews)} views
+            Tracking {plural(stats.totalCompetitors, 'competitor')} · {plural(stats.totalReels, 'Reel')} ·{' '}
+            {countLabel(stats.totalViews, 'view')}
           </p>
           <CompetitorMarquee items={marqueeItems} />
 
@@ -213,7 +213,7 @@ export function DashboardPage() {
                   <div>
                     <p className="text-sm text-ink/60">@{stats.topReel.competitorUsername}</p>
                     <p className="mt-1 text-lg font-medium leading-snug text-ink">{stats.topReel.caption}</p>
-                    <p className="stat mt-2">{compactNumber(stats.topReel.viewCount)} views</p>
+                    <p className="stat mt-2">{countLabel(stats.topReel.viewCount, 'view')}</p>
                   </div>
                 </div>
               ) : (
@@ -227,7 +227,7 @@ export function DashboardPage() {
                 {stats.mostViewedCompetitor ? (
                   <>
                     @{stats.mostViewedCompetitor.username}{' '}
-                    <span className="stat">· {compactNumber(stats.mostViewedCompetitor.views)} views</span>
+                    <span className="stat">· {countLabel(stats.mostViewedCompetitor.views, 'view')}</span>
                   </>
                 ) : (
                   'No Reels yet.'
@@ -272,7 +272,7 @@ export function DashboardPage() {
                       <p className="text-sm text-ink/60">@{reel.competitorUsername} · {relativeTime(reel.postedAt)}</p>
                       <p className="truncate text-base text-ink">{reel.caption}</p>
                     </div>
-                    <span className="stat">{compactNumber(reel.viewCount)} views</span>
+                    <span className="stat">{countLabel(reel.viewCount, 'view')}</span>
                   </li>
                 ))}
               </ul>

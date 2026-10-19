@@ -18,6 +18,8 @@ const API_BASE = import.meta.env.VITE_API_BASE_URL ?? '/api';
 
 type Method = 'GET' | 'POST' | 'PATCH' | 'DELETE';
 
+const UNREACHABLE = 'Could not reach the server. Check that the backend is running.';
+
 async function request<T>(
   method: Method,
   path: string,
@@ -33,7 +35,7 @@ async function request<T>(
   } catch {
     return {
       data: null,
-      error: 'Could not reach the server. Is the backend running on port 8091?',
+      error: UNREACHABLE,
     };
   }
 
@@ -43,10 +45,32 @@ async function request<T>(
   if (!res.ok) {
     // FastAPI puts the user-facing message in `detail`. Validation errors use an array.
     const detail = (payload as { detail?: unknown } | null)?.detail;
-    const message = typeof detail === 'string' ? detail : `Request failed (${res.status}).`;
+    // A proxy answers 500/502/503/504 with no JSON body when the API is down.
+    const serverDown = [500, 502, 503, 504].includes(res.status);
+    const message =
+      typeof detail === 'string'
+        ? detail
+        : Array.isArray(detail)
+          ? validationMessage(detail)
+          : serverDown
+          ? UNREACHABLE
+          : `Request failed (${res.status}).`;
     return { data: null, error: message };
   }
   return { data: payload as T, error: null };
+}
+
+// FastAPI sends validation problems as a list. Say which field and what is wrong.
+function validationMessage(detail: unknown[]): string {
+  const first = detail[0] as
+    | { type?: string; loc?: unknown[]; msg?: string; ctx?: { max_length?: number } }
+    | undefined;
+  if (!first) return 'Some of the information is not valid.';
+  const field = String(first.loc?.[first.loc.length - 1] ?? 'value');
+  if (first.type === 'string_too_long' && first.ctx?.max_length) {
+    return `The ${field} is too long (at most ${first.ctx.max_length} characters).`;
+  }
+  return first.msg ?? 'Some of the information is not valid.';
 }
 
 const enc = encodeURIComponent;

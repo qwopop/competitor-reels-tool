@@ -223,3 +223,70 @@ describe('MockReelsApi content plan', () => {
   });
 });
 
+
+
+describe('parseUsername: links people actually paste', () => {
+  it.each([
+    ['instagram.com/vibecoder', 'vibecoder'],
+    ['www.instagram.com/vibecoder', 'vibecoder'],
+    ['m.instagram.com/vibecoder/', 'vibecoder'],
+    ['http://instagram.com/vibecoder', 'vibecoder'],
+    ['https://www.instagram.com/vibecoder/?igsh=abc123', 'vibecoder'],
+    ['https://instagram.com/vibecoder/reels/', 'vibecoder'],
+    ['@vibe.coder_1', 'vibe.coder_1'],
+  ])('accepts %s', (input, expected) => {
+    expect(parseUsername(input)).toBe(expected);
+  });
+
+  it.each([
+    'twitter.com/vibecoder',
+    'notinstagram.com/vibecoder',
+    'https://evil.com/instagram.com/vibecoder',
+    'https://www.instagram.com/p/ABC123/',
+    'https://www.instagram.com/reel/XYZ789/',
+    'https://www.instagram.com/explore/',
+    'https://www.instagram.com/accounts/login/',
+    'https://instagram.com/vibe coder',
+    '@vibe-coder',
+    '@',
+  ])('rejects %s', (input) => {
+    expect(parseUsername(input)).toBeNull();
+  });
+
+  it('allows 30 characters and rejects 31', () => {
+    expect(parseUsername('@' + 'a'.repeat(30))).toBe('a'.repeat(30));
+    expect(parseUsername('@' + 'a'.repeat(31))).toBeNull();
+  });
+});
+
+describe('MockReelsApi re-fetch keeps the user work', () => {
+  it('keeps a remixed Reel and its remix, and does not duplicate it', async () => {
+    const api = freshApi();
+    const comp = await api.addCompetitor('https://instagram.com/creator');
+    const first = await api.fetchReelsForCompetitor(comp.data!.id);
+    const kept = first.data![0];
+    const remix = await api.remixReel(kept.id);
+    await api.updateRemix(remix.data!.id, { hook: 'my hand-edited hook' });
+
+    await api.fetchReelsForCompetitor(comp.data!.id);
+
+    const remixes = await api.listRemixes();
+    expect(remixes.data).toHaveLength(1);
+    expect(remixes.data![0].hook).toBe('my hand-edited hook');
+    const reels = (await api.listReels()).data!;
+    expect(reels.filter((r) => r.id === kept.id)).toHaveLength(1);
+    expect(reels).toHaveLength(21);
+  });
+
+  it('keeps a Reel that is in the content plan so it can still be remixed', async () => {
+    const api = freshApi();
+    const comp = await api.addCompetitor('https://instagram.com/creator');
+    const first = await api.fetchReelsForCompetitor(comp.data!.id);
+    const item = await api.addToContentPlan(first.data![0].id);
+
+    await api.fetchReelsForCompetitor(comp.data!.id);
+
+    const remix = await api.remixReel(item.data!.reelId);
+    expect(remix.error).toBeNull();
+  });
+});

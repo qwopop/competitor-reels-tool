@@ -73,7 +73,11 @@ export function ContentPlanPage() {
     const res = await api.remixReel(item.reelId);
     setBusyId(null);
     if (res.error || !res.data) {
-      setError(res.error ?? 'Could not create the breakdown.');
+      setError(
+        res.error === 'Reel not found.'
+          ? "This Reel is no longer in your library, so a breakdown can't be created."
+          : (res.error ?? 'Could not create the breakdown.')
+      );
       return;
     }
     navigate(`/remix/${res.data.id}`);

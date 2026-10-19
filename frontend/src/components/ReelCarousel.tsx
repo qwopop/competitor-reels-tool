@@ -1,5 +1,5 @@
 import type { Reel } from '@/types';
-import { compactNumber } from '@/utils/format';
+import { countLabel } from '@/utils/format';
 
 // A fan of Reel cards in 3D, tilted away from the centre, with a soft reflection.
 export function ReelCarousel({ reels }: { reels: Reel[] }) {
@@ -26,7 +26,7 @@ export function ReelCarousel({ reels }: { reels: Reel[] }) {
               >
                 <img src={reel.thumbnailUrl} alt={reel.caption} className="aspect-[3/4] w-full object-cover" />
                 <figcaption className="px-4 py-3 text-xs text-ink/70">
-                  @{reel.competitorUsername} · {compactNumber(reel.viewCount)} views
+                  @{reel.competitorUsername} · {countLabel(reel.viewCount, 'view')}
                 </figcaption>
               </figure>
             </li>

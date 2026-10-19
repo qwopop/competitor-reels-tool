@@ -138,9 +138,36 @@ def test_patch_unknown_remix_is_404(client):
         ("https://www.instagram.com/vibecoder/", "vibecoder"),
         ("@vibecoder", "vibecoder"),
         ("vibecoder", "vibecoder"),
+        # links without a scheme, other Instagram hosts, http, and query strings
+        ("instagram.com/vibecoder", "vibecoder"),
+        ("www.instagram.com/vibecoder", "vibecoder"),
+        ("m.instagram.com/vibecoder/", "vibecoder"),
+        ("http://instagram.com/vibecoder", "vibecoder"),
+        ("https://www.instagram.com/vibecoder/?igsh=abc123", "vibecoder"),
+        ("https://instagram.com/vibecoder/reels/", "vibecoder"),
+        ("@vibe.coder_1", "vibe.coder_1"),
+        # not Instagram
         ("https://twitter.com/vibecoder", None),
+        ("twitter.com/vibecoder", None),
+        ("notinstagram.com/vibecoder", None),
+        ("https://evil.com/instagram.com/vibecoder", None),
         ("   ", None),
         ("https://instagram.com/", None),
+        # Instagram pages that are not profiles
+        ("https://www.instagram.com/p/ABC123/", None),
+        ("https://www.instagram.com/reel/XYZ789/", None),
+        ("https://www.instagram.com/reels/", None),
+        ("https://www.instagram.com/explore/", None),
+        ("https://www.instagram.com/stories/someone/123/", None),
+        ("https://www.instagram.com/accounts/login/", None),
+        # username rules: 1-30 characters of letters, digits, . and _
+        ("@" + "a" * 30, "a" * 30),
+        ("@" + "a" * 31, None),
+        ("@" + "a" * 40, None),
+        ("https://instagram.com/vibe coder", None),
+        ("@vibe coder", None),
+        ("@vibe-coder", None),
+        ("@", None),
     ],
 )
 def test_parse_username(raw, expected):
@@ -288,3 +315,179 @@ def test_apply_template_overwrites_text_fields(client):
 def test_apply_template_unknown_remix_is_404(client):
     res = client.post("/api/remixes/nope/apply-template", json={"template": "default"})
     assert res.status_code == 404
+
+
+@pytest.mark.parametrize(
+    "link",
+    [
+        "https://www.instagram.com/p/ABC123/",
+        "https://www.instagram.com/reel/XYZ789/",
+        "https://www.instagram.com/explore/",
+        "https://instagram.com/vibe coder",
+        "@" + "a" * 40,
+    ],
+)
+def test_non_profile_links_are_rejected_and_create_nothing(client, link):
+    res = add(client, link)
+    assert res.status_code == 400
+    assert client.get("/api/competitors").json() == []
+
+
+@pytest.mark.parametrize("link", ["instagram.com/scheme_less", "www.instagram.com/scheme_less"])
+def test_links_without_a_scheme_are_accepted(client, link):
+    res = add(client, link)
+    assert res.status_code == 201
+    assert res.json()["username"] == "scheme_less"
+
+
+def test_refetch_keeps_a_remix_and_its_edits(client):
+    comp = add(client).json()
+    reel = client.post(f"/api/competitors/{comp['id']}/reels/fetch").json()[0]
+    remix = client.post(f"/api/reels/{reel['id']}/remix").json()
+    client.patch(f"/api/remixes/{remix['id']}", json={"hook": "my hand-edited hook"})
+
+    client.post(f"/api/competitors/{comp['id']}/reels/fetch")
+
+    remixes = client.get("/api/remixes").json()
+    assert [r["id"] for r in remixes] == [remix["id"]]
+    assert remixes[0]["hook"] == "my hand-edited hook"
+    assert client.get(f"/api/reels/{reel['id']}").status_code == 200
+
+
+def test_refetch_keeps_a_planned_reel_so_it_can_still_be_remixed(client):
+    comp = add(client).json()
+    reel = client.post(f"/api/competitors/{comp['id']}/reels/fetch").json()[0]
+    item = client.post("/api/content-plan", json={"reelId": reel["id"]}).json()
+
+    client.post(f"/api/competitors/{comp['id']}/reels/fetch")
+
+    assert client.post(f"/api/reels/{item['reelId']}/remix").status_code == 201
+
+
+def test_refetch_replaces_other_reels_and_does_not_keep_growing(client):
+    comp = add(client).json()
+    first = client.post(f"/api/competitors/{comp['id']}/reels/fetch").json()
+    kept = first[0]
+    client.post(f"/api/reels/{kept['id']}/remix")
+
+    for _ in range(3):
+        client.post(f"/api/competitors/{comp['id']}/reels/fetch")
+
+    ids = [r["id"] for r in client.get("/api/reels").json()]
+    assert kept["id"] in ids
+    assert first[1]["id"] not in ids  # an unremixed Reel was replaced
+    assert len(ids) == generator.REELS_PER_FETCH + 1  # 20 new Reels plus the one kept
+    assert len(ids) == len(set(ids))
+
+
+def test_removing_a_competitor_still_deletes_its_reels_and_remixes(client):
+    comp = add(client).json()
+    reel = client.post(f"/api/competitors/{comp['id']}/reels/fetch").json()[0]
+    client.post(f"/api/reels/{reel['id']}/remix")
+    client.post(f"/api/competitors/{comp['id']}/reels/fetch")  # keeps the remixed Reel
+
+    assert client.delete(f"/api/competitors/{comp['id']}").status_code == 204
+    assert client.get("/api/reels").json() == []
+    assert client.get("/api/remixes").json() == []
+
+
+def test_in_memory_mode_works_but_saves_nothing():
+    from fastapi.testclient import TestClient
+
+    from app.main import create_app
+
+    with TestClient(create_app("sqlite://")) as memory_client:
+        assert add(memory_client, "https://instagram.com/ephemeral").status_code == 201
+        assert [c["username"] for c in memory_client.get("/api/competitors").json()] == ["ephemeral"]
+        comp = memory_client.get("/api/competitors").json()[0]
+        assert len(memory_client.post(f"/api/competitors/{comp['id']}/reels/fetch").json()) == 20
+
+    with TestClient(create_app("sqlite://")) as fresh:
+        assert fresh.get("/api/competitors").json() == []
+
+
+# ---- bugs #46 and #47, and the database constraints in the plan (section 3.9)
+
+def test_competitor_usernames_are_stored_lowercase_and_unique(client):
+    first = add(client, "@Mixed.Case").json()
+    assert first["username"] == "mixed.case"
+    again = add(client, "https://instagram.com/MIXED.case")
+    assert again.status_code == 200
+    assert again.json()["id"] == first["id"]
+    assert len(client.get("/api/competitors").json()) == 1
+
+
+def test_database_rejects_duplicate_competitor_usernames_and_plan_reels(client):
+    from sqlalchemy.exc import IntegrityError
+
+    reel = first_reel(client)
+    session = client.app.state.session_factory()
+    session.add(generator.build_competitor("creator"))  # "creator" already exists
+    with pytest.raises(IntegrityError):
+        session.commit()
+    session.rollback()
+
+    reel_row = store_get_reel(session, reel["id"])
+    client.post("/api/content-plan", json={"reelId": reel["id"]})
+    session.add(generator.build_plan_item(reel_row))
+    with pytest.raises(IntegrityError):
+        session.commit()
+    session.rollback()
+    session.close()
+
+
+def store_get_reel(session, reel_id):
+    from app import store
+
+    return store.get_reel(session, reel_id)
+
+
+def test_add_plan_item_returns_the_existing_item_when_another_request_won(client):
+    from app import store
+
+    reel = first_reel(client)
+    first_session = client.app.state.session_factory()
+    second_session = client.app.state.session_factory()
+    first_reel_row = store.get_reel(first_session, reel["id"])
+    second_reel_row = store.get_reel(second_session, reel["id"])  # loaded before the first insert
+
+    first_item, created_first = store.add_plan_item(first_session, first_reel_row)
+    second_item, created_second = store.add_plan_item(second_session, second_reel_row)
+
+    assert created_first is True
+    assert created_second is False
+    assert second_item.id == first_item.id
+    first_session.close()
+    second_session.close()
+
+
+def test_parallel_plan_adds_leave_one_item_and_no_server_error(client):
+    from concurrent.futures import ThreadPoolExecutor
+
+    reel = first_reel(client)
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        responses = list(
+            pool.map(lambda _: client.post("/api/content-plan", json={"reelId": reel["id"]}), range(8))
+        )
+    assert all(r.status_code < 500 for r in responses)
+    assert [r.status_code for r in responses].count(201) == 1
+    assert len(client.get("/api/content-plan").json()) == 1
+
+
+@pytest.mark.parametrize(
+    "field, limit", [("title", 500), ("hook", 1000), ("script", 2000), ("cta", 500)]
+)
+def test_remix_text_limits_match_the_database_columns(client, field, limit):
+    reel = first_reel(client)
+    remix = client.post(f"/api/reels/{reel['id']}/remix").json()
+
+    at_limit = client.patch(f"/api/remixes/{remix['id']}", json={field: "x" * limit})
+    over_limit = client.patch(f"/api/remixes/{remix['id']}", json={field: "x" * (limit + 1)})
+
+    assert at_limit.status_code == 200
+    assert over_limit.status_code == 422
+
+
+def test_an_absurdly_long_link_is_a_validation_error(client):
+    res = client.post("/api/competitors", json={"instagramUrl": "https://instagram.com/" + "a" * 3000})
+    assert res.status_code == 422

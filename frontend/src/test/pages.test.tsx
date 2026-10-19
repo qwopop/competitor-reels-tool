@@ -16,6 +16,7 @@ import { ReelsPage } from '@/pages/ReelsPage';
 import { CompetitorsPage } from '@/pages/CompetitorsPage';
 import { RemixesPage } from '@/pages/RemixesPage';
 import { ContentPlanPage } from '@/pages/ContentPlanPage';
+import { RemixPage } from '@/pages/RemixPage';
 
 // A stub service whose returns we control per test. Pages depend only on ReelsApi.
 class StubApi implements Partial<ReelsApi> {
@@ -328,5 +329,96 @@ describe('ContentPlanPage', () => {
     const stub = new StubApi();
     renderAt(stub, '/content-plan', <ContentPlanPage />, '/content-plan');
     expect(await screen.findByText(/nothing planned yet/i)).toBeInTheDocument();
+  });
+});
+
+
+describe('bugs found while testing the running app', () => {
+  it('"Back to reels" on the remix page goes to /reels', async () => {
+    const stub = new StubApi();
+    stub.getRemix.mockResolvedValue({
+      data: { id: 'remix_1', reelId: 'reel_1', title: 'Remix: x', hook: 'h', script: 's', cta: 'c', createdAt: '', updatedAt: '' },
+      error: null,
+    });
+    stub.getReel.mockResolvedValue({ data: reel(), error: null });
+    renderAt(stub, '/remix/remix_1', <RemixPage />, '/remix/:id');
+    const link = await screen.findByRole('link', { name: /back to reels/i });
+    expect(link).toHaveAttribute('href', '/reels');
+  });
+
+  it('Escape closes the remix preview and focus goes back to Preview', async () => {
+    const user = userEvent.setup();
+    const stub = new StubApi();
+    stub.listReels.mockResolvedValue({ data: [reel()], error: null });
+    stub.listRemixes.mockResolvedValue({
+      data: [{ id: 'remix_1', reelId: 'reel_1', title: 'Remix: SaaS', hook: 'Hook text', script: 's', cta: 'c', createdAt: '', updatedAt: '' }],
+      error: null,
+    });
+    renderAt(stub, '/reels', <ReelsPage />, '/reels');
+    await user.click(await screen.findByRole('button', { name: 'Preview' }));
+    expect(await screen.findByRole('complementary', { name: /remix preview/i })).toBeInTheDocument();
+
+    await user.keyboard('{Escape}');
+
+    expect(screen.queryByRole('complementary', { name: /remix preview/i })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Preview' })).toHaveFocus();
+  });
+
+  it('offers Clear filters when nothing matches and restores every Reel', async () => {
+    const user = userEvent.setup();
+    const stub = new StubApi();
+    stub.listReels.mockResolvedValue({
+      data: [reel({ id: 'a', caption: 'Prompt tips' }), reel({ id: 'b', caption: 'SaaS build' })],
+      error: null,
+    });
+    renderAt(stub, '/reels', <ReelsPage />, '/reels');
+    await screen.findByText('Prompt tips');
+
+    await user.type(screen.getByLabelText(/search captions/i), 'zzzzzz');
+    expect(screen.getByText('No Reels match these filters.')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Clear filters' }));
+
+    expect(screen.getByText('Prompt tips')).toBeInTheDocument();
+    expect(screen.getByText('SaaS build')).toBeInTheDocument();
+    expect(screen.getByLabelText(/search captions/i)).toHaveValue('');
+  });
+
+  it('says "1 competitor" for a single competitor on the dashboard', async () => {
+    const stub = new StubApi();
+    stub.listCompetitors.mockResolvedValue({
+      data: [{ id: 'comp_1', username: 'vibecoder', instagramUrl: '', displayName: 'Vibecoder', avatarUrl: '', addedAt: '' }],
+      error: null,
+    });
+    stub.listReels.mockResolvedValue({ data: [reel()], error: null });
+    renderAt(stub, '/', <DashboardPage />, '/');
+    expect(await screen.findByText(/Tracking 1 competitor · 1 Reel/)).toBeInTheDocument();
+    expect(screen.queryByText(/1 competitors/)).toBeNull();
+  });
+
+  it('explains plainly when a planned Reel has been removed from the library', async () => {
+    const user = userEvent.setup();
+    const stub = new StubApi();
+    stub.listContentPlan.mockResolvedValue({ data: [planItem()], error: null });
+    stub.remixReel.mockResolvedValue({ data: null, error: 'Reel not found.' });
+    renderAt(stub, '/content-plan', <ContentPlanPage />, '/content-plan');
+
+    await user.click(await screen.findByRole('button', { name: 'Create breakdown' }));
+
+    expect(await screen.findByText(/no longer in your library/i)).toBeInTheDocument();
+    expect(screen.queryByText('Reel not found.')).toBeNull();
+  });
+
+  it('limits the remix editor fields to what the database stores', async () => {
+    const stub = new StubApi();
+    stub.getRemix.mockResolvedValue({
+      data: { id: 'remix_1', reelId: 'reel_1', title: 't', hook: 'h', script: 's', cta: 'c', createdAt: '', updatedAt: '' },
+      error: null,
+    });
+    stub.getReel.mockResolvedValue({ data: reel(), error: null });
+    renderAt(stub, '/remix/remix_1', <RemixPage />, '/remix/:id');
+    expect(await screen.findByLabelText('Title')).toHaveAttribute('maxlength', '500');
+    expect(screen.getByLabelText('Hook')).toHaveAttribute('maxlength', '1000');
+    expect(screen.getByLabelText('Script')).toHaveAttribute('maxlength', '2000');
+    expect(screen.getByLabelText('Call to action')).toHaveAttribute('maxlength', '500');
   });
 });

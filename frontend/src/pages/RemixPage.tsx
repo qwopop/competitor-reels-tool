@@ -3,7 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
 import { useApi } from '@/services';
 import type { ContentPlanItem, Reel, RemixedReel, RemixTemplate } from '@/types';
-import { compactNumber, relativeTime } from '@/utils/format';
+import { relativeTime, reelStats } from '@/utils/format';
 import { ErrorBanner, FullPageLoader, Spinner } from '@/components/ui';
 import { ConfirmDialog } from '@/components/Modal';
 import { REMIX_TEMPLATES } from '@/utils/templates';
@@ -162,8 +162,7 @@ export function RemixPage() {
               </p>
               <p className="mt-2 text-lg leading-snug text-ink">{reel.caption}</p>
               <p className="stat mt-3">
-                {compactNumber(reel.viewCount)} views · {compactNumber(reel.likeCount)} likes
-                · {compactNumber(reel.commentCount)} comments
+                {reelStats(reel)}
               </p>
               <a
                 href={reel.permalink}
@@ -207,6 +206,7 @@ export function RemixPage() {
             <Field id="remix-title" label="Title">
               <input
                 id="remix-title"
+                maxLength={500}
                 className="input"
                 value={title}
                 onChange={markDirty(setTitle)}
@@ -221,6 +221,7 @@ export function RemixPage() {
             >
               <textarea
                 id="remix-hook"
+                maxLength={1000}
                 className="input min-h-[88px] resize-y"
                 value={hook}
                 onChange={markDirty(setHook)}
@@ -235,6 +236,7 @@ export function RemixPage() {
             >
               <textarea
                 id="remix-script"
+                maxLength={2000}
                 className="input min-h-[180px] resize-y leading-relaxed"
                 value={script}
                 onChange={markDirty(setScript)}
@@ -249,6 +251,7 @@ export function RemixPage() {
             >
               <textarea
                 id="remix-cta"
+                maxLength={500}
                 className="input min-h-[80px] resize-y"
                 value={cta}
                 onChange={markDirty(setCta)}
@@ -294,7 +297,7 @@ export function RemixPage() {
 function BackLink() {
   return (
     <Link
-      to="/"
+      to="/reels"
       className="inline-flex items-center gap-2 text-sm text-ink/60 transition-colors hover:text-ink"
     >
       <ArrowLeft size={15} /> Back to reels

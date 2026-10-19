@@ -100,3 +100,25 @@ describe('dashboardStats', () => {
     expect(s.totalViews).toBe(0);
   });
 });
+
+
+import { countLabel, plural, reelStats } from '@/utils/format';
+
+describe('wording helpers', () => {
+  it('plural uses the singular only for exactly one', () => {
+    expect(plural(0, 'competitor')).toBe('0 competitors');
+    expect(plural(1, 'competitor')).toBe('1 competitor');
+    expect(plural(2, 'competitor')).toBe('2 competitors');
+    expect(plural(2, 'person', 'people')).toBe('2 people');
+  });
+
+  it('countLabel compacts large numbers and singularises one', () => {
+    expect(countLabel(1, 'view')).toBe('1 view');
+    expect(countLabel(0, 'view')).toBe('0 views');
+    expect(countLabel(12_300, 'view')).toBe('12.3K views');
+  });
+
+  it('reelStats joins views, likes and comments', () => {
+    expect(reelStats({ viewCount: 1, likeCount: 2, commentCount: 1 })).toBe('1 view · 2 likes · 1 comment');
+  });
+});

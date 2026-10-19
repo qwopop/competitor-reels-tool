@@ -25,3 +25,22 @@ export function formatDate(iso: string): string {
     day: 'numeric',
   });
 }
+
+// "1 competitor", "2 competitors". Pass the singular word; add a plural form for irregular words.
+export function plural(count: number, singular: string, pluralForm = `${singular}s`): string {
+  return `${count} ${count === 1 ? singular : pluralForm}`;
+}
+
+// "1 view", "12.3K views". Uses the compact number, but still says "view" for exactly one.
+export function countLabel(count: number, singular: string): string {
+  return `${compactNumber(count)} ${count === 1 ? singular : `${singular}s`}`;
+}
+
+// "710.7K views · 61K likes · 1 comment"
+export function reelStats(reel: { viewCount: number; likeCount: number; commentCount: number }): string {
+  return [
+    countLabel(reel.viewCount, 'view'),
+    countLabel(reel.likeCount, 'like'),
+    countLabel(reel.commentCount, 'comment'),
+  ].join(' · ');
+}

@@ -1,4 +1,4 @@
-import { compactNumber } from '@/utils/format';
+import { countLabel } from '@/utils/format';
 
 export interface MarqueeItem {
   id: string;
@@ -24,7 +24,7 @@ export function CompetitorMarquee({ items }: { items: MarqueeItem[] }) {
           >
             <img src={item.avatarUrl} alt="" className="h-16 w-16 rounded-full bg-surface-2 object-cover" />
             <span className="text-sm font-medium text-ink">{item.username}</span>
-            <span className="text-xs tabular-nums text-ink/50">{compactNumber(item.views)} views</span>
+            <span className="text-xs tabular-nums text-ink/50">{countLabel(item.views, 'view')}</span>
           </li>
         ))}
       </ul>

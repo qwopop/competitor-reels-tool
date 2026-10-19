@@ -1,14 +1,15 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import type { ContentPlanItem, Reel, RemixedReel } from '@/types';
 import { useApi } from '@/services';
-import { compactNumber, relativeTime } from '@/utils/format';
+import { relativeTime, reelStats } from '@/utils/format';
 import { filterReels, type ReelSort } from '@/utils/reels';
 import { planStatusMeta } from '@/utils/plan';
 import { PageHeader } from '@/components/PageHeader';
 import { EmptyState, ErrorBanner, FullPageLoader, Spinner } from '@/components/ui';
 import { Notice } from '@/components/Notice';
 import { ViewToggle } from '@/components/ViewToggle';
+import { useDialogFocus } from '@/components/useDialogFocus';
 
 type LibraryView = 'grid' | 'list';
 
@@ -169,7 +170,20 @@ export function ReelsPage() {
           action={<Link to="/competitors" className="btn-primary">Go to competitors</Link>}
         />
       ) : reels && visible.length === 0 ? (
-        <p className="text-base text-ink/70">No Reels match these filters.</p>
+        <div className="flex flex-wrap items-center gap-4">
+          <p className="text-base text-ink/70">No Reels match these filters.</p>
+          <button
+            type="button"
+            className="btn-outline px-4 py-2 text-sm"
+            onClick={() => {
+              setCompetitorId('');
+              setQuery('');
+              setSort('newest');
+            }}
+          >
+            Clear filters
+          </button>
+        </div>
       ) : view === 'grid' ? (
         <div className="grid grid-cols-1 gap-x-8 gap-y-14 sm:grid-cols-2 lg:grid-cols-3">
           {visible.map((reel, index) => (
@@ -188,8 +202,7 @@ export function ReelsPage() {
                   {reel.caption}
                 </h3>
                 <p className="stat">
-                  {compactNumber(reel.viewCount)} views · {compactNumber(reel.likeCount)} likes
-                  · {compactNumber(reel.commentCount)} comments
+                  {reelStats(reel)}
                 </p>
               </div>
               <ReelActions
@@ -221,8 +234,7 @@ export function ReelsPage() {
                   </p>
                   <h3 className="text-base font-medium text-ink">{reel.caption}</h3>
                   <p className="stat mt-1">
-                    {compactNumber(reel.viewCount)} views · {compactNumber(reel.likeCount)} likes
-                    · {compactNumber(reel.commentCount)} comments
+                    {reelStats(reel)}
                   </p>
                 </div>
                 <ReelActions
@@ -294,8 +306,12 @@ function ReelActions({
 }
 
 function RemixPreview({ remix, onClose }: { remix: RemixedReel; onClose: () => void }) {
+  const panelRef = useRef<HTMLElement>(null);
+  // Escape closes it, focus moves in, and returns to the Preview button afterwards.
+  useDialogFocus(panelRef, onClose, { trap: false });
   return (
     <aside
+      ref={panelRef}
       aria-label="Remix preview"
       className="fixed inset-y-0 right-0 z-40 flex w-full max-w-md flex-col gap-6 overflow-y-auto rounded-l-3xl bg-surface p-8"
     >

@@ -6,7 +6,7 @@ import type { Competitor } from '@/types';
 import { PageHeader } from '@/components/PageHeader';
 import { ErrorBanner, FullPageLoader, Spinner } from '@/components/ui';
 import { Modal, ConfirmDialog } from '@/components/Modal';
-import { relativeTime } from '@/utils/format';
+import { plural, relativeTime } from '@/utils/format';
 
 export function CompetitorsPage() {
   const api = useApi();
@@ -121,7 +121,7 @@ export function CompetitorsPage() {
                   <div className="min-w-0 flex-1">
                     <h3 className="truncate text-lg font-medium text-ink">{c.displayName}</h3>
                     <p className="truncate text-sm text-ink/60">
-                      @{c.username} · added {relativeTime(c.addedAt)} · {count} reels
+                      @{c.username} · added {relativeTime(c.addedAt)} · {plural(count, 'reel')}
                     </p>
                   </div>
                   <div className="flex items-center gap-2">

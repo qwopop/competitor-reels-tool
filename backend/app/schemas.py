@@ -24,7 +24,7 @@ class Competitor(ApiModel):
 
 
 class AddCompetitorRequest(ApiModel):
-    instagram_url: str = Field(examples=["https://instagram.com/vibecoder"])
+    instagram_url: str = Field(max_length=2048, examples=["https://instagram.com/vibecoder"])
 
 
 class Reel(ApiModel):
@@ -83,7 +83,8 @@ class RemixRequest(ApiModel):
 
 
 class UpdateRemixRequest(ApiModel):
-    title: str | None = None
-    hook: str | None = None
-    script: str | None = None
-    cta: str | None = None
+    # Keep these in step with the column lengths in models.RemixRow.
+    title: str | None = Field(default=None, max_length=500)
+    hook: str | None = Field(default=None, max_length=1000)
+    script: str | None = Field(default=None, max_length=2000)
+    cta: str | None = Field(default=None, max_length=500)
