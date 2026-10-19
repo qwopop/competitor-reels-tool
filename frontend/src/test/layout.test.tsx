@@ -53,3 +53,21 @@ describe('index.html', () => {
     expect(html).toMatch(/property="og:title"/);
   });
 });
+
+describe('footer contrast (user-test-bug #48)', () => {
+  it('footer text uses at least ink/60, which is 4.5:1 or better on the ground', () => {
+    const { container } = renderAt('/reels');
+    const footer = container.querySelector('footer');
+    expect(footer?.className).toContain('text-ink/60');
+    expect(footer?.className).not.toContain('text-ink/40');
+  });
+});
+
+describe('phone navigation (user-test-bug #50)', () => {
+  it('the nav wraps on phones instead of hiding links off the edge', () => {
+    const { container } = renderAt('/');
+    const nav = container.querySelector('nav[aria-label="Main"]');
+    expect(nav?.className).toContain('flex-wrap');
+    expect(nav?.className).not.toContain('overflow-x-auto');
+  });
+});

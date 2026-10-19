@@ -7,6 +7,7 @@ import { PLAN_STATUSES } from '@/utils/plan';
 import { PageHeader } from '@/components/PageHeader';
 import { EmptyState, ErrorBanner, FullPageLoader, Spinner } from '@/components/ui';
 import { ViewToggle } from '@/components/ViewToggle';
+import { ConfirmDialog } from '@/components/Modal';
 
 type PlanView = 'board' | 'table';
 
@@ -18,6 +19,7 @@ export function ContentPlanPage() {
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [view, setView] = useState<PlanView>('board');
+  const [pendingRemove, setPendingRemove] = useState<ContentPlanItem | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -53,6 +55,7 @@ export function ContentPlanPage() {
   }
 
   async function handleRemove(item: ContentPlanItem) {
+    setPendingRemove(null);
     setError(null);
     const res = await api.removeFromContentPlan(item.id);
     if (res.error) {
@@ -148,7 +151,7 @@ export function ContentPlanPage() {
                       busy={busyId === item.id}
                       onStatus={(status) => handleStatus(item, status)}
                       onEditRemix={() => handleEditRemix(item)}
-                      onRemove={() => handleRemove(item)}
+                      onRemove={() => setPendingRemove(item)}
                     />
                   ))}
               </ul>
@@ -187,6 +190,9 @@ export function ContentPlanPage() {
                     <td className="px-4 py-4 align-top text-ink/70">{formatDate(item.addedAt)}</td>
                     <td className="px-4 py-4 align-top">
                       <PlanLinks item={item} hasRemix={Boolean(remix)} busy={busyId === item.id} onEditRemix={() => handleEditRemix(item)} />
+                      <button type="button" onClick={() => setPendingRemove(item)} className="btn-ghost mt-2 px-2 py-1 text-xs hover:text-danger">
+                        Remove from plan
+                      </button>
                     </td>
                   </tr>
                 );
@@ -195,6 +201,16 @@ export function ContentPlanPage() {
           </table>
         </div>
       ) : null}
+
+      {pendingRemove && (
+        <ConfirmDialog
+          title={`Remove “${pendingRemove.caption}”?`}
+          message="This Reel will leave your Content Plan. Its breakdown, if you made one, is kept."
+          confirmLabel="Remove from plan"
+          onConfirm={() => handleRemove(pendingRemove)}
+          onCancel={() => setPendingRemove(null)}
+        />
+      )}
     </div>
   );
 }

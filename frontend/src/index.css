@@ -23,6 +23,12 @@ body {
   text-rendering: optimizeLegibility;
 }
 
+/* Keyboard focus must be visible on the dark ground, for links and any control without its own ring. */
+:focus-visible {
+  outline: 2px solid #ffab5e;
+  outline-offset: 2px;
+}
+
 ::selection {
   background-color: #ff8f7a;
   color: #07070b;
@@ -45,7 +51,7 @@ body {
     @apply rounded-3xl bg-surface p-6;
   }
   .input {
-    @apply w-full rounded-2xl border border-white/10 bg-surface-2 px-4 py-3 text-[15px] text-ink placeholder:text-ink/40 outline-none transition duration-200 focus:border-accent/60 focus-visible:outline-2 focus-visible:outline-accent;
+    @apply w-full rounded-2xl border border-white/10 bg-surface-2 px-4 py-3 text-[15px] text-ink placeholder:text-ink/60 outline-none transition duration-200 focus:border-accent/60 focus-visible:outline-2 focus-visible:outline-accent;
   }
   .label {
     @apply text-sm font-medium text-ink/70;

@@ -422,3 +422,31 @@ describe('bugs found while testing the running app', () => {
     expect(screen.getByLabelText('Call to action')).toHaveAttribute('maxlength', '500');
   });
 });
+
+describe('bugs #49 and #52', () => {
+  it('confirms before removing a Content Plan item, and Cancel keeps it', async () => {
+    const user = userEvent.setup();
+    const stub = new StubApi();
+    stub.listContentPlan.mockResolvedValue({ data: [planItem()], error: null });
+    renderAt(stub, '/content-plan', <ContentPlanPage />, '/content-plan');
+
+    await user.click((await screen.findAllByRole('button', { name: 'Remove from plan' }))[0]);
+    expect(screen.getByRole('dialog')).toHaveTextContent(/I let AI build my SaaS in 48 hours/);
+    expect(stub.removeFromContentPlan).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(stub.removeFromContentPlan).not.toHaveBeenCalled();
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it('removes the item only after confirming', async () => {
+    const user = userEvent.setup();
+    const stub = new StubApi();
+    stub.listContentPlan.mockResolvedValue({ data: [planItem()], error: null });
+    renderAt(stub, '/content-plan', <ContentPlanPage />, '/content-plan');
+
+    await user.click((await screen.findAllByRole('button', { name: 'Remove from plan' }))[0]);
+    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Remove from plan' }));
+    await waitFor(() => expect(stub.removeFromContentPlan).toHaveBeenCalledWith('plan_1'));
+  });
+});

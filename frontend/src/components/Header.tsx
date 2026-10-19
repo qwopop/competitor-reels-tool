@@ -21,7 +21,7 @@ export function Header() {
           ReelRemix
         </Link>
 
-        <nav aria-label="Main" className="order-last flex w-full gap-1 overflow-x-auto md:order-none md:w-auto">
+        <nav aria-label="Main" className="order-last flex w-full flex-wrap gap-1 md:order-none md:w-auto">
           {navItems.map((item) => (
             <NavLink
               key={item.to}

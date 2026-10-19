@@ -137,7 +137,7 @@ export function DashboardPage() {
               onChange={(e) => setUrl(e.target.value)}
               placeholder="Paste an Instagram profile link"
               autoComplete="off"
-              className="min-w-0 flex-1 bg-transparent text-base text-ink outline-none placeholder:text-ink/40"
+              className="min-w-0 flex-1 bg-transparent text-base text-ink outline-none placeholder:text-ink/60"
             />
             <button type="submit" disabled={busy || !url.trim()} className="btn-primary whitespace-nowrap py-3">
               {busy ? <Spinner /> : null} Track &amp; fetch

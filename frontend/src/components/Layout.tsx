@@ -31,7 +31,7 @@ export function Layout() {
           <Outlet />
         </div>
       </main>
-      <footer className="px-6 pb-8 text-center text-xs text-ink/40">
+      <footer className="px-6 pb-8 text-center text-xs text-ink/60">
         {USING_MOCK ? 'Demo: saved in this browser only.' : 'Saved to the database.'}
       </footer>
     </div>
