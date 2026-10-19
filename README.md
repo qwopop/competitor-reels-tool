@@ -23,9 +23,9 @@ Track Instagram competitors, pull their 20 most recent Reels into a library, and
 | --- | --- | --- |
 | ![Reels list](docs/screenshots/reels-list.png) | ![Tracked competitors](docs/screenshots/competitors-tracked.png) | ![Add a competitor](docs/screenshots/add-competitor.png) |
 
-| Dashboard hero | Dashboard totals |
-| --- | --- |
-| ![Dashboard hero](docs/screenshots/dashboard-hero.webp) | ![Dashboard totals](docs/screenshots/dashboard-totals.webp) |
+| Dashboard hero | Dashboard totals | Dashboard details |
+| --- | --- | --- |
+| ![Dashboard hero](docs/screenshots/dashboard-hero.webp) | ![Dashboard totals](docs/screenshots/dashboard-totals.webp) | ![Dashboard details](docs/screenshots/dashboard-details.png) |
 
 ## Run it locally
 
