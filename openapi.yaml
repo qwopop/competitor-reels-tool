@@ -362,7 +362,12 @@ components:
       properties:
         instagramUrl:
           type: string
-          description: Instagram profile URL, or a bare username such as @vibecoder
+          maxLength: 2048
+          description: >
+            An Instagram profile link (with or without https:// and www.) or a bare
+            username such as @vibecoder. Usernames are 1 to 30 characters of letters,
+            digits, periods and underscores. Post, Reel, Explore and other non-profile
+            links are rejected with HTTP 400.
           examples: ["https://instagram.com/vibecoder"]
 
     Reel:
@@ -418,13 +423,13 @@ components:
 
     UpdateRemixRequest:
       type: object
-      description: Only the provided fields are changed.
+      description: Only the provided fields are changed. Longer values return HTTP 422.
       additionalProperties: false
       properties:
-        title: { type: string }
-        hook: { type: string }
-        script: { type: string }
-        cta: { type: string }
+        title: { type: string, maxLength: 500 }
+        hook: { type: string, maxLength: 1000 }
+        script: { type: string, maxLength: 2000 }
+        cta: { type: string, maxLength: 500 }
 
     PlanStatus:
       type: string

@@ -26,6 +26,8 @@ A single user with no login. Anyone who can reach the app can use it.
 5. **Edit a remix.** The user edits the title, hook, script, or CTA and saves.
    Only changed fields are sent to the server.
 6. **Stop tracking.** Removing a competitor deletes its Reels and their remixes.
+   Reels that have a remix or a content plan item are kept when the competitor's
+   Reels are fetched again, so edits and plans are never lost.
 7. **Plan filming.** From the Reels page or a remix, the user adds a Reel to the
    content plan. Each item has a status shown as an emoji: ❌ not started (the
    default, nothing ready yet), ⏳ ready to film (script done, video ready to

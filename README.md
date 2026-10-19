@@ -70,5 +70,6 @@ make check      # tests, typecheck and production build
 - Competitor Reels are **sample data**. The backend generates them the same way the original frontend mock did, because scraping Instagram is outside this project's scope. `backend/app/generator.py` is the single place to replace it with a real source.
 - Remixes are produced by a **template**, not an LLM. Swap `build_remix` in `backend/app/generator.py` to call a model.
 - There is no login. Anyone who can reach the server can use it.
+- Set `DATABASE_URL=sqlite://` to run with an in-memory database. Nothing is saved, which is useful for trying the API or for tests.
 - Set `DATABASE_URL` (for example `sqlite:///./data/app.db`) to change the database. The code is written so Postgres can be added later.
 - To point the frontend at a backend elsewhere, set `VITE_API_BASE_URL` (for example `https://api.example.com/api`).
