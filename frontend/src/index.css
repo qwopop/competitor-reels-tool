@@ -183,6 +183,48 @@ body {
   }
 }
 
+/* Colour tokens for the text effects. Override to re-skin them:
+   --ink    main text colour (defaults to currentColor)
+   --ink-2  primary accent   --ink-3  secondary accent */
+:root {
+  --ink: currentColor;
+  --ink-2: #ff4fd8;
+  --ink-3: #4ff8ff;
+}
+
+/* Hi-Liter: a marker pen paints across the words, then lifts off.
+   Only the paint is applied: the words keep their own font, size and colour.
+   The padding gives the stroke some overhang; the negative margin cancels it
+   so the line doesn't move. */
+.fx-marker {
+  color: var(--ink);
+  padding: 0.1em 0.2em;
+  margin: 0 -0.2em;
+  background: linear-gradient(
+      100deg,
+      color-mix(in srgb, var(--ink-2) 85%, transparent),
+      color-mix(in srgb, var(--ink-2) 60%, transparent)
+    )
+    no-repeat 0 62%;
+  background-size: 0% 46%;
+  animation: fx-marker 3s ease-in-out infinite;
+}
+@keyframes fx-marker {
+  0% {
+    background-size: 0% 46%;
+    background-position: 0 62%;
+  }
+  38%,
+  62% {
+    background-size: 100% 46%;
+    background-position: 0 62%;
+  }
+  100% {
+    background-size: 0% 46%;
+    background-position: 100% 62%;
+  }
+}
+
 /* Scrolling creator strip. Pauses on hover. */
 .marquee:hover {
   animation-play-state: paused;
@@ -193,7 +235,8 @@ body {
   .animate-fade-in {
     animation: none;
   }
-  .marquee {
+  .marquee,
+  .fx-marker {
     animation: none;
   }
   .btn-primary:hover::before {

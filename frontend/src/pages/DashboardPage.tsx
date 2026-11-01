@@ -124,7 +124,7 @@ export function DashboardPage() {
         </p>
         <h1 className="relative mx-auto mt-4 max-w-5xl text-5xl font-semibold leading-[0.98] tracking-[-0.045em] text-ink sm:text-7xl">
           Turn competitor videos
-          <br className="hidden sm:block" /> into <Accent>viral ideas</Accent>
+          <br className="hidden sm:block" /> into <Accent className="fx-marker">viral ideas</Accent>
         </h1>
         <p className="relative mx-auto mt-6 max-w-2xl text-lg text-ink/80">
           Track YouTube channels, remix their best videos into scripts, and plan every shoot in one place.

@@ -1,8 +1,10 @@
 import type { ReactNode } from 'react';
 
 // One italic serif phrase inside a bold sans headline.
-export function Accent({ children }: { children: ReactNode }) {
-  return <em className="font-serif text-[1.08em] font-normal italic tracking-[-0.02em]">{children}</em>;
+export function Accent({ children, className = '' }: { children: ReactNode; className?: string }) {
+  return (
+    <em className={`font-serif text-[1.08em] font-normal italic tracking-[-0.02em] ${className}`.trim()}>{children}</em>
+  );
 }
 
 export function PageHeader({
