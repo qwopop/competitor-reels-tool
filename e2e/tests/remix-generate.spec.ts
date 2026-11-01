@@ -1,21 +1,77 @@
-// Issue 61: Generate a remix.
-import { expect, test } from '@playwright/test';
+// Issue 61: Generate a remix
+import { expect, test, type Page } from '@playwright/test';
 import { openVideosOf, seedChannel } from './helpers';
 
-test('Remix opens the editor with a full draft, and remixing again reopens it', async ({ page, request }) => {
-  const { handle } = await seedChannel(request, 'remix');
-  await openVideosOf(page, handle);
-  await page.locator('article').first().getByRole('button', { name: 'Remix' }).click();
+const FIELDS = ['Title', 'Hook', 'Script', 'Call to action'] as const;
+const field = (page: Page, label: (typeof FIELDS)[number]) => page.getByLabel(label, { exact: true });
 
-  await expect(page).toHaveURL(/\/remix\/remix_/);
-  const url = page.url();
-  for (const field of ['Title', 'Hook', 'Script', 'Call to action']) {
-    await expect(page.getByLabel(field, { exact: true })).not.toHaveValue('');
-  }
+// The card for one video in the filtered library.
+const cardOf = (page: Page, caption: string) => page.locator('article').filter({ has: page.getByRole('heading', { name: caption, exact: true }) });
+
+test('Remix opens the editor with a full draft of that video', async ({ page, request }) => {
+  const { handle, videos } = await seedChannel(request, 'remix');
+  const video = videos[0];
+  await openVideosOf(page, handle);
+  await cardOf(page, video.caption).getByRole('button', { name: 'Remix' }).click();
+
+  await expect(page).toHaveURL(/\/remix\/[^/]+$/);
+  for (const label of FIELDS) await expect(field(page, label), label).not.toHaveValue('');
+  const title = await field(page, 'Title').inputValue();
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText(title);
+
+  const source = page.locator('section').filter({ has: page.getByRole('img', { name: video.caption }) });
+  await expect(source).toContainText(video.caption);
+  await expect(source).toContainText(`@${handle} · `);
+  await expect(page.getByLabel('Remix template').locator('option:checked')).toHaveText('Default');
+
+  await expect(page.getByText(/^Created /)).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Save changes' })).toBeDisabled();
+
+  await page.getByRole('link', { name: 'Back to videos' }).click();
+  await expect(page).toHaveURL(/\/videos$/);
+});
+
+test('remixing the same video reopens its remix; another video gets its own', async ({ page, request }) => {
+  const { handle, videos } = await seedChannel(request, 'remix-again');
+  const [one, two] = videos;
 
   await openVideosOf(page, handle);
-  const first = page.locator('article').first();
-  await expect(first.getByRole('button', { name: 'Preview' })).toBeVisible();
-  await first.getByRole('button', { name: 'Remix' }).click();
-  await expect(page).toHaveURL(url);
+  await cardOf(page, one.caption).getByRole('button', { name: 'Remix' }).click();
+  await expect(page).toHaveURL(/\/remix\/[^/]+$/);
+  const firstUrl = page.url();
+  const firstHook = await field(page, 'Hook').inputValue();
+  const firstScript = await field(page, 'Script').inputValue();
+
+  await openVideosOf(page, handle);
+  await cardOf(page, one.caption).getByRole('button', { name: 'Remix' }).click();
+  await expect(page).toHaveURL(firstUrl);
+
+  // Listed once on the Remixes page.
+  await page.goto('/remixes');
+  await expect(page.locator('li').filter({ hasText: `@${handle} · updated` })).toHaveCount(1);
+
+  // After a reload, only the remixed video has Preview.
+  await openVideosOf(page, handle);
+  await page.reload();
+  await page.getByLabel('Competitor').selectOption({ label: `@${handle}` });
+  await expect(page.locator('article')).toHaveCount(15);
+  await expect(cardOf(page, one.caption).getByRole('button', { name: 'Preview' })).toBeVisible();
+  await expect(page.locator('article').getByRole('button', { name: 'Preview' })).toHaveCount(1);
+
+  // A second video: a different remix with a different draft.
+  await cardOf(page, two.caption).getByRole('button', { name: 'Remix' }).click();
+  await expect(page).toHaveURL(/\/remix\/[^/]+$/);
+  expect(page.url()).not.toBe(firstUrl);
+  await expect(field(page, 'Hook')).not.toHaveValue('');
+  const secondHook = await field(page, 'Hook').inputValue();
+  const secondScript = await field(page, 'Script').inputValue();
+  expect(secondHook === firstHook && secondScript === firstScript).toBe(false);
+});
+
+test('an unknown remix shows an error and no editor', async ({ page }) => {
+  await page.goto('/remix/does-not-exist');
+  await expect(page.getByText('Remix not found.')).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Back to videos' })).toBeVisible();
+  for (const label of FIELDS) await expect(field(page, label)).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Save changes' })).toHaveCount(0);
 });
