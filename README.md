@@ -9,11 +9,11 @@ Track competitor YouTube channels, pull their latest videos into a library, gene
 
 ## Screenshots
 
-These show the earlier Instagram version. The layout is the same; video thumbnails are now 16:9.
+The Dashboard and Tracked competitors screenshots show the current ClipRemix app. The others still show the earlier Instagram version; the layout is the same, and video thumbnails are now 16:9.
 
 | Dashboard | Reels | Content plan (board) | Content plan (table) |
 | --- | --- | --- | --- |
-| ![Dashboard](docs/screenshots/dashboard.png) | ![Reels](docs/screenshots/reels.webp) | ![Content plan board](docs/screenshots/content-plan.png) | ![Content plan table](docs/screenshots/content-plan-table.png) |
+| ![Dashboard](docs/screenshots/dashboard.webp) | ![Reels](docs/screenshots/reels.webp) | ![Content plan board](docs/screenshots/content-plan.png) | ![Content plan table](docs/screenshots/content-plan-table.png) |
 
 | Competitors | Remixes | Remix editor |
 | --- | --- | --- |
@@ -25,9 +25,9 @@ These show the earlier Instagram version. The layout is the same; video thumbnai
 | --- | --- | --- |
 | ![Reels list](docs/screenshots/reels-list.png) | ![Tracked competitors](docs/screenshots/competitors-tracked.png) | ![Add a competitor](docs/screenshots/add-competitor.png) |
 
-| Dashboard hero | Dashboard totals | Dashboard details |
+| Dashboard: top videos and channels | Dashboard: totals and progress | Dashboard: recent videos |
 | --- | --- | --- |
-| ![Dashboard hero](docs/screenshots/dashboard-hero.webp) | ![Dashboard totals](docs/screenshots/dashboard-totals.webp) | ![Dashboard details](docs/screenshots/dashboard-details.png) |
+| ![Dashboard top videos and channels](docs/screenshots/dashboard-videos.webp) | ![Dashboard totals and progress](docs/screenshots/dashboard-totals.png) | ![Dashboard recent videos](docs/screenshots/dashboard-recent.png) |
 
 ## Run it locally
 
