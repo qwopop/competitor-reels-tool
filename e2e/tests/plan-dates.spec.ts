@@ -1,27 +1,91 @@
-// Issue 67: Film and publish dates.
-import { expect, test } from '@playwright/test';
-import { api, planCard, seedChannel } from './helpers';
+// Issue 67: Film and publish dates
+import { expect, test, type Locator, type Page } from '@playwright/test';
+import { api, isoDay, planCard, seedChannel } from './helpers';
 
-test('set, warn about and clear the film and publish dates', async ({ page, request }) => {
+const WARNING = 'Publishing is set before filming.';
+
+function day(offset: number) {
+  const d = new Date();
+  d.setDate(d.getDate() + offset);
+  return isoDay(d);
+}
+
+// Changes a date field and waits until the change is saved.
+async function setDate(page: Page, field: Locator, value: string) {
+  const saved = page.waitForResponse((r) => r.request().method() === 'PATCH' && r.url().includes('/api/content-plan/') && r.ok());
+  await field.fill(value);
+  await saved;
+}
+
+test('film and publish dates save at once, warn when backwards, and clear', async ({ page, request }) => {
   const { handle, videos } = await seedChannel(request, 'pdate');
+  const caption = videos[0].caption;
   await api.addToPlan(request, videos[0].id);
   await page.goto('/content-plan');
+
   const card = planCard(page, handle);
-  const film = card.getByLabel(/^Film date for/);
-  const publish = card.getByLabel(/^Publish date for/);
+  const film = card.getByLabel(`Film date for ${caption}`, { exact: true });
+  const publish = card.getByLabel(`Publish date for ${caption}`, { exact: true });
+  const warning = card.getByText(WARNING);
+  await expect(film).toHaveValue('');
+  await expect(publish).toHaveValue('');
 
-  await film.fill('2027-03-10');
-  await publish.fill('2027-03-12');
-  await expect(card.getByText('Publishing is set before filming.')).toHaveCount(0);
+  const filmDay = day(10);
+  await setDate(page, film, filmDay);
+  await setDate(page, publish, day(12));
+  await expect(warning).toHaveCount(0);
+
   await page.reload();
-  await expect(film).toHaveValue('2027-03-10');
-  await expect(publish).toHaveValue('2027-03-12');
+  await expect(film).toHaveValue(filmDay);
+  await expect(publish).toHaveValue(day(12));
 
-  await publish.fill('2027-03-08');
-  await expect(card.getByText('Publishing is set before filming.')).toBeVisible();
+  // Same day: fine.
+  await setDate(page, publish, filmDay);
+  await expect(warning).toHaveCount(0);
 
-  await film.fill('');
+  // One day before filming: warning, kept after a reload.
+  await setDate(page, publish, day(9));
+  await expect(warning).toBeVisible();
+  await page.reload();
+  await expect(film).toHaveValue(filmDay);
+  await expect(publish).toHaveValue(day(9));
+  await expect(warning).toBeVisible();
+
+  // After filming again: no warning.
+  await setDate(page, publish, day(11));
+  await expect(warning).toHaveCount(0);
+
+  // Clear the film date.
+  await setDate(page, film, '');
   await page.reload();
   await expect(film).toHaveValue('');
-  await expect(publish).toHaveValue('2027-03-08');
+  await expect(publish).toHaveValue(day(11));
+  await expect(warning).toHaveCount(0);
+
+  // The status never changed.
+  await expect(page.getByRole('region', { name: /Not started/ }).locator('li').filter({ hasText: `@${handle} · added` })).toHaveCount(1);
+  await expect(card.getByRole('button', { name: 'Not started' })).toHaveAttribute('aria-pressed', 'true');
+});
+
+test('the Table shows the same dates, and a change there shows on the Board', async ({ page, request }) => {
+  const { handle, videos } = await seedChannel(request, 'pdate-table');
+  const caption = videos[0].caption;
+  await api.addToPlan(request, videos[0].id);
+  await page.goto('/content-plan');
+
+  const card = planCard(page, handle);
+  await setDate(page, card.getByLabel(`Film date for ${caption}`, { exact: true }), day(5));
+  await setDate(page, card.getByLabel(`Publish date for ${caption}`, { exact: true }), day(7));
+
+  const views = page.getByRole('group', { name: 'Plan layout' });
+  await views.getByRole('button', { name: 'Table' }).click();
+  const row = page.locator('tbody tr').filter({ has: page.locator('td:nth-child(2)', { hasText: new RegExp(`^@${handle}$`) }) });
+  const schedule = row.locator('td:nth-child(4)');
+  await expect(schedule.getByLabel(`Film date for ${caption}`, { exact: true })).toHaveValue(day(5));
+  await expect(schedule.getByLabel(`Publish date for ${caption}`, { exact: true })).toHaveValue(day(7));
+
+  await setDate(page, schedule.getByLabel(`Publish date for ${caption}`, { exact: true }), day(8));
+  await views.getByRole('button', { name: 'Board' }).click();
+  await expect(card.getByLabel(`Publish date for ${caption}`, { exact: true })).toHaveValue(day(8));
+  await expect(card.getByRole('button', { name: 'Not started' })).toHaveAttribute('aria-pressed', 'true');
 });
