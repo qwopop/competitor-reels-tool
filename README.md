@@ -19,9 +19,9 @@ Track competitor YouTube channels, pull their latest videos into a library, gene
 
 ### More screens
 
-| Videos list | Add a competitor |
-| --- | --- |
-| ![Videos list](docs/screenshots/videos-list.webp) | ![Add a competitor](docs/screenshots/add-competitor.png) |
+| Content plan (calendar) | Videos list | Go to videos | Add a competitor |
+| --- | --- | --- | --- |
+| ![Content plan calendar](docs/screenshots/content-plan-calendar.png) | ![Videos list](docs/screenshots/videos-list.webp) | ![Go to videos](docs/screenshots/go-to-videos.png) | ![Add a competitor](docs/screenshots/add-competitor.png) |
 
 | Dashboard: top videos and channels | Dashboard: totals and progress | Dashboard: recent videos |
 | --- | --- | --- |
