@@ -36,16 +36,38 @@ body {
 
 @layer components {
   .btn {
-    @apply inline-flex items-center justify-center gap-2 rounded-full px-5 py-2.5 text-sm font-semibold transition duration-200 disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent;
+    @apply inline-flex items-center justify-center gap-2 rounded-full px-5 py-2.5 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent;
+    /* Colours ease over 200ms; the press itself is quick (60ms) so it feels tactile. */
+    transition-property: color, background-color, border-color, filter, opacity, transform, box-shadow;
+    transition-duration: 200ms, 200ms, 200ms, 200ms, 200ms, 60ms, 60ms;
+    transition-timing-function: ease-out;
+    --edge: 0px;
+    --edge-color: transparent;
+    box-shadow: 0 var(--edge) 0 var(--edge-color);
+  }
+  /* Physical press: the button drops onto its solid bottom edge. It moves down by the
+     edge height minus the 1px that stays visible, so its base never moves. */
+  .btn:active:not(:disabled) {
+    transform: translateY(calc(var(--edge) - 1px));
+    box-shadow: 0 1px 0 var(--edge-color);
   }
   .btn-primary {
-    @apply btn bg-brand text-ground hover:brightness-110 active:scale-[0.98];
+    @apply btn bg-brand text-ground hover:brightness-110;
+    --edge: 4px;
+    --edge-color: #b4455e; /* the gradient's coral, darkened */
   }
   .btn-outline {
-    @apply btn border border-white/15 bg-transparent text-ink hover:border-accent/60 hover:bg-white/5;
+    @apply btn border border-white/15 bg-surface-2 text-ink hover:border-accent/60 hover:bg-surface-3;
+    --edge: 3px;
+    --edge-color: rgba(255, 255, 255, 0.14);
   }
+  /* Text-only buttons have no edge to stand on; they just nudge down 1px. */
   .btn-ghost {
     @apply btn text-ink/70 hover:bg-white/5 hover:text-ink;
+  }
+  .btn-ghost:active:not(:disabled) {
+    transform: translateY(1px);
+    box-shadow: none;
   }
   .panel {
     @apply rounded-3xl bg-surface p-6;
