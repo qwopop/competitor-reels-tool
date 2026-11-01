@@ -24,7 +24,7 @@ export function Layout() {
   }, [pathname]);
 
   return (
-    <div className="flex min-h-dvh flex-col bg-ground">
+    <div className="flex min-h-dvh flex-col">
       <Header />
       <main className="flex-1 overflow-x-clip">
         <div className="mx-auto max-w-6xl px-6 py-12 sm:px-10 sm:py-16">

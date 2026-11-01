@@ -16,11 +16,68 @@ body,
 
 body {
   margin: 0;
-  background-color: #07070b;
+  background-color: #08070c;
   color: #f6f6f8;
   font-family: 'Inter', ui-sans-serif, system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
+}
+
+/* Site-wide backdrop: two large glowing orbs on the near-black ground, an
+   orange one breaking in from the top-left and a magenta one from the
+   bottom-right, each with a faint light rim. Fixed, so it stays put while
+   pages scroll; sized from the screen (--orb) so the arcs keep their shape. */
+body::before,
+body::after {
+  --orb: 1vmax; /* one unit of the orb layout */
+  content: '';
+  position: fixed;
+  z-index: -1;
+  border-radius: 50%;
+  pointer-events: none;
+}
+body::before {
+  width: calc(74 * var(--orb));
+  height: calc(74 * var(--orb));
+  left: calc(-31 * var(--orb));
+  top: calc(-49 * var(--orb));
+  /* 42% 66% is the screen's top-left corner inside this circle. */
+  background: radial-gradient(
+    circle at 42% 66%,
+    #f27a2b 0%,
+    #bd4c36 8%,
+    #722a42 18%,
+    #33162a 30%,
+    #181019 46%,
+    #120d17 70%
+  );
+  border: 1px solid rgba(255, 186, 140, 0.14);
+  box-shadow: 0 0 90px 0 rgba(255, 110, 60, 0.06);
+}
+body::after {
+  width: calc(96 * var(--orb));
+  height: calc(96 * var(--orb));
+  right: calc(-56 * var(--orb));
+  bottom: calc(-74 * var(--orb));
+  /* 42% 23% is the screen's bottom-right corner inside this circle. */
+  background: radial-gradient(
+    circle at 42% 23%,
+    #d23ca2 0%,
+    #a62e92 7%,
+    #5a2170 17%,
+    #29133a 29%,
+    #140e1b 44%
+  );
+  border: 1px solid rgba(255, 150, 220, 0.2);
+  box-shadow: 0 0 160px 30px rgba(200, 50, 150, 0.14);
+}
+
+/* Upright phones: size the orbs from the short side, so both stay on screen. */
+@media (max-aspect-ratio: 1/1) {
+  body::before,
+  body::after {
+    --orb: 1.6vmin;
+  }
 }
 
 /* Keyboard focus must be visible on the dark ground, for links and any control without its own ring. */
