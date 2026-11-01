@@ -7,6 +7,7 @@ import { CompetitorsPage } from '@/pages/CompetitorsPage';
 import { RemixesPage } from '@/pages/RemixesPage';
 import { RemixPage } from '@/pages/RemixPage';
 import { ContentPlanPage } from '@/pages/ContentPlanPage';
+import { ReelsLinkPage } from '@/pages/ReelsLinkPage';
 
 export default function App() {
   return (
@@ -20,6 +21,7 @@ export default function App() {
             <Route path="/remixes" element={<RemixesPage />} />
             <Route path="/remix/:id" element={<RemixPage />} />
             <Route path="/content-plan" element={<ContentPlanPage />} />
+            <Route path="/go-to-reels" element={<ReelsLinkPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>
         </Routes>

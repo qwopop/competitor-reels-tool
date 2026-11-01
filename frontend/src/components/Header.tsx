@@ -7,6 +7,7 @@ const navItems = [
   { to: '/reels', label: 'Reels', end: false },
   { to: '/remixes', label: 'Remixes', end: false },
   { to: '/content-plan', label: 'Content Plan', end: false },
+  { to: '/go-to-reels', label: 'Go to Reels', end: false },
 ];
 
 // Sticky top bar: wordmark, page links, and one action.

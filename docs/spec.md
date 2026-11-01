@@ -40,6 +40,8 @@ A single user with no login. Anyone who can reach the app can use it.
    username on the dashboard or in the Add competitor dialog, a link to that
    account's Reels tab on Instagram appears. It opens in a new tab and works
    without tracking the account. Each tracked competitor also has this link.
+   The **Go to Reels** page does the same on its own: type a username, press
+   Generate link, and open or copy `https://www.instagram.com/<name>/reels/`.
 
 ## Data
 
