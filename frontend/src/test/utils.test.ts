@@ -145,3 +145,14 @@ describe('calendar month grid', () => {
     expect(days.map(isoDay)).toContain('2026-11-30');
   });
 });
+
+describe('moving video fan', () => {
+  it('starts as the original fan and loops cards from the left edge round to the right', async () => {
+    const { offsetAt } = await import('@/components/VideoCarousel');
+    const at = (t: number) => [0, 1, 2, 3, 4, 5, 6].map((i) => Math.round(offsetAt(i, t, 7) * 100) / 100);
+    expect(at(0)).toEqual([-3, -2, -1, 0, 1, 2, 3]);
+    expect(at(0.5)).toEqual([-3.5, -2.5, -1.5, -0.5, 0.5, 1.5, 2.5]);
+    expect(at(0.6)[0]).toBe(3.4); // the leftmost card has wrapped to the far right
+    expect(at(7)).toEqual(at(0)); // a full loop
+  });
+});
