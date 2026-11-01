@@ -1,28 +1,68 @@
-// Issue 65: Add a video to the Content Plan.
-import { expect, test } from '@playwright/test';
-import { api, openVideosOf, planCard, seedChannel, type PlanItem } from './helpers';
+// Issue 65: Add a video to the Content Plan
+import { expect, test, type Page } from '@playwright/test';
+import { api, openVideosOf, planCard, seedChannel } from './helpers';
 
-test('Add to plan adds a video once, at Not started, with a message', async ({ page, request }) => {
-  const { handle, videos } = await seedChannel(request, 'padd');
+const cardOf = (page: Page, caption: string) =>
+  page.locator('article').filter({ has: page.getByRole('heading', { name: caption, exact: true }) });
+const planCardOf = (page: Page, handle: string, caption: string) => planCard(page, handle).filter({ hasText: caption });
+const column = (page: Page, label: string) => page.getByRole('region', { name: new RegExp(label) });
+
+test('Add to plan from the library and from the editor, never twice, and kept after a refetch', async ({ page, request }) => {
+  const { handle, competitor, videos } = await seedChannel(request, 'padd');
+  const [A, B, C] = videos;
+
+  // A: from the Videos page.
   await openVideosOf(page, handle);
-  const first = page.locator('article').first();
-  await first.getByRole('button', { name: 'Add to plan' }).click();
+  await cardOf(page, A.caption).getByRole('button', { name: 'Add to plan' }).click();
   await expect(page.getByText('Added to your Content Plan.')).toBeVisible();
-  await expect(first).toContainText('In content plan');
+  await expect(cardOf(page, A.caption)).toContainText('❌ In content plan');
+  await expect(cardOf(page, A.caption).getByRole('button', { name: 'Add to plan' })).toHaveCount(0);
+
+  // C: planned behind the open page's back, then clicked in the page.
+  await api.addToPlan(request, C.id);
+  await cardOf(page, C.caption).getByRole('button', { name: 'Add to plan' }).click();
+
+  // After a reload: A planned, others (except C) still offer Add to plan.
+  await page.reload();
+  await page.getByLabel('Competitor').selectOption({ label: `@${handle}` });
+  await expect(cardOf(page, A.caption)).toContainText('In content plan');
+  for (const v of videos.filter((x) => x.id !== A.id && x.id !== C.id)) {
+    await expect(cardOf(page, v.caption).getByRole('button', { name: 'Add to plan' })).toBeVisible();
+  }
 
   await page.goto('/content-plan');
-  const notStarted = page.getByRole('region', { name: /Not started/ });
-  await expect(notStarted.locator('li').filter({ hasText: `@${handle} · added` })).toHaveCount(1);
+  const cardA = column(page, 'Not started').locator('li').filter({ hasText: `@${handle} · added` }).filter({ hasText: A.caption });
+  await expect(cardA).toHaveCount(1);
+  await expect(cardA).toContainText('No breakdown yet.');
+  await expect(cardA.getByRole('button', { name: 'Create breakdown' })).toBeVisible();
+  await expect(planCardOf(page, handle, C.caption)).toHaveCount(1);
 
-  // From the remix editor the video already shows as planned; the API won't plan it twice.
-  const remix = await api.remix(request, videos[0].id);
-  await page.goto(`/remix/${remix.id}`);
+  // B: from the remix editor.
+  const remixB = await api.remix(request, B.id);
+  await page.goto(`/remix/${remixB.id}`);
+  await page.getByRole('button', { name: 'Add to plan' }).click();
+  await expect(page.getByText('❌ In content plan')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Add to plan' })).toHaveCount(0);
+  await page.goto('/content-plan');
+  await expect(column(page, 'Not started').locator('li').filter({ hasText: `@${handle} · added` }).filter({ hasText: B.caption })).toHaveCount(1);
+
+  // An editor for an already planned video.
+  const remixA = await api.remix(request, A.id);
+  await page.goto(`/remix/${remixA.id}`);
   await expect(page.getByText('In content plan')).toBeVisible();
-  const again = await request.post('/api/content-plan', { data: { videoId: videos[0].id } });
-  expect(again.status()).toBe(200);
-  const plan = await api.list<PlanItem[]>(request, '/content-plan');
-  expect(plan.filter((p) => p.videoId === videos[0].id)).toHaveLength(1);
+  await expect(page.getByRole('button', { name: 'Add to plan' })).toHaveCount(0);
 
+  // Status shows in the library.
+  const plan = await api.list<{ id: string; videoId: string }[]>(request, '/content-plan');
+  const itemA = plan.find((p) => p.videoId === A.id)!;
+  await api.updatePlan(request, itemA.id, { status: 'ready' });
+  await openVideosOf(page, handle);
+  await expect(cardOf(page, A.caption)).toContainText('⏳ In content plan');
+
+  // Refetch keeps the plan.
+  await api.fetchVideos(request, competitor.id);
   await page.goto('/content-plan');
-  await expect(planCard(page, handle)).toHaveCount(1);
+  for (const v of [A, B, C]) await expect(planCardOf(page, handle, v.caption), v.caption).toHaveCount(1);
+  await openVideosOf(page, handle);
+  await expect(cardOf(page, A.caption).filter({ hasText: 'In content plan' })).toHaveCount(1);
 });
