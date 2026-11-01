@@ -176,7 +176,7 @@ def read_description(description: str) -> DescriptionRead:
         sentence = _promise(sentence.strip())
         if 30 <= len(sentence) <= 220 and len(sentence.split()) >= 6 and sentence not in read.sentences:
             read.sentences.append(sentence)
-        if len(read.sentences) == 3:
+        if len(read.sentences) == 4:
             break
     return read
 
@@ -235,35 +235,142 @@ def _beats(facts: VideoFacts, middle: list[str]) -> str:
     return "\n".join(f"{i}. {step}" for i, step in enumerate(steps, 1))
 
 
-def _middle(facts: VideoFacts, t: TitleRead, d: DescriptionRead, template: str) -> list[str]:
-    """The body of the script, from the video's own chapters or description when it has them."""
-    beats: list[str] = []
-    if d.sentences:
-        beats.append(f"The promise: {_cap(d.sentences[0])}")
-    if d.chapters:
-        beats.append(f"Cover “{d.chapters[0]}” in your own words")
-        beats += [f"Then: {c}" for c in d.chapters[1:]]
-        return beats
+_PROBLEM = re.compile(
+    r"\b(most people|struggl|waste|wasting|stuck|mistake|problem|hard|rely on|without|can't|cannot|never|"
+    r"tired of|frustrat|fail|expensive|slow)\w*", re.IGNORECASE)
+_METHOD = re.compile(
+    r"\b(here is|here's|i use|we use|the system|the workflow|the method|the process|step|framework|"
+    r"how to|set up|using|with)\b", re.IGNORECASE)
+_NUMBER = re.compile(
+    r"(?:\$\d[\d,.]*[kKmM]?|\b\d[\d,.]*\s*(?:%|x\b|k\b|(?:minutes?|hours?|days?|weeks?|months?|"
+    r"clients?|calls?|customers?|users?|dollars?|views?|subscribers?|lines?)\b))", re.IGNORECASE)
 
+
+def _find(sentences: list[str], pattern: re.Pattern, skip: set[str]) -> str | None:
+    return next((x for x in sentences if x not in skip and pattern.search(x)), None)
+
+
+def _proof(t: TitleRead, d: DescriptionRead) -> str | None:
+    """A concrete number the video itself claims: '48 hours', '30 minutes', '$10k'."""
+    for text in (t.clean, *d.sentences):
+        if m := _NUMBER.search(_YEAR.sub("", text)):
+            return m.group(0).strip()
+    return None
+
+
+def _why_it_worked(facts: VideoFacts, t: TitleRead) -> str:
+    reason = {
+        "how_to": "it promises one clear outcome",
+        "tutorial": "it promises a complete answer for beginners",
+        "list": "a numbered list is easy to follow and easy to save",
+        "versus": "an either/or makes viewers pick a side",
+        "story": "it's a personal experiment with a clear stake",
+        "question": "it asks the question the audience already has",
+    }.get(t.kind, "the title makes one clear promise")
+    if facts.views:
+        return f"Why it worked: {reason}, and {compact(facts.views)} views say it landed"
+    return f"Why it worked: {reason}"
+
+
+def _middle(facts: VideoFacts, t: TitleRead, d: DescriptionRead, template: str) -> list[str]:
+    """The body of the script. Each template has its own structure, filled from the
+    video's chapters, description sentences, numbers and channel. The most important
+    beats come first, because Shorts only keep three."""
     about = _about(t)
-    if len(d.sentences) > 1:
-        beats.append(f"Back it up: {d.sentences[1]}")
+    used: set[str] = set()
+    problem = _find(d.sentences, _PROBLEM, used)
+    if problem:
+        used.add(problem)
+    method = _find(d.sentences, _METHOD, used)
+    if method:
+        used.add(method)
+    promise = next((x for x in d.sentences if x not in used), None)
+    proof = _proof(t, d)
+    chapters = d.chapters
+    # A noun for "who needs ___" sentences, and a verb phrase for "before you ___".
+    noun = t.topic or "this"
+    doing = t.action or (f"use {t.topic}" if t.topic else "put it into practice")
+
     if t.kind == "versus" and t.topic:
         left, right = t.topic.split(" vs ", 1)
-        beats += [f"Where {left} wins", f"Where {right} wins", "Your pick, and who should choose the other one"]
-    elif t.kind == "list" and t.count:
-        beats += [f"Go through the {t.count} quickly, one line each", "Slow down on the one that matters most and show it"]
-    elif template == "educational":
-        beats += [f"Show one concrete example of {about}, start to finish", "Name the most common mistake and how to avoid it"]
-    elif template == "storytelling":
-        beats += ["Where you started and what you expected", "The moment it went wrong (or surprisingly right)",
-                  "What you changed and the result"]
-    elif template == "promotional":
-        beats += ["Show the result first, then how you got there",
-                  "One proof point: a number, a screenshot or a before/after"]
+        compare = [f"Where {left} wins", f"Where {right} wins"]
     else:
-        beats += [f"Your angle: what {facts.channel} does well and what you would do differently",
-                  f"Show it: a quick demo of {about}"]
+        compare = []
+
+    if template == "educational":
+        if problem:
+            beats = [f"Why it matters: {_cap(problem)}"]
+        elif t.action:
+            beats = [f"Why it matters: what changes once you can {t.action}"]
+        else:
+            beats = [f"Why it matters: who {noun} is for, and what it saves them"]
+        if chapters:
+            beats += [f"Step {i}: {c} (show it on screen)" for i, c in enumerate(chapters[:5], 1)]
+        elif compare:
+            beats += [f"Step 1: {compare[0]}", f"Step 2: {compare[1]}", "Step 3: the simple rule for choosing"]
+        elif t.kind == "list" and t.count:
+            beats += [f"Steps 1–{t.count}: one line each on the {t.head or 'items'}", "Then slow down on the one to learn first"]
+        else:
+            beats += [
+                f"Step 1: {_cap(method)}" if method else f"Step 1: what you need before you {doing}",
+                f"Step 2: {doing}, once, live, start to finish",
+                "Step 3: the mistake most beginners make here, and the fix",
+            ]
+        beats.append(f"Recap: {_cap(promise)}" if promise else "Recap the whole thing in one sentence")
+        return beats
+
+    if template == "storytelling":
+        if problem:
+            start = f"Where it starts: {_cap(problem)}"
+        elif t.action:
+            start = f"Where it starts: why you decided to {t.action}"
+        else:
+            start = f"Where it starts: the moment {facts.channel}'s video made you want to try this"
+        beats = [start]
+        if proof:
+            beats.append(f"The stakes: you gave yourself {proof}" if re.search(r"(minute|hour|day|week|month)", proof)
+                         else f"The stakes: {proof} on the line")
+        if chapters:
+            beats.append("The journey: " + " → ".join(chapters[:4]))
+        elif compare:
+            beats.append(f"The test: a week with {compare[0][9:]}, then a week with {compare[1][9:]}")
+        else:
+            beats.append(f"The attempt: {_cap(method)}" if method else "The attempt: what you did, step by step")
+        beats += ["The turning point: what went wrong, or surprisingly right",
+                  "The result, and what you'd tell yourself before you started"]
+        return beats
+
+    if template == "promotional":
+        if problem:
+            beats = [f"The pain: {_cap(problem)}"]
+        elif t.action:
+            beats = [f"The pain: trying to {t.action} the slow way"]
+        else:
+            beats = [f"The pain: what it costs you to get {noun} wrong"]
+        beats.append(f"The fix: {_cap(method)}" if method else f"The fix: your way to {doing}")
+        if proof:
+            beats.append(f"The proof: {proof}. Show it on screen")
+        elif facts.views:
+            beats.append(f"The proof: {compact(facts.views)} people watched {facts.channel} cover this. Show your own result")
+        else:
+            beats.append("The proof: one before/after or screenshot")
+        if chapters:
+            beats.append("What's inside: " + ", ".join(chapters[:4]))
+        if d.offer:
+            beats.append(f"The offer: your {d.offer}, and who it's for")
+        return beats
+
+    # default: a breakdown of the original, then your own take
+    beats = [f"What the video promises: {_cap(promise)}" if promise else f"What the video promises: {about}",
+             _why_it_worked(facts, t)]
+    if chapters:
+        beats.append(f"How it's built: {len(chapters)} parts. " + ", ".join(chapters[:4]))
+    elif compare:
+        beats += compare
+    if problem:
+        beats.append(f"The problem it solves: {problem}")
+    beats += [f"Your angle: what you'd add or do differently from {facts.channel}",
+              f"Show it: your own version of {about}"]
     return beats
 
 
@@ -366,9 +473,17 @@ def _cta(facts: VideoFacts, t: TitleRead, d: DescriptionRead, template: str) -> 
             word, what = offer.split()[-1].upper(), f"my {offer}"
         return f"Comment “{word}” and I'll send you {what}."
     if template == "educational":
+        if t.action:
+            return _pick([f"Save this for the next time you {t.action}.",
+                          f"Try it today, then tell me in the comments which step was hardest."], s)
         return _pick([f"Save this for the next time you work on {_about(t)}.",
-                      "Subscribe for one short lesson like this every week."], s)
+                      f"Subscribe for a short {t.topic or 'lesson'} lesson every week." if t.topic
+                      else "Subscribe for one short lesson like this every week."], s)
     if template == "storytelling":
+        if t.action:
+            return f"Would you {t.action}? Tell me in the comments."
+        if t.kind == "versus" and t.topic:
+            return f"Which would you pick, {t.topic.replace(' vs ', ' or ')}? Tell me in the comments."
         return "Would you have done the same? Tell me in the comments."
     if t.kind == "versus":
         return "Which one do you use? Tell me in the comments."

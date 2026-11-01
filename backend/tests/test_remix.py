@@ -173,3 +173,46 @@ def test_an_older_database_gets_the_description_column(tmp_path):
         assert client.get("/api/videos").status_code == 200
     columns = [row[1] for row in sqlite3.connect(path).execute("PRAGMA table_info(videos)")]
     assert "description" in columns
+
+
+# ----- each template has its own structure -----------------------------------
+
+TEXT_DESCRIPTION = (
+    "Most freelancers rely on referrals and wait. Here is the outreach system I use every single day "
+    "to book calls. It takes about 30 minutes and costs nothing."
+)
+
+
+def test_each_template_has_its_own_script_structure():
+    scripts = {
+        tpl: write_remix(facts("How I Find Unlimited Clients With AI", TEXT_DESCRIPTION), tpl)["script"]
+        for tpl in TEMPLATES
+    }
+    assert "Why it worked:" in scripts["default"] and "Your angle:" in scripts["default"]
+    assert "Why it matters: Most freelancers rely on referrals and wait." in scripts["educational"]
+    assert "Step 1: Here is the outreach system" in scripts["educational"]
+    assert "Where it starts: Most freelancers rely on referrals" in scripts["storytelling"]
+    assert "The stakes: you gave yourself 30 minutes" in scripts["storytelling"]
+    assert "The pain: Most freelancers rely on referrals" in scripts["promotional"]
+    assert "The fix: Here is the outreach system" in scripts["promotional"]
+    assert "The proof: 30 minutes" in scripts["promotional"]
+    assert len(set(scripts.values())) == 4
+
+
+def test_chapters_are_framed_differently_by_each_template():
+    title = "The ONLY Vibe Coding Tutorial Beginners Need in 2026"
+    scripts = {tpl: write_remix(facts(title, DESCRIPTION), tpl)["script"] for tpl in TEMPLATES}
+    assert "How it's built: 3 parts. Setting up Cursor" in scripts["default"]
+    assert "Step 1: Setting up Cursor (show it on screen)" in scripts["educational"]
+    assert "The journey: Setting up Cursor → Your first prompt" in scripts["storytelling"]
+    assert "What's inside: Setting up Cursor" in scripts["promotional"]
+    assert "The offer: your community" in scripts["promotional"]
+
+
+@pytest.mark.parametrize("template", TEMPLATES)
+def test_no_template_produces_clumsy_phrases(template):
+    for title in ["How I Find Unlimited Clients With AI", "I let AI build my entire SaaS in 48 hours",
+                  "Building in public, week 12", "Cursor vs Claude Code", "5 Prompts That Replaced My Entire Team"]:
+        text = " ".join(write_remix(facts(title), template).values())
+        for clumsy in ["needs how to", "at how to", "of how to build", "you decided to let AI build my", "{", "None"]:
+            assert clumsy not in text, (title, clumsy, text)
