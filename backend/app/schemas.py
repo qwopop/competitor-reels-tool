@@ -16,22 +16,23 @@ class ApiModel(BaseModel):
 
 class Competitor(ApiModel):
     id: str
+    channel_id: str
     username: str
-    instagram_url: str
+    channel_url: str
     display_name: str
     avatar_url: str
     added_at: str
 
 
 class AddCompetitorRequest(ApiModel):
-    instagram_url: str = Field(max_length=2048, examples=["https://instagram.com/vibecoder"])
+    channel_url: str = Field(max_length=2048, examples=["https://www.youtube.com/@mkbhd"])
 
 
 class Video(ApiModel):
     id: str
     competitor_id: str
     competitor_username: str
-    shortcode: str
+    youtube_id: str
     permalink: str
     caption: str
     thumbnail_url: str

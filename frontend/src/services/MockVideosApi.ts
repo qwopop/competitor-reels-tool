@@ -8,7 +8,7 @@ import type {
   RemixTemplate,
   ServiceResult,
 } from '@/types';
-import { parseUsername } from '@/utils/instagram';
+import { channelUrlForRef, parseChannelInput } from '@/utils/youtube';
 
 // ----------------------------------------------------------------------------
 // Offline mock of the VideosApi service, persisted to localStorage. It is no
@@ -20,7 +20,7 @@ const COMPETITORS_KEY = 'mock.competitors';
 const VIDEOS_KEY = 'mock.videos';
 const REMIXES_KEY = 'mock.remixes';
 const PLAN_KEY = 'mock.plan';
-const MAX_VIDEOS = 20;
+const MAX_VIDEOS = 15; // the most a YouTube channel feed returns
 
 const ok = <T>(data: T): ServiceResult<T> => ({ data, error: null });
 const fail = <T>(error: string): ServiceResult<T> => ({ data: null, error });
@@ -45,9 +45,6 @@ function write<T>(key: string, value: T): void {
     // ignore quota errors in mock mode
   }
 }
-
-// Kept as a re-export so existing imports keep working.
-export { parseUsername };
 
 // ----- Mock data generation --------------------------------------------------
 
@@ -131,22 +128,23 @@ function pick<T>(arr: T[], i: number): T {
   return arr[i % arr.length];
 }
 
+const ID_CHARS = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-';
+
 function mockVideosFor(competitor: Competitor): Video[] {
   const now = Date.now();
   const videos: Video[] = [];
   for (let i = 0; i < MAX_VIDEOS; i++) {
-    const shortcode = `${competitor.username.slice(0, 3)}${Math.random()
-      .toString(36)
-      .slice(2, 9)}`;
+    const youtubeId = Array.from({ length: 11 }, () => ID_CHARS[Math.floor(Math.random() * ID_CHARS.length)]).join('');
     const posted = new Date(now - i * 86_400_000 * 2).toISOString();
     videos.push({
       id: uid('video'),
       competitorId: competitor.id,
       competitorUsername: competitor.username,
-      shortcode,
-      permalink: competitor.instagramUrl,
+      youtubeId,
+      // Sample videos have no real page, so they link to the channel.
+      permalink: competitor.channelUrl,
       caption: pick(VIBECODING_TOPICS, i),
-      thumbnailUrl: `https://picsum.photos/seed/${shortcode}/640/800`,
+      thumbnailUrl: `https://picsum.photos/seed/${youtubeId}/640/360`,
       viewCount: Math.round(50_000 + Math.random() * 900_000),
       likeCount: Math.round(3_000 + Math.random() * 60_000),
       commentCount: Math.round(40 + Math.random() * 1_500),
@@ -170,27 +168,33 @@ export class MockVideosApi implements VideosApi {
     return delay(ok(competitors), 150);
   }
 
-  async addCompetitor(instagramUrl: string): Promise<ServiceResult<Competitor>> {
-    const parsed = parseUsername(instagramUrl);
-    const username = parsed ? parsed.toLowerCase() : null;
-    if (!username) {
+  // Offline, like the backend's SampleSource: no channel lookup, so a video link cannot be resolved.
+  async addCompetitor(channelUrl: string): Promise<ServiceResult<Competitor>> {
+    const ref = parseChannelInput(channelUrl);
+    if (!ref) {
       return fail<Competitor>(
-        'Please paste a valid Instagram profile URL like https://instagram.com/username'
+        'Please paste a YouTube channel link like https://www.youtube.com/@mkbhd, an @handle, or a video link'
       );
     }
+    const url = channelUrlForRef(ref);
+    if (!url) {
+      return fail<Competitor>('Sample mode cannot look up a channel from a video link. Paste the channel link instead.');
+    }
+    const channelId = ref.kind === 'id' ? ref.value : `sample-${ref.value.toLowerCase()}`;
     const competitors = read<Competitor[]>(COMPETITORS_KEY, []);
-    const existing = competitors.find(
-      (c) => c.username.toLowerCase() === username.toLowerCase()
-    );
+    const existing = competitors.find((c) => c.channelId === channelId);
     if (existing) {
       return ok(existing);
     }
+    const username = ref.kind === 'handle' ? ref.value : ref.kind === 'id' ? ref.value : ref.value.toLowerCase();
+    const name = ref.kind === 'id' ? `Channel ${ref.value.slice(-6)}` : ref.value;
     const competitor: Competitor = {
       id: uid('comp'),
+      channelId,
       username,
-      instagramUrl: `https://www.instagram.com/${username}/`,
-      displayName: username.charAt(0).toUpperCase() + username.slice(1),
-      avatarUrl: `https://picsum.photos/seed/${username}-avatar/96/96`,
+      channelUrl: url,
+      displayName: name.charAt(0).toUpperCase() + name.slice(1),
+      avatarUrl: `https://picsum.photos/seed/${channelId}-avatar/96/96`,
       addedAt: new Date().toISOString(),
     };
     competitors.unshift(competitor);
@@ -222,7 +226,7 @@ export class MockVideosApi implements VideosApi {
     }
     const newVideos = mockVideosFor(competitor);
     const existing = read<Video[]>(VIDEOS_KEY, []);
-    // Replace this competitor's Videos, but keep any that have a remix or a plan item.
+    // Replace this competitor's videos, but keep any that have a remix or a plan item.
     const keep = new Set([
       ...read<RemixedVideo[]>(REMIXES_KEY, []).map((rm) => rm.videoId),
       ...read<ContentPlanItem[]>(PLAN_KEY, []).map((item) => item.videoId),
@@ -260,7 +264,7 @@ export class MockVideosApi implements VideosApi {
     }
 
     const seedIndex = Math.abs(
-      Array.from(video.shortcode).reduce((acc, ch) => acc + ch.charCodeAt(0), 0)
+      Array.from(video.youtubeId).reduce((acc, ch) => acc + ch.charCodeAt(0), 0)
     );
     const now = new Date().toISOString();
     const remix: RemixedVideo = {
@@ -291,7 +295,7 @@ export class MockVideosApi implements VideosApi {
   async getRemixForVideo(videoId: string): Promise<ServiceResult<RemixedVideo>> {
     const remixes = read<RemixedVideo[]>(REMIXES_KEY, []);
     const remix = remixes.find((rm) => rm.videoId === videoId);
-    if (!remix) return fail<RemixedVideo>('No remix for this Video yet.');
+    if (!remix) return fail<RemixedVideo>('No remix for this video yet.');
     return delay(ok(remix), 100);
   }
 
@@ -302,7 +306,7 @@ export class MockVideosApi implements VideosApi {
     const videos = read<Video[]>(VIDEOS_KEY, []);
     const video = videos.find((r) => r.id === remixes[idx].videoId);
     if (!video) return fail<RemixedVideo>('Video not found.');
-    const seedIndex = Math.abs(Array.from(video.shortcode).reduce((acc, ch) => acc + ch.charCodeAt(0), 0));
+    const seedIndex = Math.abs(Array.from(video.youtubeId).reduce((acc, ch) => acc + ch.charCodeAt(0), 0));
     const updated: RemixedVideo = {
       ...remixes[idx],
       ...templateText(template, video, seedIndex),

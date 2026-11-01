@@ -2,8 +2,11 @@
 
 export interface Competitor {
   id: string;
+  // YouTube's channel ID (UC...). Sample channels use sample-<name>.
+  channelId: string;
+  // The @handle without the @, lowercase, or the channel ID when there is no handle.
   username: string;
-  instagramUrl: string;
+  channelUrl: string;
   displayName: string;
   avatarUrl: string;
   addedAt: string;
@@ -13,9 +16,9 @@ export interface Video {
   id: string;
   competitorId: string;
   competitorUsername: string;
-  // Instagram's short code. Sample Videos have no real post, so `permalink`
-  // points at the competitor's profile instead.
-  shortcode: string;
+  // YouTube's 11-character video ID. Sample videos have no real page, so
+  // `permalink` points at the channel instead of a watch link.
+  youtubeId: string;
   permalink: string;
   caption: string;
   thumbnailUrl: string;
@@ -71,7 +74,7 @@ export interface ServiceResult<T> {
 
 export interface VideosApi {
   listCompetitors(): Promise<ServiceResult<Competitor[]>>;
-  addCompetitor(instagramUrl: string): Promise<ServiceResult<Competitor>>;
+  addCompetitor(channelUrl: string): Promise<ServiceResult<Competitor>>;
   removeCompetitor(id: string): Promise<ServiceResult<void>>;
   // Fetches the 20 most recent Videos for a competitor and stores them.
   fetchVideosForCompetitor(competitorId: string): Promise<ServiceResult<Video[]>>;

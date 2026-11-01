@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from app import generator
 from app.models import ContentPlanRow, CompetitorRow, VideoRow, RemixRow
+from app.youtube import ChannelInfo
 
 
 def _add_or_get(db: Session, row, find: Callable[[], object | None]):
@@ -41,9 +42,14 @@ def find_competitor_by_username(db: Session, username: str) -> CompetitorRow | N
     return db.scalars(stmt).first()
 
 
-def add_competitor(db: Session, username: str) -> tuple[CompetitorRow, bool]:
-    competitor = generator.build_competitor(username)
-    return _add_or_get(db, competitor, lambda: find_competitor_by_username(db, username))
+def find_competitor_by_channel_id(db: Session, channel_id: str) -> CompetitorRow | None:
+    stmt = select(CompetitorRow).where(CompetitorRow.channel_id == channel_id)
+    return db.scalars(stmt).first()
+
+
+def add_competitor(db: Session, info: ChannelInfo) -> tuple[CompetitorRow, bool]:
+    competitor = generator.build_competitor(info)
+    return _add_or_get(db, competitor, lambda: find_competitor_by_channel_id(db, info.channel_id))
 
 
 def delete_competitor(db: Session, competitor: CompetitorRow) -> None:
@@ -52,12 +58,12 @@ def delete_competitor(db: Session, competitor: CompetitorRow) -> None:
 
 
 def replace_videos_for_competitor(
-    db: Session, competitor: CompetitorRow, videos: list[VideoRow] | None = None
+    db: Session, competitor: CompetitorRow, videos: list[VideoRow]
 ) -> list[VideoRow]:
-    """Swap in new Videos (sample ones when `videos` is None), keeping any Video that has a remix or a plan item.
+    """Swap in freshly fetched videos, keeping any video that has a remix or a plan item.
 
-    Deleting a remixed Video would cascade to its remix and throw away the
-    user's edits, and a planned Video could no longer be remixed.
+    Deleting a remixed video would cascade to its remix and throw away the
+    user's edits, and a planned video could no longer be remixed.
     """
     keep_ids = set(db.scalars(select(RemixRow.video_id))) | set(
         db.scalars(select(ContentPlanRow.video_id))
@@ -67,8 +73,6 @@ def replace_videos_for_competitor(
             VideoRow.competitor_id == competitor.id, VideoRow.id.not_in(keep_ids)
         )
     )
-    if videos is None:
-        videos = generator.build_videos(competitor)
     db.add_all(videos)
     db.commit()
     return videos

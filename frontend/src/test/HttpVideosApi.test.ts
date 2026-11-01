@@ -31,23 +31,23 @@ describe('HttpVideosApi', () => {
     expect(res).toEqual({ data: [{ id: 'comp_1' }], error: null });
   });
 
-  it('posts the Instagram URL as JSON when adding a competitor', async () => {
+  it('posts the channel link as JSON when adding a competitor', async () => {
     fetchMock.mockResolvedValue(jsonResponse(201, { id: 'comp_1' }));
-    await new HttpVideosApi().addCompetitor('https://instagram.com/vibecoder');
+    await new HttpVideosApi().addCompetitor('https://www.youtube.com/@vibecoder');
     const [url, init] = fetchMock.mock.calls[0];
     expect(url).toBe('/api/competitors');
     expect(init.method).toBe('POST');
     expect(init.headers).toEqual({ 'Content-Type': 'application/json' });
-    expect(JSON.parse(init.body)).toEqual({ instagramUrl: 'https://instagram.com/vibecoder' });
+    expect(JSON.parse(init.body)).toEqual({ channelUrl: 'https://www.youtube.com/@vibecoder' });
   });
 
   it('surfaces the backend detail message as the error', async () => {
     fetchMock.mockResolvedValue(
-      jsonResponse(400, { detail: 'Please paste a valid Instagram profile URL' })
+      jsonResponse(400, { detail: 'Please paste a YouTube channel link' })
     );
     const res = await new HttpVideosApi().addCompetitor('https://twitter.com/x');
     expect(res.data).toBeNull();
-    expect(res.error).toMatch(/valid Instagram/);
+    expect(res.error).toMatch(/YouTube channel link/);
   });
 
   it('handles 204 responses with no body', async () => {
@@ -130,7 +130,7 @@ describe('HttpVideosApi validation messages', () => {
 
   it('falls back to the first message for other validation errors', async () => {
     vi.mocked(fetch).mockResolvedValue(
-      jsonResponse(422, { detail: [{ type: 'missing', loc: ['body', 'instagramUrl'], msg: 'Field required' }] })
+      jsonResponse(422, { detail: [{ type: 'missing', loc: ['body', 'channelUrl'], msg: 'Field required' }] })
     );
     const res = await new HttpVideosApi().addCompetitor('');
     expect(res.error).toBe('Field required');

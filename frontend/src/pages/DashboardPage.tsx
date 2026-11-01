@@ -6,13 +6,13 @@ import { useApi } from '@/services';
 import { compactNumber, countLabel, plural, relativeTime } from '@/utils/format';
 import { dashboardStats } from '@/utils/stats';
 import { PLAN_STATUSES } from '@/utils/plan';
-import { parseUsername } from '@/utils/instagram';
+import { channelLabel, parseChannelInput } from '@/utils/youtube';
 import { ErrorBanner, FullPageLoader, Spinner } from '@/components/ui';
 import { Notice } from '@/components/Notice';
 import { Accent } from '@/components/PageHeader';
 import { VideoCarousel } from '@/components/VideoCarousel';
 import { CompetitorMarquee, type MarqueeItem } from '@/components/CompetitorMarquee';
-import { InstagramVideosLink } from '@/components/InstagramVideosLink';
+import { ChannelRefLink, ChannelVideosLink } from '@/components/YouTubeLinks';
 
 interface DashboardData {
   competitors: Competitor[];
@@ -30,7 +30,7 @@ export function DashboardPage() {
   const [formError, setFormError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [trackedUsername, setTrackedUsername] = useState<string | null>(null);
-  const typedUsername = parseUsername(url);
+  const typedRef = parseChannelInput(url);
 
   const load = useCallback(async () => {
     const [competitors, videos, remixes, plan] = await Promise.all([
@@ -63,7 +63,7 @@ export function DashboardPage() {
     };
   }, [load]);
 
-  // Adds the competitor, then pulls its Videos, in one step.
+  // Adds the competitor, then pulls its videos, in one step.
   async function handleTrack(e: React.FormEvent) {
     e.preventDefault();
     if (!url.trim()) return;
@@ -84,7 +84,7 @@ export function DashboardPage() {
     } else {
       setUrl('');
       setTrackedUsername(added.data.username);
-      setNotice(`Pulled ${fetched.data?.length ?? 0} Videos from @${added.data.username}.`);
+      setNotice(`Pulled ${plural(fetched.data?.length ?? 0, 'video')} from ${added.data.displayName}.`);
     }
     await load();
   }
@@ -123,11 +123,11 @@ export function DashboardPage() {
           Competitor video research
         </p>
         <h1 className="relative mx-auto mt-4 max-w-5xl text-5xl font-semibold leading-[0.98] tracking-[-0.045em] text-ink sm:text-7xl">
-          Turn competitor Videos
+          Turn competitor videos
           <br className="hidden sm:block" /> into <Accent>viral ideas</Accent>
         </h1>
         <p className="relative mx-auto mt-6 max-w-2xl text-lg text-ink/80">
-          Track Instagram accounts, remix their best Videos into scripts, and plan every shoot in one place.
+          Track YouTube channels, remix their best videos into scripts, and plan every shoot in one place.
         </p>
 
         <form
@@ -138,10 +138,10 @@ export function DashboardPage() {
             <Link2 size={18} className="shrink-0 text-ink/50" aria-hidden="true" />
             <input
               type="text"
-              aria-label="Instagram profile link or username"
+              aria-label="YouTube channel link or @handle"
               value={url}
               onChange={(e) => setUrl(e.target.value)}
-              placeholder="Paste a profile link or type @username"
+              placeholder="Paste a YouTube channel link or @handle"
               autoComplete="off"
               className="min-w-0 flex-1 bg-transparent text-base text-ink outline-none placeholder:text-ink/60"
             />
@@ -155,14 +155,12 @@ export function DashboardPage() {
           </Link>
         </form>
 
-        {typedUsername && (
+        {typedRef && (
           <p className="relative mt-5 text-sm">
-            <InstagramVideosLink
-              username={typedUsername}
+            <ChannelRefLink
+              channelRef={typedRef}
               className="font-medium text-gradient underline-offset-4 hover:underline"
-            >
-              Open @{typedUsername}&rsquo;s Videos on Instagram
-            </InstagramVideosLink>
+            />
           </p>
         )}
 
@@ -176,7 +174,7 @@ export function DashboardPage() {
             <Notice message={notice} onDismiss={() => setNotice(null)} />
             {trackedUsername && (
               <p className="mt-3 px-1">
-                <InstagramVideosLink username={trackedUsername} />
+                <ChannelVideosLink username={trackedUsername} />
               </p>
             )}
           </div>
@@ -195,7 +193,7 @@ export function DashboardPage() {
       {data && stats && data.competitors.length > 0 && (
         <>
           <p className="mt-14 text-center text-lg text-ink/70">
-            Tracking {plural(stats.totalCompetitors, 'competitor')} · {plural(stats.totalVideos, 'Video')} ·{' '}
+            Tracking {plural(stats.totalCompetitors, 'competitor')} · {plural(stats.totalVideos, 'video')} ·{' '}
             {countLabel(stats.totalViews, 'view')}
           </p>
           <CompetitorMarquee items={marqueeItems} />
@@ -224,22 +222,22 @@ export function DashboardPage() {
               <h2 id="top-video" className="text-2xl font-semibold tracking-[-0.02em] text-ink">
                 Top-performing <Accent>Video</Accent>
               </h2>
-              <p className="mt-1 text-sm text-ink/60">The Video with the most views.</p>
+              <p className="mt-1 text-sm text-ink/60">The video with the most views.</p>
               {stats.topVideo ? (
                 <div className="mt-6 flex gap-5">
                   <img
                     src={stats.topVideo.thumbnailUrl}
                     alt={stats.topVideo.caption}
-                    className="aspect-[4/5] w-28 rounded-2xl bg-surface-2 object-cover"
+                    className="aspect-video w-44 shrink-0 rounded-2xl bg-surface-2 object-cover"
                   />
                   <div>
-                    <p className="text-sm text-ink/60">@{stats.topVideo.competitorUsername}</p>
+                    <p className="text-sm text-ink/60">{channelLabel(stats.topVideo.competitorUsername)}</p>
                     <p className="mt-1 text-lg font-medium leading-snug text-ink">{stats.topVideo.caption}</p>
                     <p className="stat mt-2">{countLabel(stats.topVideo.viewCount, 'view')}</p>
                   </div>
                 </div>
               ) : (
-                <p className="mt-6 text-base text-ink/70">No Videos yet. Track a competitor above.</p>
+                <p className="mt-6 text-base text-ink/70">No videos yet. Track a competitor above.</p>
               )}
 
               <h2 className="mt-12 text-2xl font-semibold tracking-[-0.02em] text-ink">
@@ -248,11 +246,11 @@ export function DashboardPage() {
               <p className="mt-4 text-lg text-ink">
                 {stats.mostViewedCompetitor ? (
                   <>
-                    @{stats.mostViewedCompetitor.username}{' '}
+                    {channelLabel(stats.mostViewedCompetitor.username)}{' '}
                     <span className="stat">· {countLabel(stats.mostViewedCompetitor.views, 'view')}</span>
                   </>
                 ) : (
-                  'No Videos yet.'
+                  'No videos yet.'
                 )}
               </p>
             </section>
@@ -282,7 +280,7 @@ export function DashboardPage() {
               Recent <Accent>Videos</Accent>
             </h2>
             {stats.recentVideos.length === 0 ? (
-              <p className="mt-6 text-base text-ink/70">No Videos yet.</p>
+              <p className="mt-6 text-base text-ink/70">No videos yet.</p>
             ) : (
               <ul className="mt-6 max-w-4xl space-y-3">
                 {stats.recentVideos.map((video) => (
@@ -291,7 +289,7 @@ export function DashboardPage() {
                     className="flex flex-wrap items-center justify-between gap-4 rounded-2xl bg-surface px-5 py-4 transition-colors duration-200 hover:bg-surface-2"
                   >
                     <div className="min-w-0">
-                      <p className="text-sm text-ink/60">@{video.competitorUsername} · {relativeTime(video.postedAt)}</p>
+                      <p className="text-sm text-ink/60">{channelLabel(video.competitorUsername)} · {relativeTime(video.postedAt)}</p>
                       <p className="truncate text-base text-ink">{video.caption}</p>
                     </div>
                     <span className="stat">{countLabel(video.viewCount, 'view')}</span>
@@ -300,7 +298,7 @@ export function DashboardPage() {
               </ul>
             )}
             <Link to="/videos" className="mt-6 inline-block text-sm text-ink/60 underline-offset-4 hover:text-ink hover:underline">
-              Open the Videos library
+              Open the videos library
             </Link>
           </section>
         </>

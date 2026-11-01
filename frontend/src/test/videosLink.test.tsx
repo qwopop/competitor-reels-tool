@@ -6,44 +6,47 @@ import { VideosLinkPage } from '@/pages/VideosLinkPage';
 function setup() {
   const user = userEvent.setup();
   render(<VideosLinkPage />);
-  return { user, input: screen.getByLabelText(/instagram username/i) };
+  return { user, input: screen.getByLabelText(/youtube channel/i) };
+}
+
+async function generate(typed: string) {
+  const { user, input } = setup();
+  if (typed) await user.type(input, typed);
+  await user.click(screen.getByRole('button', { name: /generate link/i }));
 }
 
 describe('VideosLinkPage', () => {
   it.each([
-    ['durov', 'durov'],
-    ['@Nick_Saraev', 'nick_saraev'],
-    ['  @@durov  ', null],
-    ['https://www.instagram.com/nick_saraev/', 'nick_saraev'],
-    ['instagram.com/nick_saraev/videos/', 'nick_saraev'],
-  ])('turns %j into a Videos link', async (typed, expected) => {
-    const { user, input } = setup();
-    await user.type(input, typed);
-    await user.click(screen.getByRole('button', { name: /generate link/i }));
-    if (expected === null) {
-      expect(screen.getByRole('alert')).toBeInTheDocument();
-      return;
-    }
-    const link = screen.getByRole('link', { name: new RegExp(`watch videos @${expected}`, 'i') });
-    expect(link).toHaveAttribute('href', `https://www.instagram.com/${expected}/videos/`);
-    expect(link).toHaveAttribute('target', '_blank');
+    ['mkbhd', '@mkbhd', 'https://www.youtube.com/@mkbhd'],
+    ['@MKBHD', '@mkbhd', 'https://www.youtube.com/@mkbhd'],
+    ['https://www.youtube.com/@mkbhd/featured', '@mkbhd', 'https://www.youtube.com/@mkbhd'],
+    [
+      'https://www.youtube.com/channel/UCBJycsmduvYEL83R_U4JriQ',
+      'UCBJycsmduvYEL83R_U4JriQ',
+      'https://www.youtube.com/channel/UCBJycsmduvYEL83R_U4JriQ',
+    ],
+  ])('turns %j into Videos and Shorts links', async (typed, label, channel) => {
+    await generate(typed);
+    const videos = screen.getByRole('link', { name: new RegExp(`watch videos ${label}`, 'i') });
+    expect(videos).toHaveAttribute('href', `${channel}/videos`);
+    expect(videos).toHaveAttribute('target', '_blank');
+    expect(screen.getByRole('link', { name: /shorts/i })).toHaveAttribute('href', `${channel}/shorts`);
   });
 
-  it('asks for a username when the field is empty', async () => {
-    const { user } = setup();
-    await user.click(screen.getByRole('button', { name: /generate link/i }));
-    expect(screen.getByRole('alert')).toHaveTextContent(/enter a username/i);
+  it('asks for a channel when the field is empty', async () => {
+    await generate('');
+    expect(screen.getByRole('alert')).toHaveTextContent(/enter a channel/i);
     expect(screen.queryByRole('link')).not.toBeInTheDocument();
   });
 
-  it('rejects a post link and hides the previous result', async () => {
-    const { user, input } = setup();
-    await user.type(input, 'durov');
-    await user.click(screen.getByRole('button', { name: /generate link/i }));
-    await user.clear(input);
-    await user.type(input, 'https://www.instagram.com/video/DfMPGCguhRQ/');
-    await user.click(screen.getByRole('button', { name: /generate link/i }));
-    expect(screen.getByRole('alert')).toHaveTextContent(/not a valid/i);
+  it('explains that a video link is not a channel', async () => {
+    await generate('https://youtu.be/AAAAAAAAAA1');
+    expect(screen.getByRole('alert')).toHaveTextContent(/video link/i);
+  });
+
+  it('rejects something that is not YouTube', async () => {
+    await generate('https://instagram.com/mkbhd');
+    expect(screen.getByRole('alert')).toHaveTextContent(/not a youtube channel/i);
     expect(screen.queryByRole('link')).not.toBeInTheDocument();
   });
 });

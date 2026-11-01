@@ -8,7 +8,8 @@ import { ErrorBanner, FullPageLoader, Spinner } from '@/components/ui';
 import { ConfirmDialog } from '@/components/Modal';
 import { REMIX_TEMPLATES } from '@/utils/templates';
 import { planStatusMeta } from '@/utils/plan';
-import { VideoOnInstagramLink } from '@/components/InstagramVideosLink';
+import { WatchOnYouTubeLink } from '@/components/YouTubeLinks';
+import { channelLabel } from '@/utils/youtube';
 
 export function RemixPage() {
   const { id } = useParams<{ id: string }>();
@@ -144,7 +145,7 @@ export function RemixPage() {
           {title || 'Untitled remix'}
         </h1>
         <p className="mt-5 max-w-md text-base text-ink/70">
-          An AI breakdown of the source Video. Edit the hook, script and call to
+          An AI breakdown of the source video. Edit the hook, script and call to
           action until it sounds like you.
         </p>
       </header>
@@ -156,21 +157,21 @@ export function RemixPage() {
               <img
                 src={video.thumbnailUrl}
                 alt={video.caption}
-                className="aspect-[4/5] w-full rounded-2xl bg-surface-2 object-cover"
+                className="aspect-video w-full rounded-2xl bg-surface-2 object-cover"
               />
               <p className="mt-5 text-sm text-ink/60">
-                @{video.competitorUsername} · {relativeTime(video.postedAt)}
+                {channelLabel(video.competitorUsername)} · {relativeTime(video.postedAt)}
               </p>
               <p className="mt-2 text-lg leading-snug text-ink">{video.caption}</p>
               <p className="stat mt-3">
                 {videoStats(video)}
               </p>
               <div className="mt-4">
-                <VideoOnInstagramLink permalink={video.permalink} username={video.competitorUsername} />
+                <WatchOnYouTubeLink permalink={video.permalink} username={video.competitorUsername} />
               </div>
             </>
           ) : (
-            <p className="text-base text-ink/70">Source Video is no longer available.</p>
+            <p className="text-base text-ink/70">Source video is no longer available.</p>
           )}
         </section>
 
@@ -194,7 +195,7 @@ export function RemixPage() {
             </div>
             <p className="mt-2 text-sm text-ink/50">
               {REMIX_TEMPLATES.find((t) => t.value === template)?.description} Drafts are
-              built from the Video's details, not AI analysis.
+              built from the video's details, not AI analysis.
             </p>
           </div>
 

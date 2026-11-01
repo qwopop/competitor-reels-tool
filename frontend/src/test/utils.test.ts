@@ -8,7 +8,7 @@ function video(overrides: Partial<Video>): Video {
     id: 'r',
     competitorId: 'c1',
     competitorUsername: 'one',
-    shortcode: 'x',
+    youtubeId: 'xxxxxxxxxxx',
     permalink: '',
     caption: 'caption',
     thumbnailUrl: '',
@@ -56,8 +56,8 @@ describe('filterVideos', () => {
 
 describe('dashboardStats', () => {
   const competitors: Competitor[] = [
-    { id: 'c1', username: 'one', instagramUrl: '', displayName: 'One', avatarUrl: '', addedAt: '' },
-    { id: 'c2', username: 'two', instagramUrl: '', displayName: 'Two', avatarUrl: '', addedAt: '' },
+    { id: 'c1', username: 'one', channelId: 'sample-vibecoder', channelUrl: '', displayName: 'One', avatarUrl: '', addedAt: '' },
+    { id: 'c2', username: 'two', channelId: 'sample-vibecoder', channelUrl: '', displayName: 'Two', avatarUrl: '', addedAt: '' },
   ];
   const videos = [
     video({ id: 'a', competitorId: 'c1', viewCount: 100, likeCount: 10, commentCount: 1, postedAt: '2026-01-01T00:00:00.000Z' }),
@@ -123,27 +123,11 @@ describe('wording helpers', () => {
   });
 });
 
-describe('instagramVideosUrl', () => {
-  it('builds the Videos tab link for a username', async () => {
-    const { instagramVideosUrl } = await import('@/utils/instagram');
-    expect(instagramVideosUrl('vibecoder')).toBe('https://www.instagram.com/vibecoder/videos/');
-    expect(instagramVideosUrl('Vibe.Coder_1')).toBe('https://www.instagram.com/vibe.coder_1/videos/');
-  });
-});
-
-describe('isPostLink and videoStats', () => {
-  it('tells a Video link from a profile link', async () => {
-    const { isPostLink } = await import('@/utils/instagram');
-    expect(isPostLink('https://www.instagram.com/video/DfMPGCguhRQ/')).toBe(true);
-    expect(isPostLink('https://www.instagram.com/nick_saraev/video/DfMPGCguhRQ/')).toBe(true);
-    expect(isPostLink('https://www.instagram.com/p/ABC_12-x/')).toBe(true);
-    expect(isPostLink('https://www.instagram.com/nick_saraev/')).toBe(false);
-    expect(isPostLink('https://www.instagram.com/nick_saraev/videos/')).toBe(false);
-  });
-
-  it('leaves views out when Instagram did not report them', async () => {
+describe('videoStats', () => {
+  it('leaves out counts YouTube did not report', async () => {
     const { videoStats } = await import('@/utils/format');
-    expect(videoStats({ viewCount: 0, likeCount: 5, commentCount: 1 })).toBe('5 likes · 1 comment');
-    expect(videoStats({ viewCount: 2, likeCount: 1, commentCount: 0 })).toBe('2 views · 1 like · 0 comments');
+    expect(videoStats({ viewCount: 1200, likeCount: 5, commentCount: 0 })).toBe('1.2K views · 5 likes');
+    expect(videoStats({ viewCount: 2, likeCount: 1, commentCount: 1 })).toBe('2 views · 1 like · 1 comment');
+    expect(videoStats({ viewCount: 0, likeCount: 0, commentCount: 0 })).toBe('');
   });
 });

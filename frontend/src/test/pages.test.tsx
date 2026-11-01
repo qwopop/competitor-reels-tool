@@ -43,8 +43,8 @@ function video(overrides: Partial<Video> = {}): Video {
     id: 'video_1',
     competitorId: 'comp_1',
     competitorUsername: 'vibecoder',
-    shortcode: 'ABC123',
-    permalink: 'https://instagram.com/vibecoder/',
+    youtubeId: 'AAAAAAAAAA1',
+    permalink: 'https://www.youtube.com/@vibecoder',
     caption: 'I let AI build my SaaS in 48 hours',
     thumbnailUrl: 'https://example.com/thumb.jpg',
     viewCount: 120000,
@@ -64,7 +64,7 @@ function planItem(overrides: Partial<ContentPlanItem> = {}): ContentPlanItem {
     competitorUsername: 'vibecoder',
     caption: 'I let AI build my SaaS in 48 hours',
     thumbnailUrl: 'https://example.com/thumb.jpg',
-    permalink: 'https://instagram.com/vibecoder/',
+    permalink: 'https://www.youtube.com/@vibecoder',
     postedAt: new Date(Date.now() - 86_400_000).toISOString(),
     addedAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
@@ -94,7 +94,7 @@ describe('DashboardPage', () => {
     const stub = new StubApi();
     renderAt(stub, '/', <DashboardPage />, '/');
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(/viral ideas/i);
-    expect(screen.getByLabelText(/instagram profile link/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/youtube channel link/i)).toBeInTheDocument();
     await waitFor(() => expect(stub.listCompetitors).toHaveBeenCalled());
   });
 
@@ -102,37 +102,37 @@ describe('DashboardPage', () => {
     const user = userEvent.setup();
     const stub = new StubApi();
     stub.addCompetitor.mockResolvedValue({
-      data: { id: 'comp_1', username: 'vibecoder', instagramUrl: '', displayName: 'Vibecoder', avatarUrl: '', addedAt: '' },
+      data: { id: 'comp_1', username: 'vibecoder', channelId: 'sample-vibecoder', channelUrl: '', displayName: 'Vibecoder', avatarUrl: '', addedAt: '' },
       error: null,
     });
     stub.fetchVideosForCompetitor.mockResolvedValue({ data: [video(), video({ id: 'video_2' })], error: null });
     renderAt(stub, '/', <DashboardPage />, '/');
 
-    await user.type(screen.getByLabelText(/instagram profile link/i), '@vibecoder');
+    await user.type(screen.getByLabelText(/youtube channel link/i), '@vibecoder');
     await user.click(screen.getByRole('button', { name: /track & fetch/i }));
 
     expect(stub.addCompetitor).toHaveBeenCalledWith('@vibecoder');
     await waitFor(() => expect(stub.fetchVideosForCompetitor).toHaveBeenCalledWith('comp_1'));
-    expect(await screen.findByText('Pulled 2 Videos from @vibecoder.')).toBeInTheDocument();
+    expect(await screen.findByText('Pulled 2 videos from Vibecoder.')).toBeInTheDocument();
   });
 
   it('shows the validation error and does not fetch when the link is invalid', async () => {
     const user = userEvent.setup();
     const stub = new StubApi();
-    stub.addCompetitor.mockResolvedValue({ data: null, error: 'That is not a valid Instagram URL' });
+    stub.addCompetitor.mockResolvedValue({ data: null, error: 'That is not a valid YouTube channel' });
     renderAt(stub, '/', <DashboardPage />, '/');
 
-    await user.type(screen.getByLabelText(/instagram profile link/i), 'https://twitter.com/x');
+    await user.type(screen.getByLabelText(/youtube channel link/i), 'https://twitter.com/x');
     await user.click(screen.getByRole('button', { name: /track & fetch/i }));
 
-    expect(await screen.findByText(/not a valid instagram url/i)).toBeInTheDocument();
+    expect(await screen.findByText(/not a valid youtube channel/i)).toBeInTheDocument();
     expect(stub.fetchVideosForCompetitor).not.toHaveBeenCalled();
   });
 
   it('shows totals, the top Video and the most-viewed competitor', async () => {
     const stub = new StubApi();
     stub.listCompetitors.mockResolvedValue({
-      data: [{ id: 'comp_1', username: 'vibecoder', instagramUrl: '', displayName: 'Vibecoder', avatarUrl: '', addedAt: '' }],
+      data: [{ id: 'comp_1', username: 'vibecoder', channelId: 'sample-vibecoder', channelUrl: '', displayName: 'Vibecoder', avatarUrl: '', addedAt: '' }],
       error: null,
     });
     stub.listVideos.mockResolvedValue({
@@ -239,23 +239,23 @@ describe('CompetitorsPage', () => {
     const user = userEvent.setup();
     const stub = new StubApi();
     stub.addCompetitor.mockResolvedValue({
-      data: { id: 'comp_1', username: 'vibecoder', instagramUrl: '', displayName: 'Vibecoder', avatarUrl: '', addedAt: '' },
+      data: { id: 'comp_1', username: 'vibecoder', channelId: 'sample-vibecoder', channelUrl: '', displayName: 'Vibecoder', avatarUrl: '', addedAt: '' },
       error: null,
     });
     renderAt(stub, '/competitors', <CompetitorsPage />, '/competitors');
 
     await user.click(await screen.findByRole('button', { name: /add competitor/i }));
     const dialog = screen.getByRole('dialog', { name: /add a competitor/i });
-    await user.type(within(dialog).getByPlaceholderText(/instagram\.com\/vibecoder/i), 'https://instagram.com/vibecoder');
+    await user.type(within(dialog).getByPlaceholderText(/youtube\.com\/@mkbhd/i), 'https://www.youtube.com/@vibecoder');
     await user.click(within(dialog).getByRole('button', { name: /add competitor/i }));
 
-    await waitFor(() => expect(stub.addCompetitor).toHaveBeenCalledWith('https://instagram.com/vibecoder'));
+    await waitFor(() => expect(stub.addCompetitor).toHaveBeenCalledWith('https://www.youtube.com/@vibecoder'));
   });
 
   it('shows a validation error inside the modal', async () => {
     const user = userEvent.setup();
     const stub = new StubApi();
-    stub.addCompetitor.mockResolvedValue({ data: null, error: 'That is not a valid Instagram URL' });
+    stub.addCompetitor.mockResolvedValue({ data: null, error: 'That is not a valid YouTube channel' });
     renderAt(stub, '/competitors', <CompetitorsPage />, '/competitors');
 
     await user.click(await screen.findByRole('button', { name: /add competitor/i }));
@@ -263,14 +263,14 @@ describe('CompetitorsPage', () => {
     await user.type(within(dialog).getByRole('textbox'), 'https://twitter.com/x');
     await user.click(within(dialog).getByRole('button', { name: /add competitor/i }));
 
-    expect(await screen.findByRole('alert')).toHaveTextContent(/not a valid instagram url/i);
+    expect(await screen.findByRole('alert')).toHaveTextContent(/not a valid youtube channel/i);
   });
 
   it('asks for confirmation before removing a competitor', async () => {
     const user = userEvent.setup();
     const stub = new StubApi();
     stub.listCompetitors.mockResolvedValue({
-      data: [{ id: 'comp_1', username: 'vibecoder', instagramUrl: '', displayName: 'Vibecoder', avatarUrl: '', addedAt: new Date().toISOString() }],
+      data: [{ id: 'comp_1', username: 'vibecoder', channelId: 'sample-vibecoder', channelUrl: '', displayName: 'Vibecoder', avatarUrl: '', addedAt: new Date().toISOString() }],
       error: null,
     });
     renderAt(stub, '/competitors', <CompetitorsPage />, '/competitors');
@@ -375,7 +375,7 @@ describe('bugs found while testing the running app', () => {
     await screen.findByText('Prompt tips');
 
     await user.type(screen.getByLabelText(/search captions/i), 'zzzzzz');
-    expect(screen.getByText('No Videos match these filters.')).toBeInTheDocument();
+    expect(screen.getByText('No videos match these filters.')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Clear filters' }));
 
     expect(screen.getByText('Prompt tips')).toBeInTheDocument();
@@ -386,12 +386,12 @@ describe('bugs found while testing the running app', () => {
   it('says "1 competitor" for a single competitor on the dashboard', async () => {
     const stub = new StubApi();
     stub.listCompetitors.mockResolvedValue({
-      data: [{ id: 'comp_1', username: 'vibecoder', instagramUrl: '', displayName: 'Vibecoder', avatarUrl: '', addedAt: '' }],
+      data: [{ id: 'comp_1', username: 'vibecoder', channelId: 'sample-vibecoder', channelUrl: '', displayName: 'Vibecoder', avatarUrl: '', addedAt: '' }],
       error: null,
     });
     stub.listVideos.mockResolvedValue({ data: [video()], error: null });
     renderAt(stub, '/', <DashboardPage />, '/');
-    expect(await screen.findByText(/Tracking 1 competitor · 1 Video/)).toBeInTheDocument();
+    expect(await screen.findByText(/Tracking 1 competitor · 1 video/)).toBeInTheDocument();
     expect(screen.queryByText(/1 competitors/)).toBeNull();
   });
 
@@ -451,38 +451,46 @@ describe('bugs #49 and #52', () => {
   });
 });
 
-describe('links to a profile’s Videos on Instagram', () => {
-  it('shows a Videos link on the dashboard as soon as a valid username is typed', async () => {
+describe('links to YouTube', () => {
+  it('shows a channel link on the dashboard as soon as a valid channel is typed', async () => {
     const user = userEvent.setup();
     const stub = new StubApi();
     renderAt(stub, '/', <DashboardPage />, '/');
-    const input = screen.getByLabelText(/instagram profile link/i);
+    const input = screen.getByLabelText(/youtube channel link/i);
 
     await user.type(input, 'https://twitter.com/x');
-    expect(screen.queryByRole('link', { name: /videos on instagram/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /on youtube/i })).not.toBeInTheDocument();
 
     await user.clear(input);
-    await user.type(input, 'https://www.instagram.com/Vibe.Coder/?hl=en');
-    const link = screen.getByRole('link', { name: /open @vibe\.coder’s videos on instagram/i });
-    expect(link).toHaveAttribute('href', 'https://www.instagram.com/vibe.coder/videos/');
+    await user.type(input, 'https://www.youtube.com/@MKBHD/featured');
+    const link = screen.getByRole('link', { name: /open @mkbhd on youtube/i });
+    expect(link).toHaveAttribute('href', 'https://www.youtube.com/@mkbhd/videos');
     expect(link).toHaveAttribute('target', '_blank');
     expect(link.getAttribute('rel')).toContain('noopener');
     expect(stub.addCompetitor).not.toHaveBeenCalled();
+
+    await user.clear(input);
+    await user.type(input, 'https://youtu.be/AAAAAAAAAA1');
+    expect(screen.getByRole('link', { name: /open this video on youtube/i })).toHaveAttribute(
+      'href',
+      'https://www.youtube.com/watch?v=AAAAAAAAAA1'
+    );
   });
 
-  it('links each tracked competitor to its Videos tab', async () => {
+  it('links each tracked competitor to its channel', async () => {
     const stub = new StubApi();
     stub.listCompetitors.mockResolvedValue({
-      data: [{ id: 'comp_1', username: 'vibecoder', instagramUrl: '', displayName: 'Vibecoder', avatarUrl: '', addedAt: new Date().toISOString() }],
+      data: [{ id: 'comp_1', channelId: 'UCBJycsmduvYEL83R_U4JriQ', username: 'mkbhd', channelUrl: 'https://www.youtube.com/@mkbhd', displayName: 'Marques Brownlee', avatarUrl: '', addedAt: new Date().toISOString() }],
       error: null,
     });
     renderAt(stub, '/competitors', <CompetitorsPage />, '/competitors');
 
-    const link = await screen.findByRole('link', { name: /videos on instagram/i });
-    expect(link).toHaveAttribute('href', 'https://www.instagram.com/vibecoder/videos/');
+    const link = await screen.findByRole('link', { name: /channel on youtube/i });
+    expect(link).toHaveAttribute('href', 'https://www.youtube.com/@mkbhd/videos');
+    expect(screen.getByText(/@mkbhd · added/)).toBeInTheDocument();
   });
 
-  it('previews the Videos link in the add-competitor modal', async () => {
+  it('previews the channel link in the add-competitor modal', async () => {
     const user = userEvent.setup();
     const stub = new StubApi();
     renderAt(stub, '/competitors', <CompetitorsPage />, '/competitors');
@@ -490,44 +498,42 @@ describe('links to a profile’s Videos on Instagram', () => {
     await user.click(await screen.findByRole('button', { name: /add competitor/i }));
     const dialog = screen.getByRole('dialog');
     await user.type(within(dialog).getByRole('textbox'), '@vibecoder');
-    expect(within(dialog).getByRole('link', { name: /preview @vibecoder’s videos/i })).toHaveAttribute(
+    expect(within(dialog).getByRole('link', { name: /open @vibecoder on youtube/i })).toHaveAttribute(
       'href',
-      'https://www.instagram.com/vibecoder/videos/'
+      'https://www.youtube.com/@vibecoder/videos'
     );
   });
 
-  it('points the Video cards at the competitor’s Videos tab', async () => {
+  it('links a sample video, which has no real page, to its channel', async () => {
     const stub = new StubApi();
     stub.listVideos.mockResolvedValue({ data: [video()], error: null });
     renderAt(stub, '/videos', <VideosPage />, '/videos');
 
-    const links = await screen.findAllByRole('link', { name: /@vibecoder’s videos on instagram/i });
-    for (const link of links) expect(link).toHaveAttribute('href', 'https://www.instagram.com/vibecoder/videos/');
+    const links = await screen.findAllByRole('link', { name: /open @vibecoder on youtube/i });
+    for (const link of links) expect(link).toHaveAttribute('href', 'https://www.youtube.com/@vibecoder/videos');
   });
-});
 
-describe('links to the Video itself', () => {
-  it('links a fetched Video to its own page on Instagram', async () => {
+  it('links a fetched video to its own page on YouTube', async () => {
     const stub = new StubApi();
     stub.listVideos.mockResolvedValue({
-      data: [video({ competitorUsername: 'nick_saraev', permalink: 'https://www.instagram.com/video/DfMPGCguhRQ/' })],
+      data: [video({ competitorUsername: 'mkbhd', permalink: 'https://www.youtube.com/watch?v=AAAAAAAAAA1' })],
       error: null,
     });
     renderAt(stub, '/videos', <VideosPage />, '/videos');
 
-    const links = await screen.findAllByRole('link', { name: /watch this video on instagram/i });
-    for (const link of links) expect(link).toHaveAttribute('href', 'https://www.instagram.com/video/DfMPGCguhRQ/');
+    const links = await screen.findAllByRole('link', { name: /watch on youtube/i });
+    for (const link of links) expect(link).toHaveAttribute('href', 'https://www.youtube.com/watch?v=AAAAAAAAAA1');
   });
 
-  it('links a plan item to its Video', async () => {
+  it('links a plan item to its video', async () => {
     const stub = new StubApi();
     stub.listContentPlan.mockResolvedValue({
-      data: [planItem({ permalink: 'https://www.instagram.com/video/DfMPGCguhRQ/' })],
+      data: [planItem({ permalink: 'https://www.youtube.com/shorts/BBBBBBBBBB2' })],
       error: null,
     });
     renderAt(stub, '/content-plan', <ContentPlanPage />, '/content-plan');
 
-    const links = await screen.findAllByRole('link', { name: /watch this video on instagram/i });
-    expect(links[0]).toHaveAttribute('href', 'https://www.instagram.com/video/DfMPGCguhRQ/');
+    const links = await screen.findAllByRole('link', { name: /watch on youtube/i });
+    expect(links[0]).toHaveAttribute('href', 'https://www.youtube.com/shorts/BBBBBBBBBB2');
   });
 });

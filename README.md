@@ -1,6 +1,6 @@
-# Competitor Reels Tool
+# ClipRemix
 
-Track Instagram competitors, pull their 20 most recent Reels into a library, and generate an AI breakdown (hook, script, CTA) for any Reel that you can edit.
+Track competitor YouTube channels, pull their latest videos into a library, generate an editable breakdown (hook, script, CTA) for any video, and plan your shoots. Real videos come from YouTube's public channel feeds, so no API key or account is needed.
 
 - **Frontend:** React, Vite, TypeScript, Tailwind (`frontend/`)
 - **Backend:** FastAPI, SQLAlchemy, SQLite (`backend/`)
@@ -8,6 +8,8 @@ Track Instagram competitors, pull their 20 most recent Reels into a library, and
 - **Agent guidance:** [`AGENTS.md`](AGENTS.md)
 
 ## Screenshots
+
+These show the earlier Instagram version. The layout is the same; video thumbnails are now 16:9.
 
 | Dashboard | Reels | Content plan (board) | Content plan (table) |
 | --- | --- | --- | --- |
@@ -38,12 +40,12 @@ make dev       # start the API on :8091 and the web app on :5173
 
 Open **http://localhost:5173**.
 
-1. Go to **Competitors** and paste an Instagram profile URL (or `@username`).
-2. Click **Fetch reels** to pull 20 Reels into the library.
-3. On the **Reels** page, click **Remix** on any Reel to generate a breakdown, then edit it and save.
-4. Click **Add to plan** on any Reel to queue it for filming. Track each one on the **Content Plan** page with ❌ not started, ⏳ ready to film, or ✅ filmed.
+1. Go to **Competitors** and paste a YouTube channel link, an `@handle`, or a link to one of the channel's videos.
+2. Click **Fetch videos** to pull the channel's latest videos (up to 15) into the library.
+3. On the **Videos** page, click **Remix** on any video to generate a breakdown, then edit it and save. **Watch on YouTube** opens the video itself.
+4. Click **Add to plan** on any video to queue it for filming. Track each one on the **Content Plan** page with ❌ not started, ⏳ ready to film, or ✅ filmed.
 
-Data is stored in `backend/data/app.db` and survives restarts. Delete that file to start fresh.
+Data is stored in `backend/data/clipremix.db` and survives restarts. Delete that file to start fresh.
 
 API docs are at http://localhost:8091/docs while the backend runs.
 
@@ -67,14 +69,11 @@ make check      # tests, typecheck and production build
 
 ## Notes
 
-- **Real Reels** come from the official Instagram Graph API (Business Discovery) when the backend has these two environment variables. Each Reel then links to its own page, such as `https://www.instagram.com/reel/DfMPGCguhRQ/`:
-  - `INSTAGRAM_ACCESS_TOKEN`: a long-lived token with the `instagram_basic` permission, from a Meta developer app connected to your own Instagram Business or Creator account.
-  - `INSTAGRAM_USER_ID`: the Instagram user ID of that account of yours (not the competitor's).
-
-  Only public **Business or Creator** competitor accounts can be read this way. The API does not report view counts for other accounts, so real Reels show likes and comments only. The code is in `backend/app/instagram.py`.
-- Without those variables, competitor Reels are **sample data** from `backend/app/generator.py`, and their links open the competitor's Reels tab instead of a specific video.
+- **Real videos, no key:** the backend reads each channel's public feed (`https://www.youtube.com/feeds/videos.xml?channel_id=UC…`) for the latest 15 videos with title, thumbnail, views and likes. The feed has no comment counts. When you add a channel by `@handle` or video link, the backend reads the channel's public page once to find its channel ID, name and avatar. The code is in `backend/app/youtube.py`.
+- **Sample data:** set `VIDEO_SOURCE=sample` to use generated videos with no network access (the tests always do). Sample videos link to the channel, since they have no real page.
+- **Upgrading from the Instagram version:** the database file is now `clipremix.db`, so the old `app.db` is left alone and the app starts empty.
 - Remixes are produced by a **template**, not an LLM. Swap `build_remix` in `backend/app/generator.py` to call a model.
 - There is no login. Anyone who can reach the server can use it.
 - Set `DATABASE_URL=sqlite://` to run with an in-memory database. Nothing is saved, which is useful for trying the API or for tests.
-- Set `DATABASE_URL` (for example `sqlite:///./data/app.db`) to change the database. The code is written so Postgres can be added later.
+- Set `DATABASE_URL` (for example `sqlite:///./data/clipremix.db`) to change the database. The code is written so Postgres can be added later.
 - To point the frontend at a backend elsewhere, set `VITE_API_BASE_URL` (for example `https://api.example.com/api`).

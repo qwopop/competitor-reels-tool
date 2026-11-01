@@ -1,19 +1,15 @@
-"""Stand-ins for the real Instagram scraper and the AI remix step.
+"""Sample channels and videos (for tests and offline use) and the template remix step.
 
-Both produce deterministic-looking sample data, the same way the frontend's
-MockVideosApi does. Replace these functions with real integrations later; the
-store and routers only call into this module.
+Real videos come from app/youtube.py. The sample data here mirrors the
+frontend's MockVideosApi. Remixes come from fixed templates, not an AI model.
 """
 
 import random
-import re
 from datetime import UTC, datetime, timedelta
-from urllib.parse import urlparse
 from uuid import uuid4
 
 from app.models import ContentPlanRow, CompetitorRow, VideoRow, RemixRow
-
-VIDEOS_PER_FETCH = 20
+from app.youtube import VIDEOS_PER_FETCH, ChannelInfo, ChannelRef, YouTubeError, channel_url
 
 VIBECODING_TOPICS = [
     "I let AI build my entire SaaS in 48 hours",
@@ -60,16 +56,6 @@ CTA_BANK = [
     "Tag a founder who still hand-codes CRUD.",
 ]
 
-# Instagram usernames are 1-30 characters: letters, digits, periods and underscores.
-USERNAME_RE = re.compile(r"^[A-Za-z0-9._]{1,30}$")
-INSTAGRAM_LINK_RE = re.compile(r"^(https?://)?([A-Za-z0-9-]+\.)*instagram\.com(/|$|\?)", re.IGNORECASE)
-# First path segments that are Instagram pages, not accounts.
-RESERVED_SEGMENTS = {
-    "p", "video", "videos", "tv", "explore", "stories", "accounts", "direct",
-    "about", "web", "developer", "legal", "privacy", "press", "api", "directory",
-}
-
-
 def now_iso() -> str:
     """UTC timestamp in the same format JavaScript's toISOString() produces."""
     return datetime.now(UTC).isoformat(timespec="milliseconds").replace("+00:00", "Z")
@@ -79,58 +65,59 @@ def new_id(prefix: str) -> str:
     return f"{prefix}_{uuid4().hex[:12]}"
 
 
-def parse_username(raw: str) -> str | None:
-    """Return the username from a profile link or a bare (optionally @-prefixed) name.
-
-    Accepts links with or without a scheme, a www./m. host, a trailing slash,
-    a query string and a profile sub-path such as /name/videos/. Anything that
-    is not a profile (a post, Video, explore page, another site) returns None.
-    """
-    text = raw.strip()
-    if not text:
-        return None
-    if INSTAGRAM_LINK_RE.match(text):
-        parsed = urlparse(text if "://" in text else f"https://{text}")
-        parts = [part for part in parsed.path.split("/") if part]
-        if not parts or parts[0].lower() in RESERVED_SEGMENTS:
-            return None
-        name = parts[0]
-    else:
-        name = text[1:] if text.startswith("@") else text
-    return name if USERNAME_RE.match(name) else None
-
-
-def build_competitor(username: str) -> CompetitorRow:
-    username = username.lower()
+def build_competitor(info: ChannelInfo) -> CompetitorRow:
     return CompetitorRow(
         id=new_id("comp"),
-        username=username,
-        instagram_url=f"https://www.instagram.com/{username}/",
-        display_name=username[:1].upper() + username[1:],
-        avatar_url=f"https://picsum.photos/seed/{username}-avatar/96/96",
+        channel_id=info.channel_id,
+        username=(info.handle or info.channel_id).lower(),
+        channel_url=channel_url(info.channel_id, info.handle),
+        display_name=info.title[:128],
+        avatar_url=info.avatar_url or f"https://picsum.photos/seed/{info.channel_id}-avatar/96/96",
         added_at=now_iso(),
     )
 
 
+class SampleSource:
+    """Offline stand-in for YouTubeSource: no network, generated videos.
+
+    Used by the tests, and when VIDEO_SOURCE=sample.
+    """
+
+    def resolve_channel(self, ref: ChannelRef) -> ChannelInfo:
+        if ref.kind == "video":
+            raise YouTubeError(
+                "Sample mode cannot look up a channel from a video link. Paste the channel link instead.",
+                status=400,
+            )
+        if ref.kind == "id":
+            return ChannelInfo(ref.value, None, f"Channel {ref.value[-6:]}", None)
+        name = ref.value.lower()
+        return ChannelInfo(f"sample-{name}", name if ref.kind == "handle" else None, name[:1].upper() + name[1:], None)
+
+    def fetch_videos(self, competitor: CompetitorRow) -> list[VideoRow]:
+        return build_videos(competitor)
+
+
 def build_videos(competitor: CompetitorRow) -> list[VideoRow]:
-    """Sample the latest Videos for a competitor, newest first, two days apart."""
+    """Sample the latest videos for a competitor, newest first, two days apart.
+
+    Sample videos have no real page, so their permalink is the channel link.
+    """
     now = datetime.now(UTC)
     fetched_at = now_iso()
     videos: list[VideoRow] = []
     for i in range(VIDEOS_PER_FETCH):
-        shortcode = competitor.username[:3] + "".join(
-            random.choices("abcdefghijklmnopqrstuvwxyz0123456789", k=7)
-        )
+        youtube_id = "".join(random.choices("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-", k=11))
         posted = now - timedelta(days=2 * i)
         videos.append(
             VideoRow(
                 id=new_id("video"),
                 competitor_id=competitor.id,
                 competitor_username=competitor.username,
-                shortcode=shortcode,
-                permalink=competitor.instagram_url,
+                youtube_id=youtube_id,
+                permalink=competitor.channel_url,
                 caption=VIBECODING_TOPICS[i % len(VIBECODING_TOPICS)],
-                thumbnail_url=f"https://picsum.photos/seed/{shortcode}/640/800",
+                thumbnail_url=f"https://picsum.photos/seed/{youtube_id}/640/360",
                 view_count=random.randint(50_000, 950_000),
                 like_count=random.randint(3_000, 63_000),
                 comment_count=random.randint(40, 1_540),
@@ -197,9 +184,9 @@ TEMPLATE_BANKS: dict[str, dict] = {
 
 
 def template_fields(video: VideoRow, template: str) -> dict[str, str]:
-    """Title, hook, script and CTA for a Video, chosen deterministically from its shortcode."""
+    """Title, hook, script and CTA for a video, chosen deterministically from its YouTube ID."""
     bank = TEMPLATE_BANKS[template]
-    seed = sum(ord(ch) for ch in video.shortcode)
+    seed = sum(ord(ch) for ch in video.youtube_id)
     return {
         "title": f"{bank['title']}: {video.caption}",
         "hook": bank["hook"][seed % len(bank["hook"])].replace("{topic}", video.caption),

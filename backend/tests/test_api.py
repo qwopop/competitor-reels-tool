@@ -3,28 +3,29 @@ import pytest
 from app import generator
 
 
-def add(client, url="https://instagram.com/creator"):
-    return client.post("/api/competitors", json={"instagramUrl": url})
+def add(client, url="https://www.youtube.com/@creator"):
+    return client.post("/api/competitors", json={"channelUrl": url})
 
 
 def test_add_competitor_returns_camel_case_and_201(client):
-    res = add(client, "https://instagram.com/vibecoder")
+    res = add(client, "https://www.youtube.com/@vibecoder")
     assert res.status_code == 201
     body = res.json()
     assert body["username"] == "vibecoder"
-    assert body["instagramUrl"] == "https://www.instagram.com/vibecoder/"
+    assert body["channelUrl"] == "https://www.youtube.com/@vibecoder"
+    assert body["channelId"] == "sample-vibecoder"
     assert body["displayName"] == "Vibecoder"
     assert "addedAt" in body
 
 
-def test_add_competitor_rejects_non_instagram_url(client):
+def test_add_competitor_rejects_non_youtube_url(client):
     res = add(client, "https://twitter.com/foo")
     assert res.status_code == 400
-    assert "valid Instagram" in res.json()["detail"]
+    assert "YouTube channel link" in res.json()["detail"]
 
 
 def test_add_competitor_does_not_duplicate(client):
-    first = add(client, "https://instagram.com/vibecoder").json()
+    first = add(client, "https://www.youtube.com/@vibecoder").json()
     res = add(client, "@VibeCoder")
     assert res.status_code == 200
     assert res.json()["id"] == first["id"]
@@ -52,13 +53,13 @@ def test_remove_unknown_competitor_is_404(client):
     assert res.json()["detail"] == "Competitor not found."
 
 
-def test_fetch_stores_exactly_20_videos_and_refetch_replaces_them(client):
+def test_fetch_stores_the_latest_videos_and_refetch_replaces_them(client):
     comp = add(client).json()
     first = client.post(f"/api/competitors/{comp['id']}/videos/fetch")
     assert first.status_code == 200
     assert len(first.json()) == generator.VIDEOS_PER_FETCH
     assert first.json()[0]["competitorUsername"] == "creator"
-    assert first.json()[0]["permalink"] == "https://www.instagram.com/creator/"
+    assert first.json()[0]["permalink"] == "https://www.youtube.com/@creator"
 
     client.post(f"/api/competitors/{comp['id']}/videos/fetch")
     assert len(client.get("/api/videos").json()) == generator.VIDEOS_PER_FETCH
@@ -131,49 +132,6 @@ def test_patch_unknown_remix_is_404(client):
     assert client.patch("/api/remixes/nope", json={"hook": "x"}).status_code == 404
 
 
-@pytest.mark.parametrize(
-    "raw, expected",
-    [
-        ("https://instagram.com/vibecoder", "vibecoder"),
-        ("https://www.instagram.com/vibecoder/", "vibecoder"),
-        ("@vibecoder", "vibecoder"),
-        ("vibecoder", "vibecoder"),
-        # links without a scheme, other Instagram hosts, http, and query strings
-        ("instagram.com/vibecoder", "vibecoder"),
-        ("www.instagram.com/vibecoder", "vibecoder"),
-        ("m.instagram.com/vibecoder/", "vibecoder"),
-        ("http://instagram.com/vibecoder", "vibecoder"),
-        ("https://www.instagram.com/vibecoder/?igsh=abc123", "vibecoder"),
-        ("https://instagram.com/vibecoder/videos/", "vibecoder"),
-        ("@vibe.coder_1", "vibe.coder_1"),
-        # not Instagram
-        ("https://twitter.com/vibecoder", None),
-        ("twitter.com/vibecoder", None),
-        ("notinstagram.com/vibecoder", None),
-        ("https://evil.com/instagram.com/vibecoder", None),
-        ("   ", None),
-        ("https://instagram.com/", None),
-        # Instagram pages that are not profiles
-        ("https://www.instagram.com/p/ABC123/", None),
-        ("https://www.instagram.com/video/XYZ789/", None),
-        ("https://www.instagram.com/videos/", None),
-        ("https://www.instagram.com/explore/", None),
-        ("https://www.instagram.com/stories/someone/123/", None),
-        ("https://www.instagram.com/accounts/login/", None),
-        # username rules: 1-30 characters of letters, digits, . and _
-        ("@" + "a" * 30, "a" * 30),
-        ("@" + "a" * 31, None),
-        ("@" + "a" * 40, None),
-        ("https://instagram.com/vibe coder", None),
-        ("@vibe coder", None),
-        ("@vibe-coder", None),
-        ("@", None),
-    ],
-)
-def test_parse_username(raw, expected):
-    assert generator.parse_username(raw) == expected
-
-
 def test_data_persists_across_app_restarts(tmp_path):
     from fastapi.testclient import TestClient
 
@@ -181,7 +139,7 @@ def test_data_persists_across_app_restarts(tmp_path):
 
     db_url = f"sqlite:///{tmp_path / 'persist.db'}"
     with TestClient(create_app(db_url)) as client:
-        add(client, "https://instagram.com/vibecoder")
+        add(client, "https://www.youtube.com/@vibecoder")
 
     with TestClient(create_app(db_url)) as client:
         competitors = client.get("/api/competitors").json()
@@ -320,20 +278,20 @@ def test_apply_template_unknown_remix_is_404(client):
 @pytest.mark.parametrize(
     "link",
     [
-        "https://www.instagram.com/p/ABC123/",
-        "https://www.instagram.com/video/XYZ789/",
-        "https://www.instagram.com/explore/",
-        "https://instagram.com/vibe coder",
+        "https://www.youtube.com/feed/trending",
+        "https://www.youtube.com/results?search_query=ai",
+        "https://vimeo.com/@someone",
+        "https://www.youtube.com/@vibe coder",
         "@" + "a" * 40,
     ],
 )
-def test_non_profile_links_are_rejected_and_create_nothing(client, link):
+def test_non_channel_links_are_rejected_and_create_nothing(client, link):
     res = add(client, link)
     assert res.status_code == 400
     assert client.get("/api/competitors").json() == []
 
 
-@pytest.mark.parametrize("link", ["instagram.com/scheme_less", "www.instagram.com/scheme_less"])
+@pytest.mark.parametrize("link", ["youtube.com/@scheme_less", "www.youtube.com/@scheme_less/videos"])
 def test_links_without_a_scheme_are_accepted(client, link):
     res = add(client, link)
     assert res.status_code == 201
@@ -376,7 +334,7 @@ def test_refetch_replaces_other_videos_and_does_not_keep_growing(client):
     ids = [r["id"] for r in client.get("/api/videos").json()]
     assert kept["id"] in ids
     assert first[1]["id"] not in ids  # an unremixed Video was replaced
-    assert len(ids) == generator.VIDEOS_PER_FETCH + 1  # 20 new Videos plus the one kept
+    assert len(ids) == generator.VIDEOS_PER_FETCH + 1  # the new videos plus the one kept
     assert len(ids) == len(set(ids))
 
 
@@ -397,10 +355,10 @@ def test_in_memory_mode_works_but_saves_nothing():
     from app.main import create_app
 
     with TestClient(create_app("sqlite://")) as memory_client:
-        assert add(memory_client, "https://instagram.com/ephemeral").status_code == 201
+        assert add(memory_client, "https://www.youtube.com/@ephemeral").status_code == 201
         assert [c["username"] for c in memory_client.get("/api/competitors").json()] == ["ephemeral"]
         comp = memory_client.get("/api/competitors").json()[0]
-        assert len(memory_client.post(f"/api/competitors/{comp['id']}/videos/fetch").json()) == 20
+        assert len(memory_client.post(f"/api/competitors/{comp['id']}/videos/fetch").json()) == generator.VIDEOS_PER_FETCH
 
     with TestClient(create_app("sqlite://")) as fresh:
         assert fresh.get("/api/competitors").json() == []
@@ -411,18 +369,20 @@ def test_in_memory_mode_works_but_saves_nothing():
 def test_competitor_usernames_are_stored_lowercase_and_unique(client):
     first = add(client, "@Mixed.Case").json()
     assert first["username"] == "mixed.case"
-    again = add(client, "https://instagram.com/MIXED.case")
+    again = add(client, "https://www.youtube.com/@MIXED.case")
     assert again.status_code == 200
     assert again.json()["id"] == first["id"]
     assert len(client.get("/api/competitors").json()) == 1
 
 
-def test_database_rejects_duplicate_competitor_usernames_and_plan_videos(client):
+def test_database_rejects_duplicate_channels_and_plan_videos(client):
     from sqlalchemy.exc import IntegrityError
 
     video = first_video(client)
     session = client.app.state.session_factory()
-    session.add(generator.build_competitor("creator"))  # "creator" already exists
+    from app.youtube import ChannelInfo
+
+    session.add(generator.build_competitor(ChannelInfo("sample-creator", "creator", "Creator", None)))  # already exists
     with pytest.raises(IntegrityError):
         session.commit()
     session.rollback()
@@ -489,5 +449,5 @@ def test_remix_text_limits_match_the_database_columns(client, field, limit):
 
 
 def test_an_absurdly_long_link_is_a_validation_error(client):
-    res = client.post("/api/competitors", json={"instagramUrl": "https://instagram.com/" + "a" * 3000})
+    res = client.post("/api/competitors", json={"channelUrl": "https://www.youtube.com/@" + "a" * 3000})
     assert res.status_code == 422

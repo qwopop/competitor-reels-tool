@@ -30,10 +30,10 @@ After you change `VITE_API_BASE_URL`, redeploy `reels-web`. The value is baked i
 
 ## Checking it works
 
-1. Open the frontend URL. You should see the Reels page with no errors.
+1. Open the frontend URL. You should see the dashboard with no errors.
 2. Open `https://<api>/api/competitors`. It should return `[]` or your list as JSON.
 3. Open `https://<api>/docs` for the API documentation.
-4. Add a competitor, fetch its reels, and refresh the page. The data should still be there, which shows the database persists.
+4. Add a YouTube channel, fetch its videos, and refresh the page. The data should still be there, which shows the database persists.
 
 ## Running the same stack locally
 
@@ -46,6 +46,6 @@ cd frontend && VITE_API_BASE_URL=http://localhost:8000/api npm run dev
 
 - **One database file on one instance.** SQLite fits this app. Do not scale the API past one instance. For more than one instance, move to Postgres: change `DATABASE_URL` and add a driver, since the code keeps database access in `app/store.py` and `app/models.py`.
 - **No login.** Anyone with the frontend URL can read and change the data. Add authentication before sharing the link widely.
-- **Reels are sample data.** Real Instagram fetching is not implemented (see the README).
-- **Backups.** Render disks are not backed up automatically. Copy `/app/data/app.db` out with the Render shell if the data matters.
+- **Videos come from YouTube's public channel feeds.** No API key is needed. Set `VIDEO_SOURCE=sample` on `reels-api` to use sample data instead.
+- **Backups.** Render disks are not backed up automatically. Copy `/app/data/clipremix.db` out with the Render shell if the data matters.
 - **Free demo.** The GitHub Pages demo (`.github/workflows/pages.yml`) still builds with the in-browser mock and is unrelated to this deployment.

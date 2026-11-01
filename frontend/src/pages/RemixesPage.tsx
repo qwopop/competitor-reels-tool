@@ -5,6 +5,7 @@ import { useApi } from '@/services';
 import { relativeTime } from '@/utils/format';
 import { PageHeader } from '@/components/PageHeader';
 import { EmptyState, ErrorBanner, FullPageLoader } from '@/components/ui';
+import { channelLabel } from '@/utils/youtube';
 
 export function RemixesPage() {
   const api = useApi();
@@ -44,7 +45,7 @@ export function RemixesPage() {
       ) : remixes && remixes.length === 0 ? (
         <EmptyState
           title="No remixes yet"
-          description="Open a Video and click Remix to generate a breakdown from a template."
+          description="Open a video and click Remix to generate a breakdown from a template."
           action={<Link to="/videos" className="btn-primary">Browse videos</Link>}
         />
       ) : remixes ? (
@@ -55,7 +56,7 @@ export function RemixesPage() {
               <li key={remix.id} className="rise flex flex-wrap items-center justify-between gap-6 rounded-2xl bg-surface px-6 py-5 [&+&]:mt-3">
                 <div className="min-w-0 flex-1 basis-72">
                   <p className="text-sm text-ink/60">
-                    {video ? `@${video.competitorUsername} · ` : ''}updated {relativeTime(remix.updatedAt)}
+                    {video ? `${channelLabel(video.competitorUsername)} · ` : ''}updated {relativeTime(remix.updatedAt)}
                   </p>
                   <h2 className="mt-1 text-lg font-medium leading-snug text-ink">{remix.title}</h2>
                   <p className="mt-2 line-clamp-2 text-sm text-ink/70">Hook: {remix.hook}</p>

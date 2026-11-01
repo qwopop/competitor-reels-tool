@@ -80,8 +80,8 @@ export class HttpVideosApi implements VideosApi {
     return request<Competitor[]>('GET', '/competitors');
   }
 
-  addCompetitor(instagramUrl: string) {
-    return request<Competitor>('POST', '/competitors', { instagramUrl });
+  addCompetitor(channelUrl: string) {
+    return request<Competitor>('POST', '/competitors', { channelUrl });
   }
 
   removeCompetitor(id: string) {

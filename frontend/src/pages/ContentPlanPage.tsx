@@ -8,7 +8,8 @@ import { PageHeader } from '@/components/PageHeader';
 import { EmptyState, ErrorBanner, FullPageLoader, Spinner } from '@/components/ui';
 import { ViewToggle } from '@/components/ViewToggle';
 import { ConfirmDialog } from '@/components/Modal';
-import { VideoOnInstagramLink } from '@/components/InstagramVideosLink';
+import { WatchOnYouTubeLink } from '@/components/YouTubeLinks';
+import { channelLabel } from '@/utils/youtube';
 
 type PlanView = 'board' | 'table';
 
@@ -79,7 +80,7 @@ export function ContentPlanPage() {
     if (res.error || !res.data) {
       setError(
         res.error === 'Video not found.'
-          ? "This Video is no longer in your library, so a breakdown can't be created."
+          ? "This video is no longer in your library, so a breakdown can't be created."
           : (res.error ?? 'Could not create the breakdown.')
       );
       return;
@@ -130,7 +131,7 @@ export function ContentPlanPage() {
       ) : items && items.length === 0 ? (
         <EmptyState
           title="Nothing planned yet"
-          description="Add Videos from the Videos page to start your filming list."
+          description="Add videos from the Videos page to start your filming list."
           action={<Link to="/videos" className="btn-primary">Go to videos</Link>}
         />
       ) : items && view === 'board' ? (
@@ -179,11 +180,11 @@ export function ContentPlanPage() {
                   <tr key={item.id} className="bg-surface">
                     <td className="px-4 py-4 align-top text-base text-ink">
                       <div className="flex items-center gap-3">
-                        <img src={item.thumbnailUrl} alt="" className="aspect-[4/5] w-10 rounded-lg bg-surface-2 object-cover" />
+                        <img src={item.thumbnailUrl} alt="" className="aspect-video w-16 shrink-0 rounded-lg bg-surface-2 object-cover" />
                         <span className="max-w-xs">{item.caption}</span>
                       </div>
                     </td>
-                    <td className="px-4 py-4 align-top text-ink/70">@{item.competitorUsername}</td>
+                    <td className="px-4 py-4 align-top text-ink/70">{channelLabel(item.competitorUsername)}</td>
                     <td className="px-4 py-4 align-top">
                       <StatusControl item={item} busy={busyId === item.id} onChange={(s) => handleStatus(item, s)} />
                     </td>
@@ -206,7 +207,7 @@ export function ContentPlanPage() {
       {pendingRemove && (
         <ConfirmDialog
           title={`Remove “${pendingRemove.caption}”?`}
-          message="This Video will leave your Content Plan. Its breakdown, if you made one, is kept."
+          message="This video will leave your Content Plan. Its breakdown, if you made one, is kept."
           confirmLabel="Remove from plan"
           onConfirm={() => handleRemove(pendingRemove)}
           onCancel={() => setPendingRemove(null)}
@@ -234,9 +235,9 @@ function PlanCard({
   return (
     <li className="rise rounded-2xl bg-surface-2 p-4">
       <div className="flex gap-4">
-        <img src={item.thumbnailUrl} alt="" className="aspect-[4/5] w-16 rounded-xl bg-surface-3 object-cover" />
+        <img src={item.thumbnailUrl} alt="" className="aspect-video w-28 shrink-0 rounded-xl bg-surface-3 object-cover" />
         <div className="min-w-0">
-          <p className="text-xs text-ink/60">@{item.competitorUsername} · added {relativeTime(item.addedAt)}</p>
+          <p className="text-xs text-ink/60">{channelLabel(item.competitorUsername)} · added {relativeTime(item.addedAt)}</p>
           <h3 className="mt-1 text-base font-medium leading-snug text-ink">{item.caption}</h3>
           <p className="mt-2 line-clamp-2 text-sm text-ink/70">
             {remix ? remix.hook : 'No breakdown yet. Create one to see a hook here.'}
@@ -305,7 +306,7 @@ function PlanLinks({
       <button type="button" onClick={onEditRemix} disabled={busy} className="btn-outline px-3 py-1.5 text-xs">
         {busy ? <Spinner /> : null} {hasRemix ? 'Edit remix' : 'Create breakdown'}
       </button>
-      <VideoOnInstagramLink
+      <WatchOnYouTubeLink
         permalink={item.permalink}
         username={item.competitorUsername}
         className="text-ink/60 underline-offset-4 transition-colors hover:text-ink hover:underline"

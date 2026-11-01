@@ -36,12 +36,15 @@ export function countLabel(count: number, singular: string): string {
   return `${compactNumber(count)} ${count === 1 ? singular : `${singular}s`}`;
 }
 
-// "710.7K views · 61K likes · 1 comment". Views are left out when unknown (0):
-// the Instagram API does not report them for other accounts' Videos.
+// "710.7K views · 61K likes · 1 comment". Counts of 0 are left out: YouTube's
+// channel feed has no comment counts, and hidden likes come through as 0.
 export function videoStats(video: { viewCount: number; likeCount: number; commentCount: number }): string {
   return [
-    ...(video.viewCount > 0 ? [countLabel(video.viewCount, 'view')] : []),
-    countLabel(video.likeCount, 'like'),
-    countLabel(video.commentCount, 'comment'),
-  ].join(' · ');
+    [video.viewCount, 'view'] as const,
+    [video.likeCount, 'like'] as const,
+    [video.commentCount, 'comment'] as const,
+  ]
+    .filter(([count]) => count > 0)
+    .map(([count, word]) => countLabel(count, word))
+    .join(' · ');
 }

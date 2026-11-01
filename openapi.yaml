@@ -25,9 +25,10 @@ paths:
                   $ref: "#/components/schemas/Competitor"
     post:
       operationId: addCompetitor
-      summary: Track a competitor from an Instagram profile URL or @username
+      summary: Track a competitor from a YouTube channel link, @handle or video link
       description: >
-        If the username is already tracked, the existing competitor is returned
+        The server looks the channel up on YouTube to get its ID, name and avatar.
+        If the channel is already tracked, the existing competitor is returned
         with status 200 instead of creating a duplicate.
       requestBody:
         required: true
@@ -50,6 +51,10 @@ paths:
                 $ref: "#/components/schemas/Competitor"
         "400":
           $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "502":
+          $ref: "#/components/responses/Error"
 
   /api/competitors/{competitor_id}:
     parameters:
@@ -68,17 +73,16 @@ paths:
       - $ref: "#/components/parameters/CompetitorId"
     post:
       operationId: fetchVideosForCompetitor
-      summary: Fetch the 20 most recent Videos for a competitor
+      summary: Fetch the latest videos (up to 15) for a competitor
       description: >
-        Real Videos come from the Instagram Graph API when the server has
-        INSTAGRAM_ACCESS_TOKEN and INSTAGRAM_USER_ID set; otherwise sample Videos
-        are generated. If Instagram fails (account is not a public Business or
-        Creator account, expired token, rate limit, no Videos), the response is
-        502 and the stored Videos are left as they were.
-        Stores 20 new Videos for this competitor and removes the old ones, with one
+        Videos come from the channel's public YouTube feed, which needs no API
+        key. With VIDEO_SOURCE=sample on the server, sample videos are generated
+        instead. If YouTube fails (network error, channel gone, no videos), the
+        response is 502 and the stored videos are left as they were.
+        Stores the new videos for this competitor and removes the old ones, with one
         exception: a Video that has a remix or a content plan item is kept, so a
         re-fetch never destroys the user's work. The library can therefore hold
-        more than 20 Videos for a competitor. The response lists only the new Videos.
+        more than 15 videos for a competitor. The response lists only the new Videos.
       responses:
         "200":
           description: The freshly fetched Videos
@@ -354,55 +358,63 @@ components:
   schemas:
     Competitor:
       type: object
-      required: [id, username, instagramUrl, displayName, avatarUrl, addedAt]
+      required: [id, channelId, username, channelUrl, displayName, avatarUrl, addedAt]
       properties:
         id: { type: string }
-        username: { type: string }
-        instagramUrl: { type: string, format: uri }
+        channelId:
+          type: string
+          description: YouTube channel ID (UC...). Sample channels use sample-<name>.
+        username:
+          type: string
+          description: The @handle without the @, lowercase, or the channel ID when there is none.
+        channelUrl: { type: string, format: uri }
         displayName: { type: string }
         avatarUrl: { type: string, format: uri }
         addedAt: { type: string, format: date-time }
 
     AddCompetitorRequest:
       type: object
-      required: [instagramUrl]
+      required: [channelUrl]
       properties:
-        instagramUrl:
+        channelUrl:
           type: string
           maxLength: 2048
           description: >
-            An Instagram profile link (with or without https:// and www.) or a bare
-            username such as @vibecoder. Usernames are 1 to 30 characters of letters,
-            digits, periods and underscores. Post, Video, Explore and other non-profile
-            links are rejected with HTTP 400.
-          examples: ["https://instagram.com/vibecoder"]
+            A YouTube channel link (/@handle, /channel/UC..., /c/name, /user/name,
+            with or without https:// and www.), an @handle, a channel ID, or a
+            link to one of the channel's videos (watch?v=, youtu.be/, /shorts/).
+            Other links are rejected with HTTP 400.
+          examples: ["https://www.youtube.com/@mkbhd"]
 
     Video:
       type: object
       required:
-        [id, competitorId, competitorUsername, shortcode, permalink, caption,
+        [id, competitorId, competitorUsername, youtubeId, permalink, caption,
          thumbnailUrl, viewCount, likeCount, commentCount, postedAt, fetchedAt]
       properties:
         id: { type: string }
         competitorId: { type: string }
         competitorUsername: { type: string }
-        shortcode:
+        youtubeId:
           type: string
-          description: Instagram short code (sample Videos use generated values)
+          description: YouTube's 11-character video ID (sample videos use generated values)
         permalink:
           type: string
           format: uri
           description: >
-            Link to the Video itself, e.g. https://www.instagram.com/video/<shortcode>/.
-            Sample Videos have no real post and link to the competitor's profile.
+            Link to the video itself, e.g. https://www.youtube.com/watch?v=<youtubeId>
+            or /shorts/<youtubeId>. Sample videos have no real page and link to the channel.
         viewCount:
           type: integer
           minimum: 0
-          description: 0 when unknown; the Graph API does not report views for other accounts.
+          description: 0 when unknown.
         caption: { type: string }
         thumbnailUrl: { type: string, format: uri }
         likeCount: { type: integer, minimum: 0 }
-        commentCount: { type: integer, minimum: 0 }
+        commentCount:
+          type: integer
+          minimum: 0
+          description: 0 for real videos; YouTube's channel feed has no comment counts.
         postedAt: { type: string, format: date-time }
         fetchedAt: { type: string, format: date-time }
 

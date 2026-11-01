@@ -10,7 +10,8 @@ import { EmptyState, ErrorBanner, FullPageLoader, Spinner } from '@/components/u
 import { Notice } from '@/components/Notice';
 import { ViewToggle } from '@/components/ViewToggle';
 import { useDialogFocus } from '@/components/useDialogFocus';
-import { VideoOnInstagramLink } from '@/components/InstagramVideosLink';
+import { WatchOnYouTubeLink } from '@/components/YouTubeLinks';
+import { channelLabel } from '@/utils/youtube';
 
 type LibraryView = 'grid' | 'list';
 
@@ -98,7 +99,7 @@ export function VideosPage() {
       <PageHeader
         title="Browse"
         accent="videos"
-        description="Every Video from your tracked competitors. Search, filter and sort them, then remix or queue the ones worth making."
+        description="Every video from your tracked competitors. Search, filter and sort them, then remix or queue the ones worth making."
       />
 
       <div className="mb-8 flex flex-wrap items-end gap-4">
@@ -112,7 +113,7 @@ export function VideosPage() {
           >
             <option value="">All competitors</option>
             {competitors.map(([id, username]) => (
-              <option key={id} value={id}>@{username}</option>
+              <option key={id} value={id}>{channelLabel(username)}</option>
             ))}
           </select>
         </div>
@@ -167,12 +168,12 @@ export function VideosPage() {
       ) : videos && videos.length === 0 ? (
         <EmptyState
           title="No videos yet"
-          description="Track an Instagram competitor and fetch their latest Videos to fill this library."
+          description="Track a YouTube channel and fetch its latest videos to fill this library."
           action={<Link to="/competitors" className="btn-primary">Go to competitors</Link>}
         />
       ) : videos && visible.length === 0 ? (
         <div className="flex flex-wrap items-center gap-4">
-          <p className="text-base text-ink/70">No Videos match these filters.</p>
+          <p className="text-base text-ink/70">No videos match these filters.</p>
           <button
             type="button"
             className="btn-outline px-4 py-2 text-sm"
@@ -193,11 +194,11 @@ export function VideosPage() {
                 src={video.thumbnailUrl}
                 alt={video.caption}
                 loading="lazy"
-                className="aspect-[4/5] w-full rounded-2xl bg-surface-2 object-cover"
+                className="aspect-video w-full rounded-2xl bg-surface-2 object-cover"
               />
               <div className="mt-5 space-y-2">
                 <p className="text-sm text-ink/60">
-                  @{video.competitorUsername} · {relativeTime(video.postedAt)}
+                  {channelLabel(video.competitorUsername)} · {relativeTime(video.postedAt)}
                 </p>
                 <h3 className="line-clamp-2 min-h-[3.5rem] text-lg font-medium leading-snug text-ink">
                   {video.caption}
@@ -227,11 +228,11 @@ export function VideosPage() {
                   src={video.thumbnailUrl}
                   alt={video.caption}
                   loading="lazy"
-                  className="aspect-[4/5] w-16 rounded-xl bg-surface-2 object-cover"
+                  className="aspect-video w-32 shrink-0 rounded-xl bg-surface-2 object-cover"
                 />
                 <div className="min-w-0 flex-1 basis-64">
                   <p className="text-sm text-ink/60">
-                    @{video.competitorUsername} · {relativeTime(video.postedAt)}
+                    {channelLabel(video.competitorUsername)} · {relativeTime(video.postedAt)}
                   </p>
                   <h3 className="text-base font-medium text-ink">{video.caption}</h3>
                   <p className="stat mt-1">
@@ -295,7 +296,7 @@ function VideoActions({
         {busy ? <Spinner /> : null} Remix
       </button>
       <div className="basis-full">
-        <VideoOnInstagramLink permalink={video.permalink} username={video.competitorUsername} />
+        <WatchOnYouTubeLink permalink={video.permalink} username={video.competitorUsername} />
       </div>
     </div>
   );

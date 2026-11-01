@@ -7,8 +7,8 @@ import { PageHeader } from '@/components/PageHeader';
 import { ErrorBanner, FullPageLoader, Spinner } from '@/components/ui';
 import { Modal, ConfirmDialog } from '@/components/Modal';
 import { plural, relativeTime } from '@/utils/format';
-import { parseUsername } from '@/utils/instagram';
-import { InstagramVideosLink } from '@/components/InstagramVideosLink';
+import { channelLabel, parseChannelInput } from '@/utils/youtube';
+import { ChannelRefLink, ChannelVideosLink } from '@/components/YouTubeLinks';
 
 export function CompetitorsPage() {
   const api = useApi();
@@ -22,7 +22,7 @@ export function CompetitorsPage() {
   const [pendingRemove, setPendingRemove] = useState<Competitor | null>(null);
   const [fetchingId, setFetchingId] = useState<string | null>(null);
   const [fetchedId, setFetchedId] = useState<string | null>(null);
-  const typedUsername = parseUsername(url);
+  const typedRef = parseChannelInput(url);
 
   useEffect(() => {
     let active = true;
@@ -91,7 +91,7 @@ export function CompetitorsPage() {
       <PageHeader
         title="Track your"
         accent="competitors"
-        description="Track an Instagram profile, then fetch its 20 most recent Videos into your library."
+        description="Track a YouTube channel, then fetch its latest videos into your library."
         actions={
           <button type="button" onClick={() => setShowAdd(true)} className="btn-primary">
             <Plus size={15} /> Add competitor
@@ -109,7 +109,7 @@ export function CompetitorsPage() {
         <FullPageLoader label="Loading competitors…" />
       ) : competitors && competitors.length === 0 ? (
         <p className="text-base text-ink/70">
-          No competitors yet. Add your first Instagram account to start collecting Videos.
+          No competitors yet. Add your first YouTube channel to start collecting videos.
         </p>
       ) : competitors ? (
         <ul className="max-w-3xl">
@@ -124,11 +124,11 @@ export function CompetitorsPage() {
                   <div className="min-w-0 flex-1">
                     <h3 className="truncate text-lg font-medium text-ink">{c.displayName}</h3>
                     <p className="truncate text-sm text-ink/60">
-                      @{c.username} · added {relativeTime(c.addedAt)} · {plural(count, 'video')}
+                      {channelLabel(c.username)} · added {relativeTime(c.addedAt)} · {plural(count, 'video')}
                     </p>
-                    <InstagramVideosLink username={c.username} className="mt-1 text-sm text-ink/60 underline-offset-4 transition-colors hover:text-ink hover:underline">
-                      Videos on Instagram
-                    </InstagramVideosLink>
+                    <ChannelVideosLink username={c.username} className="mt-1 text-sm text-ink/60 underline-offset-4 transition-colors hover:text-ink hover:underline">
+                      Channel on YouTube
+                    </ChannelVideosLink>
                   </div>
                   <div className="flex items-center gap-2">
                     <button
@@ -144,7 +144,7 @@ export function CompetitorsPage() {
                       type="button"
                       onClick={() => setPendingRemove(c)}
                       className="btn-ghost px-2.5 py-2 hover:text-danger"
-                      aria-label={`Remove @${c.username}`}
+                      aria-label={`Remove ${channelLabel(c.username)}`}
                       title="Remove competitor"
                     >
                       <Trash2 size={15} />
@@ -153,7 +153,7 @@ export function CompetitorsPage() {
                 </div>
                 {justFetched && (
                   <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl bg-accent/10 px-4 py-3 text-sm text-ink">
-                    <span>Pulled 20 Videos into your library.</span>
+                    <span>Pulled {plural(count, 'video')} into your library.</span>
                     <Link to="/videos" className="font-medium underline-offset-4 hover:underline">View videos</Link>
                   </div>
                 )}
@@ -172,26 +172,24 @@ export function CompetitorsPage() {
           }}
         >
           <form onSubmit={handleAdd}>
-            <label htmlFor="ig-url" className="label">Instagram profile URL</label>
+            <label htmlFor="channel-url" className="label">YouTube channel link or @handle</label>
             <input
-              id="ig-url"
+              id="channel-url"
               type="text"
               value={url}
               onChange={(e) => setUrl(e.target.value)}
-              placeholder="https://instagram.com/vibecoder or @vibecoder"
+              placeholder="https://www.youtube.com/@mkbhd or @mkbhd"
               className="input mt-3"
               autoComplete="off"
               autoFocus
-              aria-describedby={addError ? 'ig-url-error' : undefined}
+              aria-describedby={addError ? 'channel-url-error' : undefined}
             />
             {addError && (
-              <p id="ig-url-error" role="alert" className="mt-3 text-sm text-danger">{addError}</p>
+              <p id="channel-url-error" role="alert" className="mt-3 text-sm text-danger">{addError}</p>
             )}
-            {!addError && typedUsername && (
+            {!addError && typedRef && (
               <p className="mt-3">
-                <InstagramVideosLink username={typedUsername}>
-                  Preview @{typedUsername}&rsquo;s Videos on Instagram
-                </InstagramVideosLink>
+                <ChannelRefLink channelRef={typedRef} />
               </p>
             )}
             <div className="mt-8 flex flex-wrap justify-end gap-3">
@@ -206,8 +204,8 @@ export function CompetitorsPage() {
 
       {pendingRemove && (
         <ConfirmDialog
-          title={`Remove @${pendingRemove.username}?`}
-          message="Their Videos and remixes will be deleted. Videos already in your Content Plan are kept."
+          title={`Remove ${channelLabel(pendingRemove.username)}?`}
+          message="Their videos and remixes will be deleted. Videos already in your Content Plan are kept."
           confirmLabel="Remove competitor"
           onConfirm={() => confirmRemove(pendingRemove)}
           onCancel={() => setPendingRemove(null)}

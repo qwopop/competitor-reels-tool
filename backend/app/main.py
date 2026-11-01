@@ -9,20 +9,26 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.engine import make_url
 from sqlalchemy.orm import sessionmaker
 
-from app.instagram import source_from_env
+from app.generator import SampleSource
+from app.youtube import YouTubeSource
 from app.models import Base, make_engine
 from app.routers import router
 
-DEFAULT_DATABASE_URL = "sqlite:///./data/app.db"
+# A new file name: the YouTube tables differ from the earlier Instagram ones.
+DEFAULT_DATABASE_URL = "sqlite:///./data/clipremix.db"
 DEV_CORS_ORIGINS = "http://localhost:5173,http://127.0.0.1:5173"
 
 
 _FROM_ENV = object()
 
 
+def source_from_env():
+    """VIDEO_SOURCE=sample uses generated videos and no network; anything else reads YouTube."""
+    return SampleSource() if os.getenv("VIDEO_SOURCE", "youtube").strip().lower() == "sample" else YouTubeSource()
+
+
 def create_app(database_url: str | None = None, video_source=_FROM_ENV) -> FastAPI:
-    """`video_source` fetches real Videos; by default it is built from the INSTAGRAM_* env vars,
-    and None means sample data."""
+    """`video_source` looks channels up and fetches their videos; by default it comes from VIDEO_SOURCE."""
     url = database_url or os.getenv("DATABASE_URL", DEFAULT_DATABASE_URL)
     engine = make_engine(url)
     session_factory = sessionmaker(bind=engine, expire_on_commit=False)

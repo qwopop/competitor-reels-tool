@@ -14,9 +14,11 @@ class CompetitorRow(Base):
     __tablename__ = "competitors"
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
-    # Stored lowercase: Instagram usernames are case-insensitive, so a plain unique constraint works on any database.
-    username: Mapped[str] = mapped_column(String(64), unique=True)
-    instagram_url: Mapped[str] = mapped_column(String(255))
+    # YouTube's channel ID (UC...), the stable key. Handles can change; IDs do not.
+    channel_id: Mapped[str] = mapped_column(String(64), unique=True)
+    # The @handle without the @, lowercase (handles are case-insensitive), or the channel ID if it has none.
+    username: Mapped[str] = mapped_column(String(64), index=True)
+    channel_url: Mapped[str] = mapped_column(String(255))
     display_name: Mapped[str] = mapped_column(String(128))
     avatar_url: Mapped[str] = mapped_column(String(512))
     added_at: Mapped[str] = mapped_column(String(40))
@@ -30,7 +32,7 @@ class VideoRow(Base):
         ForeignKey("competitors.id", ondelete="CASCADE"), index=True
     )
     competitor_username: Mapped[str] = mapped_column(String(64))
-    shortcode: Mapped[str] = mapped_column(String(32))
+    youtube_id: Mapped[str] = mapped_column(String(32))
     permalink: Mapped[str] = mapped_column(String(255))
     caption: Mapped[str] = mapped_column(String(500))
     thumbnail_url: Mapped[str] = mapped_column(String(512))
@@ -57,16 +59,16 @@ class RemixRow(Base):
 
 
 class ContentPlanRow(Base):
-    """A Video queued for filming. Fields are copied from the Video, not linked to it.
+    """A Video queued for filming. Fields are copied from the video, not linked to it.
 
-    Re-fetching a competitor replaces their Videos with new rows. Keeping a
+    Re-fetching a competitor replaces their videos with new rows. Keeping a
     snapshot here means the filming list survives those refreshes.
     """
 
     __tablename__ = "content_plan"
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
-    # One plan item per source Video. Not a foreign key: plan items outlive their Video.
+    # One plan item per source video. Not a foreign key: plan items outlive their video.
     video_id: Mapped[str] = mapped_column(String(64), unique=True)
     status: Mapped[str] = mapped_column(String(20))
     competitor_username: Mapped[str] = mapped_column(String(64))

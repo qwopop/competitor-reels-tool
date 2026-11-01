@@ -5,8 +5,8 @@ from collections.abc import Iterator
 from fastapi import APIRouter, Body, Depends, HTTPException, Request, Response, status
 from sqlalchemy.orm import Session
 
-from app import generator, store
-from app.instagram import InstagramError
+from app import store
+from app.youtube import YouTubeError, parse_channel_input
 from app.schemas import (
     AddCompetitorRequest,
     AddToPlanRequest,
@@ -45,18 +45,34 @@ def list_competitors(db: Session = Depends(get_db)):
     status_code=status.HTTP_201_CREATED,
     responses={200: {"model": Competitor, "description": "Competitor already tracked"}},
 )
-def add_competitor(payload: AddCompetitorRequest, response: Response, db: Session = Depends(get_db)):
-    username = generator.parse_username(payload.instagram_url)
-    if not username:
+def add_competitor(
+    payload: AddCompetitorRequest, request: Request, response: Response, db: Session = Depends(get_db)
+):
+    ref = parse_channel_input(payload.channel_url)
+    if not ref:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Please paste a valid Instagram profile URL like https://instagram.com/username",
+            detail="Please paste a YouTube channel link like https://www.youtube.com/@mkbhd, an @handle, or a video link",
         )
-    existing = store.find_competitor_by_username(db, username)
+    # Skip the network when the channel is clearly tracked already.
+    if ref.kind == "id":
+        existing = store.find_competitor_by_channel_id(db, ref.value)
+    elif ref.kind == "handle":
+        existing = store.find_competitor_by_username(db, ref.value)
+    else:
+        existing = None
     if existing:
         response.status_code = status.HTTP_200_OK
         return existing
-    competitor, created = store.add_competitor(db, username)
+    try:
+        info = request.app.state.video_source.resolve_channel(ref)
+    except YouTubeError as err:
+        raise HTTPException(status_code=err.status, detail=str(err)) from err
+    existing = store.find_competitor_by_channel_id(db, info.channel_id)
+    if existing:
+        response.status_code = status.HTTP_200_OK
+        return existing
+    competitor, created = store.add_competitor(db, info)
     if not created:
         response.status_code = status.HTTP_200_OK
     return competitor
@@ -80,19 +96,14 @@ def fetch_videos_for_competitor(competitor_id: str, request: Request, db: Sessio
     competitor = store.get_competitor(db, competitor_id)
     if not competitor:
         raise not_found("Competitor not found.")
-    source = request.app.state.video_source
-    if source is None:
-        return store.replace_videos_for_competitor(db, competitor)
     try:
-        videos = source.fetch_videos(competitor)
-    except InstagramError as err:
-        db.rollback()
+        videos = request.app.state.video_source.fetch_videos(competitor)
+    except YouTubeError as err:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(err)) from err
     if not videos:
-        db.rollback()
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=f"@{competitor.username} has no Videos on Instagram yet.",
+            detail=f"{competitor.display_name} has no public videos on YouTube yet.",
         )
     return store.replace_videos_for_competitor(db, competitor, videos)
 
@@ -140,7 +151,7 @@ def remix_video(
 def get_remix_for_video(video_id: str, db: Session = Depends(get_db)):
     remix = store.get_remix_for_video(db, video_id)
     if not remix:
-        raise not_found("No remix for this Video yet.")
+        raise not_found("No remix for this video yet.")
     return remix
 
 
