@@ -11,7 +11,7 @@ from sqlalchemy.orm import sessionmaker
 
 from app.generator import SampleSource
 from app.youtube import YouTubeSource
-from app.models import Base, make_engine
+from app.models import Base, make_engine, upgrade_schema
 from app.routers import router
 
 # A new file name: the YouTube tables differ from the earlier Instagram ones.
@@ -39,6 +39,7 @@ def create_app(database_url: str | None = None, video_source=_FROM_ENV) -> FastA
         if url.startswith("sqlite") and sqlite_path and sqlite_path != ":memory:":
             Path(sqlite_path).parent.mkdir(parents=True, exist_ok=True)
         Base.metadata.create_all(engine)
+        upgrade_schema(engine)
         yield
         engine.dispose()
 

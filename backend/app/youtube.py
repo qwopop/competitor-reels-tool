@@ -173,6 +173,7 @@ MEDIA = "{http://search.yahoo.com/mrss/}"
 class FeedEntry(NamedTuple):
     video_id: str
     title: str
+    description: str
     link: str
     thumbnail_url: str
     views: int
@@ -201,6 +202,7 @@ def parse_feed(xml_text: str) -> tuple[str | None, list[FeedEntry]]:
             FeedEntry(
                 video_id=video_id,
                 title=(entry.findtext(f"{ATOM}title") or "").strip(),
+                description=((group.findtext(f"{MEDIA}description") if group is not None else None) or "").strip(),
                 link=link.get("href") if link is not None and link.get("href") else f"https://www.youtube.com/watch?v={video_id}",
                 thumbnail_url=(thumb.get("url") if thumb is not None else None) or f"https://i.ytimg.com/vi/{video_id}/hqdefault.jpg",
                 views=_int(stats.get("views") if stats is not None else None),
@@ -281,6 +283,7 @@ class YouTubeSource:
                 youtube_id=e.video_id,
                 permalink=e.link[:255],
                 caption=e.title[:500],
+                description=e.description[:5000],
                 thumbnail_url=e.thumbnail_url[:512],
                 view_count=e.views,
                 like_count=e.likes,

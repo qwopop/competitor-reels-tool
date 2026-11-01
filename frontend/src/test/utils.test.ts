@@ -11,6 +11,7 @@ function video(overrides: Partial<Video>): Video {
     youtubeId: 'xxxxxxxxxxx',
     permalink: '',
     caption: 'caption',
+    description: '',
     thumbnailUrl: '',
     viewCount: 0,
     likeCount: 0,

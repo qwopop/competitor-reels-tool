@@ -96,8 +96,13 @@ def list_remixes(db: Session) -> list[RemixRow]:
     return list(db.scalars(stmt))
 
 
+def _channel_name(db: Session, video: VideoRow) -> str | None:
+    competitor = db.get(CompetitorRow, video.competitor_id)
+    return competitor.display_name if competitor else None
+
+
 def add_remix(db: Session, video: VideoRow, template: str = "default") -> tuple[RemixRow, bool]:
-    remix = generator.build_remix(video, template)
+    remix = generator.build_remix(video, template, _channel_name(db, video))
     video_id = video.id
     return _add_or_get(db, remix, lambda: get_remix_for_video(db, video_id))
 
@@ -107,7 +112,7 @@ def get_remix(db: Session, remix_id: str) -> RemixRow | None:
 
 
 def apply_remix_template(db: Session, remix: RemixRow, video: VideoRow, template: str) -> RemixRow:
-    return update_remix(db, remix, generator.template_fields(video, template))
+    return update_remix(db, remix, generator.template_fields(video, template, _channel_name(db, video)))
 
 
 def update_remix(db: Session, remix: RemixRow, changes: dict[str, str]) -> RemixRow:

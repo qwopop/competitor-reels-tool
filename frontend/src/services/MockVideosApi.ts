@@ -144,6 +144,7 @@ function mockVideosFor(competitor: Competitor): Video[] {
       // Sample videos have no real page, so they link to the channel.
       permalink: competitor.channelUrl,
       caption: pick(VIBECODING_TOPICS, i),
+      description: 'A sample video description. Real ones come from YouTube.',
       thumbnailUrl: `https://picsum.photos/seed/${youtubeId}/640/360`,
       viewCount: Math.round(50_000 + Math.random() * 900_000),
       likeCount: Math.round(3_000 + Math.random() * 60_000),

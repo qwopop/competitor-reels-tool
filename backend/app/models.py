@@ -1,6 +1,6 @@
 """SQLAlchemy tables. The database URL is configured from the environment."""
 
-from sqlalchemy import ForeignKey, Integer, String, create_engine, event
+from sqlalchemy import ForeignKey, Integer, String, Text, create_engine, event, inspect, text
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 from sqlalchemy.pool import StaticPool
@@ -35,6 +35,8 @@ class VideoRow(Base):
     youtube_id: Mapped[str] = mapped_column(String(32))
     permalink: Mapped[str] = mapped_column(String(255))
     caption: Mapped[str] = mapped_column(String(500))
+    # The video's description, read by the remix writer. Empty for videos fetched before it was stored.
+    description: Mapped[str] = mapped_column(Text, default="", server_default="")
     thumbnail_url: Mapped[str] = mapped_column(String(512))
     view_count: Mapped[int] = mapped_column(Integer)
     like_count: Mapped[int] = mapped_column(Integer)
@@ -102,3 +104,13 @@ def make_engine(database_url: str) -> Engine:
             cursor.close()
 
     return engine
+
+
+def upgrade_schema(engine: Engine) -> None:
+    """Add columns introduced after a database was created. create_all only makes
+    missing tables, so existing files would otherwise lack the new columns.
+    Uses plain ALTER TABLE ... ADD COLUMN, which SQLite and Postgres both accept."""
+    columns = {c["name"] for c in inspect(engine).get_columns("videos")}
+    if "description" not in columns:
+        with engine.begin() as conn:
+            conn.execute(text("ALTER TABLE videos ADD COLUMN description TEXT NOT NULL DEFAULT ''"))

@@ -235,8 +235,17 @@ def test_remix_uses_the_chosen_template(client, template):
     res = client.post(f"/api/videos/{video['id']}/remix", json={"template": template})
     assert res.status_code == 201
     remix = res.json()
-    assert remix["title"].startswith(generator.TEMPLATE_BANKS[template]["title"])
-    assert remix["hook"] and remix["script"] and remix["cta"]
+    assert remix["title"] and remix["hook"] and remix["script"] and remix["cta"]
+
+
+def test_each_template_writes_a_different_draft(client):
+    video = first_video(client)
+    remix = client.post(f"/api/videos/{video['id']}/remix").json()
+    hooks = {
+        client.post(f"/api/remixes/{remix['id']}/apply-template", json={"template": t}).json()["hook"]
+        for t in ["default", "educational", "storytelling", "promotional"]
+    }
+    assert len(hooks) == 4
 
 
 def test_remix_rejects_unknown_template(client):
@@ -265,7 +274,7 @@ def test_apply_template_overwrites_text_fields(client):
     res = client.post(f"/api/remixes/{remix['id']}/apply-template", json={"template": "promotional"})
     assert res.status_code == 200
     updated = res.json()
-    assert updated["title"].startswith("Promo:")
+    assert updated["title"] != remix["title"]
     assert updated["hook"] != "my own hook"
     assert updated["id"] == remix["id"]
 

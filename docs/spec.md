@@ -26,7 +26,11 @@ A single user with no login. Anyone who can reach the app can use it.
    first, with thumbnail, title, views and likes, and a **Watch on YouTube**
    link that opens that exact video.
 4. **Remix a video.** The user generates a breakdown for a video: a title, hook,
-   script, and CTA. Remixing a video that already has one opens the existing one.
+   script, and CTA, in one of four styles (default, educational, storytelling,
+   promotional). The draft is written from that video's own title, description
+   (opening promise, chapters, what the creator offers), channel, views and
+   format, so every video gets its own text. Remixing a video that already has
+   one opens the existing one.
 5. **Edit a remix.** The user edits the title, hook, script, or CTA and saves.
    Only changed fields are sent to the server.
 6. **Stop tracking.** Removing a competitor deletes its videos and their remixes.
@@ -48,7 +52,7 @@ A single user with no login. Anyone who can reach the app can use it.
 - **Competitor:** id, YouTube channel ID, username (handle, or the channel ID
   when there is none), channel URL, display name, avatar URL, added time.
 - **Video:** id, competitor, YouTube video ID, permalink, caption (the video
-  title), thumbnail URL, view, like and comment counts, posted time, fetched time.
+  title), description, thumbnail URL, view, like and comment counts, posted time, fetched time.
 - **Remix:** id, video, title, hook, script, CTA, created and updated times.
 - **Plan item:** id, source video id, status, a copy of the video's details, added and updated times.
 
@@ -71,5 +75,6 @@ No API key or account is needed (`backend/app/youtube.py`):
 
 - More than the latest 15 videos per channel, and comment counts. Both need the
   YouTube Data API, which requires a Google API key.
-- AI-written breakdowns. Remixes come from fixed templates in `generator.py`.
+- AI-written breakdowns. Remixes are written by rules in `backend/app/remix.py`
+  from the video's title, description, channel name, views and format.
 - Accounts, authentication, and multiple users.

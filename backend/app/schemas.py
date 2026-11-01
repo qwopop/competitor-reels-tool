@@ -35,6 +35,7 @@ class Video(ApiModel):
     youtube_id: str
     permalink: str
     caption: str
+    description: str = ""
     thumbnail_url: str
     view_count: int
     like_count: int

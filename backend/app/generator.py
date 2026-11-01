@@ -1,7 +1,7 @@
-"""Sample channels and videos (for tests and offline use) and the template remix step.
+"""Sample channels and videos (for tests and offline use), and building rows.
 
-Real videos come from app/youtube.py. The sample data here mirrors the
-frontend's MockVideosApi. Remixes come from fixed templates, not an AI model.
+Real videos come from app/youtube.py. Remix text is written by app/remix.py
+from each video's own title, description and numbers.
 """
 
 import random
@@ -9,6 +9,7 @@ from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
 from app.models import ContentPlanRow, CompetitorRow, VideoRow, RemixRow
+from app.remix import VideoFacts, write_remix
 from app.youtube import VIDEOS_PER_FETCH, ChannelInfo, ChannelRef, YouTubeError, channel_url
 
 VIBECODING_TOPICS = [
@@ -34,27 +35,18 @@ VIBECODING_TOPICS = [
     "The lazy engineer guide to AI feature flags",
 ]
 
-HOOK_BANK = [
-    "Stop scrolling — I built this in 2 hours using only AI.",
-    "This one prompt replaced my entire frontend team.",
-    "I was today years old when I learned AI can ship auth for you.",
-    "Nobody tells you this about vibe coding. So I will.",
-    "If you write CRUD by hand in 2026, you are losing hours every day.",
+# Sample descriptions, so the remix writer has something real-looking to read.
+SAMPLE_DESCRIPTIONS = [
+    "In this video I show you how to go from an idea to a deployed app using only AI tools. "
+    "You don't need years of experience to follow along.\n\n"
+    "0:00 Intro\n1:10 Picking the stack\n4:30 Writing the first prompt\n9:05 Fixing bugs with AI\n"
+    "14:20 Deploying\n\nGet my free prompt template: https://example.com/template\n#vibecoding #ai",
+    "Most people waste hours on boilerplate they could have generated in a minute. "
+    "Here is the exact workflow I use every day, with the prompts.\n\nJoin my free community: https://example.com",
+    "I tested this for a full week before recording. The results surprised me, especially on the second day.\n\n"
+    "Sponsored by Example. Use code SAVE20 for 20% off.",
 ]
 
-SCRIPT_BANK = [
-    "Step 1: open your AI IDE. Step 2: describe the app in plain English. Step 3: review the diff, ship, repeat.",
-    "Start with the data model, then ask the AI for the routes, then the UI. Never write boilerplate.",
-    "I prompt for the feature, the AI drafts the component, I tweak the copy, and I deploy.",
-    "The trick is to give the model the schema first. Everything else falls out of that.",
-]
-
-CTA_BANK = [
-    'Comment "STACK" and I will DM you my full prompt library.',
-    "Follow for daily vibe coding breakdowns.",
-    "Save this for your next AI build weekend.",
-    "Tag a founder who still hand-codes CRUD.",
-]
 
 def now_iso() -> str:
     """UTC timestamp in the same format JavaScript's toISOString() produces."""
@@ -117,6 +109,7 @@ def build_videos(competitor: CompetitorRow) -> list[VideoRow]:
                 youtube_id=youtube_id,
                 permalink=competitor.channel_url,
                 caption=VIBECODING_TOPICS[i % len(VIBECODING_TOPICS)],
+                description=SAMPLE_DESCRIPTIONS[i % len(SAMPLE_DESCRIPTIONS)],
                 thumbnail_url=f"https://picsum.photos/seed/{youtube_id}/640/360",
                 view_count=random.randint(50_000, 950_000),
                 like_count=random.randint(3_000, 63_000),
@@ -128,81 +121,28 @@ def build_videos(competitor: CompetitorRow) -> list[VideoRow]:
     return videos
 
 
-TEMPLATE_BANKS: dict[str, dict] = {
-    "default": {
-        "title": "Remix",
-        "hook": HOOK_BANK,
-        "script": SCRIPT_BANK,
-        "cta": CTA_BANK,
-    },
-    "educational": {
-        "title": "Lesson",
-        "hook": [
-            "Most people get {topic} wrong. Here is the fix.",
-            "Three things you need to know about {topic}.",
-        ],
-        "script": [
-            "Step 1: state the problem. Step 2: show one concrete example. Step 3: give the takeaway.",
-            "Explain the core idea in one sentence, then walk through a worked example.",
-        ],
-        "cta": [
-            "Save this so you can practise it later.",
-            "Follow for one lesson like this every week.",
-        ],
-    },
-    "storytelling": {
-        "title": "Story",
-        "hook": [
-            "Last year I tried {topic} and it went badly.",
-            "Here is what happened when I stopped doing {topic} the old way.",
-        ],
-        "script": [
-            "Setup: where I started. Conflict: what broke. Resolution: what changed.",
-            "Open on the moment things went wrong, then rewind to show how I got there.",
-        ],
-        "cta": [
-            "Tell me your version of this story in the comments.",
-            "Follow to see how the next chapter ends.",
-        ],
-    },
-    "promotional": {
-        "title": "Promo",
-        "hook": [
-            "Stop struggling with {topic}. There is an easier way.",
-            "If you want results from {topic}, watch this first.",
-        ],
-        "script": [
-            "Show the problem, present the product as the fix, then show one result.",
-            "Lead with the benefit, show proof in ten seconds, end with the offer.",
-        ],
-        "cta": [
-            "Link in bio to get started today.",
-            "Comment READY and I will send you the details.",
-        ],
-    },
-}
+def template_fields(video: VideoRow, template: str, channel: str | None = None) -> dict[str, str]:
+    """Title, hook, script and CTA written from this video's title, description and numbers."""
+    facts = VideoFacts(
+        title=video.caption,
+        description=video.description or "",
+        channel=channel or f"@{video.competitor_username}",
+        views=video.view_count,
+        likes=video.like_count,
+        is_short="/shorts/" in video.permalink,
+        seed=sum(ord(ch) for ch in video.youtube_id),
+    )
+    return write_remix(facts, template)
 
 
-def template_fields(video: VideoRow, template: str) -> dict[str, str]:
-    """Title, hook, script and CTA for a video, chosen deterministically from its YouTube ID."""
-    bank = TEMPLATE_BANKS[template]
-    seed = sum(ord(ch) for ch in video.youtube_id)
-    return {
-        "title": f"{bank['title']}: {video.caption}",
-        "hook": bank["hook"][seed % len(bank["hook"])].replace("{topic}", video.caption),
-        "script": bank["script"][seed % len(bank["script"])].replace("{topic}", video.caption),
-        "cta": bank["cta"][seed % len(bank["cta"])].replace("{topic}", video.caption),
-    }
-
-
-def build_remix(video: VideoRow, template: str = "default") -> RemixRow:
+def build_remix(video: VideoRow, template: str = "default", channel: str | None = None) -> RemixRow:
     stamp = now_iso()
     return RemixRow(
         id=new_id("remix"),
         video_id=video.id,
         created_at=stamp,
         updated_at=stamp,
-        **template_fields(video, template),
+        **template_fields(video, template, channel),
     )
 
 

@@ -145,8 +145,8 @@ export function RemixPage() {
           {title || 'Untitled remix'}
         </h1>
         <p className="mt-5 max-w-md text-base text-ink/70">
-          An AI breakdown of the source video. Edit the hook, script and call to
-          action until it sounds like you.
+          A draft written from the source video's title, description and numbers.
+          Edit the hook, script and call to action until it sounds like you.
         </p>
       </header>
 
@@ -235,6 +235,7 @@ export function RemixPage() {
                 id="remix-script"
                 maxLength={2000}
                 className="input min-h-[180px] resize-y leading-relaxed"
+                rows={Math.min(14, Math.max(6, script.split('\n').length + 1))}
                 value={script}
                 onChange={markDirty(setScript)}
                 placeholder="Break the video into beats…"

@@ -46,6 +46,7 @@ function video(overrides: Partial<Video> = {}): Video {
     youtubeId: 'AAAAAAAAAA1',
     permalink: 'https://www.youtube.com/@vibecoder',
     caption: 'I let AI build my SaaS in 48 hours',
+    description: '',
     thumbnailUrl: 'https://example.com/thumb.jpg',
     viewCount: 120000,
     likeCount: 5400,

@@ -72,7 +72,7 @@ make check      # tests, typecheck and production build
 - **Real videos, no key:** the backend reads each channel's public feed (`https://www.youtube.com/feeds/videos.xml?channel_id=UC…`) for the latest 15 videos with title, thumbnail, views and likes. The feed has no comment counts. When you add a channel by `@handle` or video link, the backend reads the channel's public page once to find its channel ID, name and avatar. The code is in `backend/app/youtube.py`.
 - **Sample data:** set `VIDEO_SOURCE=sample` to use generated videos with no network access (the tests always do). Sample videos link to the channel, since they have no real page.
 - **Upgrading from the Instagram version:** the database file is now `clipremix.db`, so the old `app.db` is left alone and the app starts empty.
-- Remixes are produced by a **template**, not an LLM. Swap `build_remix` in `backend/app/generator.py` to call a model.
+- **Remixes are written from each video's own details**, not by an AI model: its title (how-to, tutorial, list, comparison, story, question), its description (the opening promise, the chapter list, what the creator offers), the channel name, the view count, and whether it is a Short. See `backend/app/remix.py`. Videos fetched before this change have no description stored; click **Fetch videos** again to get it.
 - There is no login. Anyone who can reach the server can use it.
 - Set `DATABASE_URL=sqlite://` to run with an in-memory database. Nothing is saved, which is useful for trying the API or for tests.
 - Set `DATABASE_URL` (for example `sqlite:///./data/clipremix.db`) to change the database. The code is written so Postgres can be added later.

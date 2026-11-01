@@ -21,6 +21,8 @@ export interface Video {
   youtubeId: string;
   permalink: string;
   caption: string;
+  // The video's YouTube description. The backend's remix writer reads it.
+  description: string;
   thumbnailUrl: string;
   viewCount: number;
   likeCount: number;

@@ -408,7 +408,12 @@ components:
           type: integer
           minimum: 0
           description: 0 when unknown.
-        caption: { type: string }
+        caption: { type: string, description: The video title }
+        description:
+          type: string
+          description: >
+            The video's YouTube description (may be empty). The remix writer reads
+            its sentences, chapter list and offers to personalise the draft.
         thumbnailUrl: { type: string, format: uri }
         likeCount: { type: integer, minimum: 0 }
         commentCount:
@@ -434,8 +439,9 @@ components:
     RemixTemplate:
       type: string
       description: >
-        default, educational, storytelling or promotional. Each produces
-        template-generated drafts from the Video's details, not AI analysis.
+        default, educational, storytelling or promotional. Each writes a draft
+        from the video's own title, description (sentences, chapters, offers),
+        channel name, view count and format (Short or long video). No AI model.
       enum: [default, educational, storytelling, promotional]
 
     RemixRequest:
