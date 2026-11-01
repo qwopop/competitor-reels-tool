@@ -1,0 +1,21 @@
+# Keeps the repository's issue labels (name, colour, description) as code.
+# Runs when this file changes, or by hand from the Actions tab.
+name: Labels
+
+on:
+  push:
+    paths: [.github/workflows/labels.yml]
+  workflow_dispatch:
+
+permissions:
+  issues: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - name: e2e-test (orange)
+        run: gh label create e2e-test --color F97316 --description "End-to-end (Playwright) test for one feature" --force
