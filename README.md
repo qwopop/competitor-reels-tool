@@ -84,7 +84,7 @@ Each test creates its own channel with a unique handle, so the suite also runs o
 
 ## Deploying
 
-The frontend, API and database deploy to Render from `render.yaml`. See [`docs/deploy.md`](docs/deploy.md).
+ClipRemix deploys to [Render](https://render.com) as the same two services as `docker-compose.yaml`: one web service built from the `Dockerfile`, and a managed PostgreSQL 16 database. `render.yaml` describes both; see [`docs/deploy.md`](docs/deploy.md).
 
 ### Running the pieces separately
 
