@@ -27,7 +27,7 @@ Track competitor YouTube channels, pull their latest videos into a library, gene
 | --- | --- | --- |
 | ![Dashboard top videos and channels](docs/screenshots/dashboard-videos.webp) | ![Dashboard totals and progress](docs/screenshots/dashboard-totals.png) | ![Dashboard recent videos](docs/screenshots/dashboard-recent.png) |
 
-The Remix editor and Add a competitor screenshots still show the earlier Instagram version.
+The Add a competitor screenshot still shows the earlier Instagram version.
 
 ## Run it locally
 
