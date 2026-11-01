@@ -1,4 +1,5 @@
-import { Link, NavLink } from 'react-router-dom';
+import { Link, NavLink, useLocation } from 'react-router-dom';
+import { PILL_LABEL_TRANSITION, useSlidingPill } from '@/components/SlidingPill';
 import { Film } from 'lucide-react';
 
 const navItems = [
@@ -12,6 +13,9 @@ const navItems = [
 
 // Sticky top bar: wordmark, page links, and one action.
 export function Header() {
+  const { pathname } = useLocation();
+  // NavLink marks the current page with aria-current="page"; the pill follows it.
+  const { containerRef, pill } = useSlidingPill<HTMLElement>('[aria-current="page"]', pathname);
   return (
     <header className="sticky top-0 z-30 border-b border-white/5 bg-ground/70 backdrop-blur-xl">
       <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-x-6 gap-y-3 px-6 py-4 sm:px-10">
@@ -22,7 +26,12 @@ export function Header() {
           ClipRemix
         </Link>
 
-        <nav aria-label="Main" className="order-last flex w-full flex-wrap gap-1 md:order-none md:w-auto">
+        <nav
+          ref={containerRef}
+          aria-label="Main"
+          className="relative order-last flex w-full flex-wrap gap-1 md:order-none md:w-auto"
+        >
+          {pill}
           {navItems.map((item) => (
             <NavLink
               key={item.to}
@@ -30,8 +39,9 @@ export function Header() {
               end={item.end}
               className={({ isActive }) =>
                 [
-                  'whitespace-nowrap rounded-full px-4 py-2 text-sm transition-colors duration-200',
-                  isActive ? 'bg-white/10 text-ink' : 'text-ink/60 hover:text-ink',
+                  'whitespace-nowrap rounded-full px-4 py-2 text-sm',
+                  PILL_LABEL_TRANSITION,
+                  isActive ? 'text-ink' : 'text-ink/60 hover:text-ink',
                 ].join(' ')
               }
             >
