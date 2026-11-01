@@ -53,6 +53,32 @@ Prices and limits change; check Render's pricing page.
    is still there, so the database is connected.
 3. API documentation is at `/docs`.
 
+## 4. Deploy every change automatically (CI/CD)
+
+`.github/workflows/ci.yml` runs on every push and pull request:
+
+1. **Backend tests** (on SQLite and on a PostgreSQL 16 service) and **frontend
+   tests** (typecheck, unit tests, production build), in parallel.
+2. The **Docker Compose stack** is built and started, then the **integration
+   tests** and the **Playwright end-to-end tests** run against it.
+3. On a push to **`main`**, once everything passes, it **deploys to Render**
+   and waits until `/api/health` reports the new commit and a working database.
+
+`render.yaml` sets `autoDeploy: false`, so Render never deploys a commit
+that hasn't passed the tests. Connect GitHub to Render once:
+
+1. In Render, open the `clipremix` service → **Settings → Deploy Hook** and copy the URL.
+2. In GitHub, open the repository → **Settings → Secrets and variables → Actions**:
+   - **Secrets** tab: add `RENDER_DEPLOY_HOOK_URL` with that URL.
+   - **Variables** tab: add `RENDER_APP_URL` with the site's address, for
+     example `https://clipremix.onrender.com`.
+
+Until both are set, the deploy job is skipped with a notice and everything
+else still runs. The deploy hook is the only credential GitHub holds: it can
+start a deploy of the branch, nothing else.
+
+Then change something, commit, and push to `main` to see it go live.
+
 ## Things to know
 
 - **No login.** Anyone with the address can read and change the data. Add

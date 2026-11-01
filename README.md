@@ -84,7 +84,7 @@ Each test creates its own channel with a unique handle, so the suite also runs o
 
 ## Deploying
 
-ClipRemix deploys to [Render](https://render.com) as the same two services as `docker-compose.yaml`: one web service built from the `Dockerfile`, and a managed PostgreSQL 16 database. `render.yaml` describes both; see [`docs/deploy.md`](docs/deploy.md).
+ClipRemix deploys to [Render](https://render.com) as the same two services as `docker-compose.yaml`: one web service built from the `Dockerfile`, and a managed PostgreSQL 16 database. `render.yaml` describes both; see [`docs/deploy.md`](docs/deploy.md). Every push runs the backend, frontend, integration and end-to-end tests in GitHub Actions, and a push to `main` that passes them all is deployed automatically.
 
 ### Running the pieces separately
 

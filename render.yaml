@@ -16,7 +16,9 @@ services:
     region: frankfurt
     plan: free                    # sleeps when idle; use starter for an always-on site
     healthCheckPath: /api/health
-    autoDeploy: true              # every push to the blueprint's branch deploys
+    # Deploys are started by GitHub Actions only after every test passes
+    # (.github/workflows/ci.yml calls this service's Deploy Hook).
+    autoDeploy: false
     envVars:
       - key: DATABASE_URL
         fromDatabase:

@@ -1,0 +1,171 @@
+# CI/CD: test everything on every push and pull request; deploy main to Render.
+#
+#   backend ─┐
+#            ├─> stack (compose: integration + end-to-end) ─> deploy (main only)
+#   frontend ┘
+#
+# Deploying needs two settings in the repository (Settings → Secrets and variables → Actions):
+#   secret   RENDER_DEPLOY_HOOK_URL   the clipremix service's Deploy Hook (Render → Settings)
+#   variable RENDER_APP_URL           the site's address, e.g. https://clipremix.onrender.com
+# Without them the deploy job is skipped with a notice. See docs/deploy.md.
+name: CI/CD
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  # Never cancel a run on main halfway through a deploy.
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+jobs:
+  backend:
+    name: Backend tests (SQLite and PostgreSQL)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: clipremix
+          POSTGRES_PASSWORD: clipremix
+          POSTGRES_DB: clipremix
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U clipremix -d clipremix"
+          --health-interval 2s --health-timeout 3s --health-retries 30
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.11.32"
+      - run: uv sync --frozen
+      - name: Tests on SQLite
+        run: uv run pytest -q
+      - name: Tests on PostgreSQL
+        env:
+          TEST_DATABASE_URL: postgresql://clipremix:clipremix@localhost:5432/clipremix
+        run: uv run pytest -q
+
+  frontend:
+    name: Frontend tests, typecheck and build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+
+  stack:
+    name: Integration and end-to-end tests (Docker Compose)
+    needs: [backend, frontend]
+    runs-on: ubuntu-latest
+    env:
+      BASE_URL: http://localhost:8100
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.11.32"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: e2e/package-lock.json
+
+      - name: Build and start the stack (app + PostgreSQL, sample videos)
+        env:
+          VIDEO_SOURCE: sample
+          APP_VERSION: ${{ github.sha }}
+        run: docker compose up -d --build --wait
+
+      - name: Integration tests
+        working-directory: backend
+        run: |
+          uv sync --frozen
+          uv run pytest ../integration -q
+
+      - name: Install Playwright
+        working-directory: e2e
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+
+      - name: End-to-end tests
+        working-directory: e2e
+        run: npx playwright test
+
+      - name: App logs
+        if: failure()
+        run: docker compose logs --no-color app db
+      - name: Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            e2e/playwright-report
+            e2e/test-results
+          retention-days: 7
+      - name: Stop the stack
+        if: always()
+        run: docker compose down -v
+
+  deploy:
+    name: Deploy to Render
+    needs: stack
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: deploy-production
+      cancel-in-progress: false
+    env:
+      DEPLOY_HOOK: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
+      APP_URL: ${{ vars.RENDER_APP_URL }}
+    steps:
+      - name: Check the deploy settings
+        id: settings
+        run: |
+          if [ -z "$DEPLOY_HOOK" ] || [ -z "$APP_URL" ]; then
+            echo "::notice::Deploy skipped: set the RENDER_DEPLOY_HOOK_URL secret and the RENDER_APP_URL variable (docs/deploy.md)."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Trigger the deploy
+        if: steps.settings.outputs.ready == 'true'
+        run: curl -fsS -X POST "$DEPLOY_HOOK" > /dev/null
+
+      - name: Wait until the new version is live and healthy
+        if: steps.settings.outputs.ready == 'true'
+        run: |
+          # /api/health reports the deployed commit (Render sets RENDER_GIT_COMMIT).
+          # Render builds the image first, so allow up to 20 minutes.
+          for attempt in $(seq 1 80); do
+            body=$(curl -fsS --max-time 10 "${APP_URL%/}/api/health" || true)
+            echo "[$attempt] $body"
+            if echo "$body" | grep -q "\"version\":\"$GITHUB_SHA\"" && echo "$body" | grep -q '"database":"ok"'; then
+              echo "Deployed $GITHUB_SHA and healthy."
+              exit 0
+            fi
+            sleep 15
+          done
+          echo "::error::The new version did not become healthy within 20 minutes. Check the deploy log in Render."
+          exit 1
