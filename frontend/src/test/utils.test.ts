@@ -122,3 +122,11 @@ describe('wording helpers', () => {
     expect(reelStats({ viewCount: 1, likeCount: 2, commentCount: 1 })).toBe('1 view · 2 likes · 1 comment');
   });
 });
+
+describe('instagramReelsUrl', () => {
+  it('builds the Reels tab link for a username', async () => {
+    const { instagramReelsUrl } = await import('@/utils/instagram');
+    expect(instagramReelsUrl('vibecoder')).toBe('https://www.instagram.com/vibecoder/reels/');
+    expect(instagramReelsUrl('Vibe.Coder_1')).toBe('https://www.instagram.com/vibe.coder_1/reels/');
+  });
+});

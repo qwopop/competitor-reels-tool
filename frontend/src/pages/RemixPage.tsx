@@ -8,6 +8,7 @@ import { ErrorBanner, FullPageLoader, Spinner } from '@/components/ui';
 import { ConfirmDialog } from '@/components/Modal';
 import { REMIX_TEMPLATES } from '@/utils/templates';
 import { planStatusMeta } from '@/utils/plan';
+import { InstagramReelsLink } from '@/components/InstagramReelsLink';
 
 export function RemixPage() {
   const { id } = useParams<{ id: string }>();
@@ -164,14 +165,9 @@ export function RemixPage() {
               <p className="stat mt-3">
                 {reelStats(reel)}
               </p>
-              <a
-                href={reel.permalink}
-                target="_blank"
-                rel="noreferrer"
-                className="mt-4 inline-block text-sm text-ink/60 underline-offset-4 transition-colors hover:text-ink hover:underline"
-              >
-                View profile on Instagram
-              </a>
+              <div className="mt-4">
+                <InstagramReelsLink username={reel.competitorUsername} />
+              </div>
             </>
           ) : (
             <p className="text-base text-ink/70">Source Reel is no longer available.</p>

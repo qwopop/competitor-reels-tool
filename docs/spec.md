@@ -20,7 +20,8 @@ A single user with no login. Anyone who can reach the app can use it.
    recent Reels. Refetching replaces that competitor's Reels rather than
    adding to them.
 3. **Browse the library.** The dashboard lists every stored Reel, newest first,
-   with thumbnail, caption, views, likes, comments, and a link to Instagram.
+   with thumbnail, caption, views, likes, comments, and a link to the
+   competitor's Reels tab on Instagram (`https://www.instagram.com/<name>/reels/`).
 4. **Remix a Reel.** The user generates a breakdown for a Reel: a title, hook,
    script, and CTA. Remixing a Reel that already has one opens the existing one.
 5. **Edit a remix.** The user edits the title, hook, script, or CTA and saves.
@@ -35,6 +36,10 @@ A single user with no login. Anyone who can reach the app can use it.
    with their status and counts, and the user changes status there. Plan items
    keep their own copy of the Reel's details, so they survive re-fetching a
    competitor's Reels.
+8. **Open a profile's Reels.** As soon as the user types a valid profile link or
+   username on the dashboard or in the Add competitor dialog, a link to that
+   account's Reels tab on Instagram appears. It opens in a new tab and works
+   without tracking the account. Each tracked competitor also has this link.
 
 ## Data
 

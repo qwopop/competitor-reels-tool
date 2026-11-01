@@ -7,6 +7,8 @@ import { PageHeader } from '@/components/PageHeader';
 import { ErrorBanner, FullPageLoader, Spinner } from '@/components/ui';
 import { Modal, ConfirmDialog } from '@/components/Modal';
 import { plural, relativeTime } from '@/utils/format';
+import { parseUsername } from '@/utils/instagram';
+import { InstagramReelsLink } from '@/components/InstagramReelsLink';
 
 export function CompetitorsPage() {
   const api = useApi();
@@ -20,6 +22,7 @@ export function CompetitorsPage() {
   const [pendingRemove, setPendingRemove] = useState<Competitor | null>(null);
   const [fetchingId, setFetchingId] = useState<string | null>(null);
   const [fetchedId, setFetchedId] = useState<string | null>(null);
+  const typedUsername = parseUsername(url);
 
   useEffect(() => {
     let active = true;
@@ -123,6 +126,9 @@ export function CompetitorsPage() {
                     <p className="truncate text-sm text-ink/60">
                       @{c.username} · added {relativeTime(c.addedAt)} · {plural(count, 'reel')}
                     </p>
+                    <InstagramReelsLink username={c.username} className="mt-1 text-sm text-ink/60 underline-offset-4 transition-colors hover:text-ink hover:underline">
+                      Reels on Instagram
+                    </InstagramReelsLink>
                   </div>
                   <div className="flex items-center gap-2">
                     <button
@@ -180,6 +186,13 @@ export function CompetitorsPage() {
             />
             {addError && (
               <p id="ig-url-error" role="alert" className="mt-3 text-sm text-danger">{addError}</p>
+            )}
+            {!addError && typedUsername && (
+              <p className="mt-3">
+                <InstagramReelsLink username={typedUsername}>
+                  Preview @{typedUsername}&rsquo;s Reels on Instagram
+                </InstagramReelsLink>
+              </p>
             )}
             <div className="mt-8 flex flex-wrap justify-end gap-3">
               <button type="button" onClick={() => setShowAdd(false)} className="btn-ghost">Cancel</button>

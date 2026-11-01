@@ -450,3 +450,58 @@ describe('bugs #49 and #52', () => {
     await waitFor(() => expect(stub.removeFromContentPlan).toHaveBeenCalledWith('plan_1'));
   });
 });
+
+describe('links to a profile’s Reels on Instagram', () => {
+  it('shows a Reels link on the dashboard as soon as a valid username is typed', async () => {
+    const user = userEvent.setup();
+    const stub = new StubApi();
+    renderAt(stub, '/', <DashboardPage />, '/');
+    const input = screen.getByLabelText(/instagram profile link/i);
+
+    await user.type(input, 'https://twitter.com/x');
+    expect(screen.queryByRole('link', { name: /reels on instagram/i })).not.toBeInTheDocument();
+
+    await user.clear(input);
+    await user.type(input, 'https://www.instagram.com/Vibe.Coder/?hl=en');
+    const link = screen.getByRole('link', { name: /open @vibe\.coder’s reels on instagram/i });
+    expect(link).toHaveAttribute('href', 'https://www.instagram.com/vibe.coder/reels/');
+    expect(link).toHaveAttribute('target', '_blank');
+    expect(link.getAttribute('rel')).toContain('noopener');
+    expect(stub.addCompetitor).not.toHaveBeenCalled();
+  });
+
+  it('links each tracked competitor to its Reels tab', async () => {
+    const stub = new StubApi();
+    stub.listCompetitors.mockResolvedValue({
+      data: [{ id: 'comp_1', username: 'vibecoder', instagramUrl: '', displayName: 'Vibecoder', avatarUrl: '', addedAt: new Date().toISOString() }],
+      error: null,
+    });
+    renderAt(stub, '/competitors', <CompetitorsPage />, '/competitors');
+
+    const link = await screen.findByRole('link', { name: /reels on instagram/i });
+    expect(link).toHaveAttribute('href', 'https://www.instagram.com/vibecoder/reels/');
+  });
+
+  it('previews the Reels link in the add-competitor modal', async () => {
+    const user = userEvent.setup();
+    const stub = new StubApi();
+    renderAt(stub, '/competitors', <CompetitorsPage />, '/competitors');
+
+    await user.click(await screen.findByRole('button', { name: /add competitor/i }));
+    const dialog = screen.getByRole('dialog');
+    await user.type(within(dialog).getByRole('textbox'), '@vibecoder');
+    expect(within(dialog).getByRole('link', { name: /preview @vibecoder’s reels/i })).toHaveAttribute(
+      'href',
+      'https://www.instagram.com/vibecoder/reels/'
+    );
+  });
+
+  it('points the Reel cards at the competitor’s Reels tab', async () => {
+    const stub = new StubApi();
+    stub.listReels.mockResolvedValue({ data: [reel()], error: null });
+    renderAt(stub, '/reels', <ReelsPage />, '/reels');
+
+    const links = await screen.findAllByRole('link', { name: /@vibecoder’s reels on instagram/i });
+    for (const link of links) expect(link).toHaveAttribute('href', 'https://www.instagram.com/vibecoder/reels/');
+  });
+});

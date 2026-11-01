@@ -6,11 +6,13 @@ import { useApi } from '@/services';
 import { compactNumber, countLabel, plural, relativeTime } from '@/utils/format';
 import { dashboardStats } from '@/utils/stats';
 import { PLAN_STATUSES } from '@/utils/plan';
+import { parseUsername } from '@/utils/instagram';
 import { ErrorBanner, FullPageLoader, Spinner } from '@/components/ui';
 import { Notice } from '@/components/Notice';
 import { Accent } from '@/components/PageHeader';
 import { ReelCarousel } from '@/components/ReelCarousel';
 import { CompetitorMarquee, type MarqueeItem } from '@/components/CompetitorMarquee';
+import { InstagramReelsLink } from '@/components/InstagramReelsLink';
 
 interface DashboardData {
   competitors: Competitor[];
@@ -27,6 +29,8 @@ export function DashboardPage() {
   const [busy, setBusy] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [trackedUsername, setTrackedUsername] = useState<string | null>(null);
+  const typedUsername = parseUsername(url);
 
   const load = useCallback(async () => {
     const [competitors, reels, remixes, plan] = await Promise.all([
@@ -66,6 +70,7 @@ export function DashboardPage() {
     setBusy(true);
     setFormError(null);
     setNotice(null);
+    setTrackedUsername(null);
     const added = await api.addCompetitor(url);
     if (added.error || !added.data) {
       setBusy(false);
@@ -78,6 +83,7 @@ export function DashboardPage() {
       setFormError(fetched.error);
     } else {
       setUrl('');
+      setTrackedUsername(added.data.username);
       setNotice(`Pulled ${fetched.data?.length ?? 0} Reels from @${added.data.username}.`);
     }
     await load();
@@ -132,10 +138,10 @@ export function DashboardPage() {
             <Link2 size={18} className="shrink-0 text-ink/50" aria-hidden="true" />
             <input
               type="text"
-              aria-label="Instagram profile link"
+              aria-label="Instagram profile link or username"
               value={url}
               onChange={(e) => setUrl(e.target.value)}
-              placeholder="Paste an Instagram profile link"
+              placeholder="Paste a profile link or type @username"
               autoComplete="off"
               className="min-w-0 flex-1 bg-transparent text-base text-ink outline-none placeholder:text-ink/60"
             />
@@ -149,6 +155,17 @@ export function DashboardPage() {
           </Link>
         </form>
 
+        {typedUsername && (
+          <p className="relative mt-5 text-sm">
+            <InstagramReelsLink
+              username={typedUsername}
+              className="font-medium text-gradient underline-offset-4 hover:underline"
+            >
+              Open @{typedUsername}&rsquo;s Reels on Instagram
+            </InstagramReelsLink>
+          </p>
+        )}
+
         {formError && (
           <div role="alert" className="relative mx-auto mt-6 max-w-3xl">
             <ErrorBanner message={formError} />
@@ -157,6 +174,11 @@ export function DashboardPage() {
         {notice && (
           <div className="relative mx-auto mt-6 max-w-3xl text-left">
             <Notice message={notice} onDismiss={() => setNotice(null)} />
+            {trackedUsername && (
+              <p className="mt-3 px-1">
+                <InstagramReelsLink username={trackedUsername} />
+              </p>
+            )}
           </div>
         )}
 
