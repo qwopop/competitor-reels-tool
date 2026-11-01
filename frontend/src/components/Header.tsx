@@ -1,6 +1,6 @@
 import { Link, NavLink, useLocation } from 'react-router-dom';
 import { PILL_LABEL_TRANSITION, useSlidingPill } from '@/components/SlidingPill';
-import { Film } from 'lucide-react';
+import { LogoMark } from '@/components/LogoMark';
 
 const navItems = [
   { to: '/', label: 'Dashboard', end: true },
@@ -20,9 +20,7 @@ export function Header() {
     <header className="sticky top-0 z-30 border-b border-white/5 bg-ground/70 backdrop-blur-xl">
       <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-x-6 gap-y-3 px-6 py-4 sm:px-10">
         <Link to="/" className="flex items-center gap-2.5 text-lg font-semibold tracking-tight text-ink">
-          <span aria-hidden="true" className="grid h-8 w-8 place-items-center rounded-xl bg-brand text-ground">
-            <Film size={16} strokeWidth={2.6} />
-          </span>
+          <LogoMark size={32} className="shrink-0 rounded-[9px]" />
           ClipRemix
         </Link>
 

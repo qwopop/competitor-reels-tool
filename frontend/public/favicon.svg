@@ -1,11 +1,33 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
   <defs>
-    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#ffbd59"/>
-      <stop offset="1" stop-color="#ff6f9c"/>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#ffb428"/>
+      <stop offset="0.5" stop-color="#ff5f6a"/>
+      <stop offset="1" stop-color="#ea1a82"/>
+    </linearGradient>
+    <linearGradient id="arrow" x1="22" y1="22" x2="42" y2="42" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ff8f4a"/>
+      <stop offset="1" stop-color="#ff4d83"/>
     </linearGradient>
   </defs>
-  <rect width="64" height="64" rx="16" fill="url(#g)"/>
-  <rect x="18" y="18" width="28" height="28" rx="5" fill="none" stroke="#07070b" stroke-width="4"/>
-  <path d="M18 27h28M18 37h28M27 18v28M37 18v28" stroke="#07070b" stroke-width="3"/>
+  <!-- tile -->
+  <rect width="64" height="64" rx="15" fill="url(#bg)"/>
+  <!-- film strip -->
+  <rect x="10" y="15" width="44" height="34" rx="5.5" fill="#0b0b10"/>
+  <!-- sprocket holes, cut through to the tile -->
+  <g fill="url(#bg)">
+    <rect x="13" y="18.5" width="4.5" height="4" rx="1"/>
+    <rect x="13" y="25.5" width="4.5" height="4" rx="1"/>
+    <rect x="13" y="32.5" width="4.5" height="4" rx="1"/>
+    <rect x="13" y="39.5" width="4.5" height="4" rx="1"/>
+    <rect x="46.5" y="18.5" width="4.5" height="4" rx="1"/>
+    <rect x="46.5" y="25.5" width="4.5" height="4" rx="1"/>
+    <rect x="46.5" y="32.5" width="4.5" height="4" rx="1"/>
+    <rect x="46.5" y="39.5" width="4.5" height="4" rx="1"/>
+  </g>
+  <!-- remix: a circular arrow -->
+  <g transform="translate(19 19) scale(1.083)" fill="none" stroke="url(#arrow)" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/>
+    <path d="M21 3v5h-5"/>
+  </g>
 </svg>
