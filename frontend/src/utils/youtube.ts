@@ -102,3 +102,15 @@ export function refOpenUrl(ref: ChannelRef): string {
   const channel = channelUrlForRef(ref);
   return channel ? `${channel}/videos` : `https://www.youtube.com/watch?v=${ref.value}`;
 }
+
+// YouTube avatars come from Google's image hosts at 900px (…=s900-c-k-…).
+// Ask for the size actually shown instead; other URLs are returned unchanged.
+export function sizedAvatarUrl(url: string, px: number): string {
+  try {
+    const host = new URL(url).hostname;
+    if (!/(?:^|\.)(?:googleusercontent\.com|ggpht\.com)$/.test(host)) return url;
+  } catch {
+    return url;
+  }
+  return url.replace(/=s\d+(?=-|$)/, `=s${px}`).replace(/\/s\d+(-[a-z0-9-]*)?\//i, `/s${px}$1/`);
+}

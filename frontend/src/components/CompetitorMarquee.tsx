@@ -1,4 +1,5 @@
 import { countLabel } from '@/utils/format';
+import { Avatar } from '@/components/Avatar';
 
 export interface MarqueeItem {
   id: string;
@@ -22,7 +23,7 @@ export function CompetitorMarquee({ items }: { items: MarqueeItem[] }) {
             aria-hidden={i >= base.length}
             className="flex w-40 shrink-0 flex-col items-center gap-2 text-center"
           >
-            <img src={item.avatarUrl} alt="" className="h-16 w-16 rounded-full bg-surface-2 object-cover" />
+            <Avatar url={item.avatarUrl} name={item.username} size={64} />
             <span className="text-sm font-medium text-ink">{item.username}</span>
             <span className="text-xs tabular-nums text-ink/50">{countLabel(item.views, 'view')}</span>
           </li>

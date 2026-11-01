@@ -227,6 +227,8 @@ export function DashboardPage() {
                 <div className="mt-6 flex gap-5">
                   <img
                     src={stats.topVideo.thumbnailUrl}
+                    referrerPolicy="no-referrer"
+                    decoding="async"
                     alt={stats.topVideo.caption}
                     className="aspect-video w-44 shrink-0 rounded-2xl bg-surface-2 object-cover"
                   />

@@ -159,8 +159,13 @@ def _page_details(page: str) -> tuple[str | None, str | None, str | None]:
     return (
         handle.lower() if handle else None,
         html.unescape(title.group(1)).strip() if title else None,
-        html.unescape(image.group(1)) if image else None,
+        small_avatar(html.unescape(image.group(1))) if image else None,
     )
+
+
+def small_avatar(url: str, px: int = 176) -> str:
+    """Channel pages give a 900px avatar (…=s900-c-k-…). The app shows it at 48-64px."""
+    return re.sub(r"=s\d+(?=-|$)", f"=s{px}", url)
 
 
 # ----- Reading the feed ------------------------------------------------------

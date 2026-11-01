@@ -156,6 +156,8 @@ export function RemixPage() {
             <>
               <img
                 src={video.thumbnailUrl}
+                referrerPolicy="no-referrer"
+                decoding="async"
                 alt={video.caption}
                 className="aspect-video w-full rounded-2xl bg-surface-2 object-cover"
               />

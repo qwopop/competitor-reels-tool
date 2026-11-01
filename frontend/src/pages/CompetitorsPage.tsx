@@ -9,6 +9,7 @@ import { Modal, ConfirmDialog } from '@/components/Modal';
 import { plural, relativeTime } from '@/utils/format';
 import { channelLabel, parseChannelInput } from '@/utils/youtube';
 import { ChannelRefLink, ChannelVideosLink } from '@/components/YouTubeLinks';
+import { Avatar } from '@/components/Avatar';
 
 export function CompetitorsPage() {
   const api = useApi();
@@ -120,7 +121,7 @@ export function CompetitorsPage() {
             return (
               <li key={c.id} className="rise rounded-2xl bg-surface px-6 py-5 transition-colors duration-200 hover:bg-surface-2 [&+&]:mt-3">
                 <div className="flex flex-wrap items-center gap-x-6 gap-y-4">
-                  <img src={c.avatarUrl} alt={c.displayName} className="h-12 w-12 rounded-full bg-surface-2 object-cover" />
+                  <Avatar url={c.avatarUrl} name={c.displayName} size={48} />
                   <div className="min-w-0 flex-1">
                     <h3 className="truncate text-lg font-medium text-ink">{c.displayName}</h3>
                     <p className="truncate text-sm text-ink/60">

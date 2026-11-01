@@ -57,7 +57,7 @@ FEED = f"""<?xml version="1.0" encoding="UTF-8"?>
 CHANNEL_PAGE = f"""<html><head>
 <link rel="canonical" href="https://www.youtube.com/channel/{CHANNEL_ID}">
 <meta property="og:title" content="Marques Brownlee">
-<meta property="og:image" content="https://yt3.googleusercontent.com/avatar=s900">
+<meta property="og:image" content="https://yt3.googleusercontent.com/ytc/AIdro_abc=s900-c-k-c0x00ffffff-no-rj">
 </head><body><script>var ytInitialData = {{"metadata":{{"channelMetadataRenderer":{{
 "externalId":"{CHANNEL_ID}","vanityChannelUrl":"http://www.youtube.com/@MKBHD"}}}}}};</script></body></html>"""
 
@@ -168,7 +168,7 @@ def test_resolve_channel_from_a_handle_an_id_or_a_video(ref):
     assert info.channel_id == CHANNEL_ID
     assert info.handle == "mkbhd"
     assert info.title == "Marques Brownlee"
-    assert info.avatar_url == "https://yt3.googleusercontent.com/avatar=s900"
+    assert info.avatar_url == "https://yt3.googleusercontent.com/ytc/AIdro_abc=s176-c-k-c0x00ffffff-no-rj"
 
 
 def test_resolve_by_id_falls_back_to_the_feed_when_the_page_is_unavailable():
@@ -207,7 +207,7 @@ def test_adding_a_channel_stores_its_real_id_name_and_avatar(live):
     assert body["username"] == "mkbhd"
     assert body["channelUrl"] == "https://www.youtube.com/@mkbhd"
     assert body["displayName"] == "Marques Brownlee"
-    assert body["avatarUrl"] == "https://yt3.googleusercontent.com/avatar=s900"
+    assert body["avatarUrl"] == "https://yt3.googleusercontent.com/ytc/AIdro_abc=s176-c-k-c0x00ffffff-no-rj"
 
 
 def test_the_same_channel_through_another_link_is_not_duplicated(live):

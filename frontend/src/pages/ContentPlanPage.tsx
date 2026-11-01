@@ -180,7 +180,7 @@ export function ContentPlanPage() {
                   <tr key={item.id} className="bg-surface">
                     <td className="px-4 py-4 align-top text-base text-ink">
                       <div className="flex items-center gap-3">
-                        <img src={item.thumbnailUrl} alt="" className="aspect-video w-16 shrink-0 rounded-lg bg-surface-2 object-cover" />
+                        <img src={item.thumbnailUrl} referrerPolicy="no-referrer" decoding="async" alt="" className="aspect-video w-16 shrink-0 rounded-lg bg-surface-2 object-cover" />
                         <span className="max-w-xs">{item.caption}</span>
                       </div>
                     </td>
@@ -235,7 +235,7 @@ function PlanCard({
   return (
     <li className="rise rounded-2xl bg-surface-2 p-4">
       <div className="flex gap-4">
-        <img src={item.thumbnailUrl} alt="" className="aspect-video w-28 shrink-0 rounded-xl bg-surface-3 object-cover" />
+        <img src={item.thumbnailUrl} referrerPolicy="no-referrer" decoding="async" alt="" className="aspect-video w-28 shrink-0 rounded-xl bg-surface-3 object-cover" />
         <div className="min-w-0">
           <p className="text-xs text-ink/60">{channelLabel(item.competitorUsername)} · added {relativeTime(item.addedAt)}</p>
           <h3 className="mt-1 text-base font-medium leading-snug text-ink">{item.caption}</h3>

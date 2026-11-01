@@ -192,6 +192,8 @@ export function VideosPage() {
             <article key={video.id} className="rise" style={{ '--i': Math.min(index, 8) } as React.CSSProperties}>
               <img
                 src={video.thumbnailUrl}
+                referrerPolicy="no-referrer"
+                decoding="async"
                 alt={video.caption}
                 loading="lazy"
                 className="aspect-video w-full rounded-2xl bg-surface-2 object-cover"
@@ -226,6 +228,8 @@ export function VideosPage() {
               <div className="flex flex-wrap items-center gap-5">
                 <img
                   src={video.thumbnailUrl}
+                  referrerPolicy="no-referrer"
+                  decoding="async"
                   alt={video.caption}
                   loading="lazy"
                   className="aspect-video w-32 shrink-0 rounded-xl bg-surface-2 object-cover"

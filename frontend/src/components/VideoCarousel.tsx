@@ -25,7 +25,7 @@ export function VideoCarousel({ videos }: { videos: Video[] }) {
                 className="overflow-hidden rounded-3xl bg-surface-2"
                 style={{ WebkitBoxReflect: 'below 8px linear-gradient(transparent 62%, rgba(0,0,0,0.35))' }}
               >
-                <img src={video.thumbnailUrl} alt={video.caption} className="aspect-video w-full object-cover" />
+                <img src={video.thumbnailUrl} referrerPolicy="no-referrer" decoding="async" alt={video.caption} className="aspect-video w-full object-cover" />
                 <figcaption className="px-4 py-3 text-xs text-ink/70">
                   {channelLabel(video.competitorUsername)}
                   {video.viewCount > 0 ? ` · ${countLabel(video.viewCount, 'view')}` : ''}
