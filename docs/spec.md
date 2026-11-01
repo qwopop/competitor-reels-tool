@@ -42,6 +42,11 @@ A single user with no login. Anyone who can reach the app can use it.
    The Content Plan page lists the items with their status and counts, and the
    user changes status there. Plan items keep their own copy of the video's
    details, so they survive re-fetching a competitor's videos.
+   Each item can also get a **film date** and a **publish date**, and has a
+   **production checklist**: script completed, recording completed, caption
+   prepared, published. The page has three layouts: Board (by status), Table,
+   and **Calendar**, a month view showing what to film and publish on each day,
+   with unscheduled videos listed underneath.
 8. **Open a channel.** As soon as the user types a valid channel link or handle
    on the dashboard or in the Add competitor dialog, a link to that channel's
    Videos tab appears (a video link opens the video). The **Go to videos** page
@@ -54,7 +59,8 @@ A single user with no login. Anyone who can reach the app can use it.
 - **Video:** id, competitor, YouTube video ID, permalink, caption (the video
   title), description, thumbnail URL, view, like and comment counts, posted time, fetched time.
 - **Remix:** id, video, title, hook, script, CTA, created and updated times.
-- **Plan item:** id, source video id, status, a copy of the video's details, added and updated times.
+- **Plan item:** id, source video id, status, a copy of the video's details, film and
+  publish dates, four checklist ticks, added and updated times.
 
 Data survives restarts (SQLite). The contract is in `openapi.yaml`.
 

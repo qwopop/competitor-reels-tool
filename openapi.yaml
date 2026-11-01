@@ -294,7 +294,10 @@ paths:
       - $ref: "#/components/parameters/PlanItemId"
     patch:
       operationId: updateContentPlanItem
-      summary: Change the filming status of a plan item
+      summary: Change a plan item's status, film/publish dates or checklist
+      description: >
+        Only the fields sent are changed. Send filmDate or publishDate as null to
+        unschedule. An empty body, an invalid date or an unknown field is a 422.
       requestBody:
         required: true
         content:
@@ -470,7 +473,8 @@ components:
 
     ContentPlanItem:
       type: object
-      required: [id, videoId, status, competitorUsername, caption, thumbnailUrl, permalink, postedAt, addedAt, updatedAt]
+      required: [id, videoId, status, competitorUsername, caption, thumbnailUrl, permalink, postedAt, addedAt, updatedAt,
+                 filmDate, publishDate, scriptDone, recordingDone, captionDone, publishedDone]
       properties:
         id: { type: string }
         videoId: { type: string, description: The Video this item was added from }
@@ -482,6 +486,18 @@ components:
         postedAt: { type: string, format: date-time }
         addedAt: { type: string, format: date-time }
         updatedAt: { type: string, format: date-time }
+        filmDate:
+          type: [string, "null"]
+          format: date
+          description: The day to film (YYYY-MM-DD), or null when not scheduled.
+        publishDate:
+          type: [string, "null"]
+          format: date
+          description: The day to publish (YYYY-MM-DD), or null when not scheduled.
+        scriptDone: { type: boolean, description: "Checklist: script completed" }
+        recordingDone: { type: boolean, description: "Checklist: recording completed" }
+        captionDone: { type: boolean, description: "Checklist: caption prepared" }
+        publishedDone: { type: boolean, description: "Checklist: published" }
 
     AddToPlanRequest:
       type: object
@@ -491,10 +507,16 @@ components:
 
     UpdatePlanItemRequest:
       type: object
-      required: [status]
+      minProperties: 1
       additionalProperties: false
       properties:
         status: { $ref: "#/components/schemas/PlanStatus" }
+        filmDate: { type: [string, "null"], format: date }
+        publishDate: { type: [string, "null"], format: date }
+        scriptDone: { type: boolean }
+        recordingDone: { type: boolean }
+        captionDone: { type: boolean }
+        publishedDone: { type: boolean }
 
     ErrorResponse:
       type: object

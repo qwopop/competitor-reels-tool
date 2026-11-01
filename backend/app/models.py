@@ -1,6 +1,6 @@
 """SQLAlchemy tables. The database URL is configured from the environment."""
 
-from sqlalchemy import ForeignKey, Integer, String, Text, create_engine, event, inspect, text
+from sqlalchemy import Boolean, ForeignKey, Integer, String, Text, create_engine, event, false, inspect, text
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 from sqlalchemy.pool import StaticPool
@@ -80,6 +80,14 @@ class ContentPlanRow(Base):
     posted_at: Mapped[str] = mapped_column(String(40))
     added_at: Mapped[str] = mapped_column(String(40))
     updated_at: Mapped[str] = mapped_column(String(40))
+    # Calendar: the days you plan to film and to publish (YYYY-MM-DD), or None.
+    film_date: Mapped[str | None] = mapped_column(String(10), nullable=True, default=None)
+    publish_date: Mapped[str | None] = mapped_column(String(10), nullable=True, default=None)
+    # Production checklist.
+    script_done: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
+    recording_done: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
+    caption_done: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
+    published_done: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
 
 
 IN_MEMORY_URLS = ("sqlite://", "sqlite:///:memory:")
@@ -110,7 +118,18 @@ def upgrade_schema(engine: Engine) -> None:
     """Add columns introduced after a database was created. create_all only makes
     missing tables, so existing files would otherwise lack the new columns.
     Uses plain ALTER TABLE ... ADD COLUMN, which SQLite and Postgres both accept."""
-    columns = {c["name"] for c in inspect(engine).get_columns("videos")}
-    if "description" not in columns:
-        with engine.begin() as conn:
-            conn.execute(text("ALTER TABLE videos ADD COLUMN description TEXT NOT NULL DEFAULT ''"))
+    added = [
+        ("videos", "description", "TEXT NOT NULL DEFAULT ''"),
+        ("content_plan", "film_date", "VARCHAR(10)"),
+        ("content_plan", "publish_date", "VARCHAR(10)"),
+        ("content_plan", "script_done", "BOOLEAN NOT NULL DEFAULT FALSE"),
+        ("content_plan", "recording_done", "BOOLEAN NOT NULL DEFAULT FALSE"),
+        ("content_plan", "caption_done", "BOOLEAN NOT NULL DEFAULT FALSE"),
+        ("content_plan", "published_done", "BOOLEAN NOT NULL DEFAULT FALSE"),
+    ]
+    inspector = inspect(engine)
+    existing = {table: {c["name"] for c in inspector.get_columns(table)} for table in {t for t, _, _ in added}}
+    with engine.begin() as conn:
+        for table, column, ddl in added:
+            if column not in existing[table]:
+                conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {column} {ddl}"))

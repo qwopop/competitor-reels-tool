@@ -1,17 +1,19 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import type { ContentPlanItem, PlanStatus, RemixedVideo } from '@/types';
+import type { ContentPlanItem, PlanItemChanges, PlanStatus, RemixedVideo } from '@/types';
 import { useApi } from '@/services';
 import { formatDate, relativeTime } from '@/utils/format';
-import { PLAN_STATUSES } from '@/utils/plan';
+import { CHECKLIST, checklistDone, PLAN_STATUSES } from '@/utils/plan';
 import { PageHeader } from '@/components/PageHeader';
 import { EmptyState, ErrorBanner, FullPageLoader, Spinner } from '@/components/ui';
 import { ViewToggle } from '@/components/ViewToggle';
 import { ConfirmDialog } from '@/components/Modal';
 import { WatchOnYouTubeLink } from '@/components/YouTubeLinks';
 import { channelLabel } from '@/utils/youtube';
+import { ChecklistBar, PlanDates, ProductionChecklist } from '@/components/PlanSchedule';
+import { PlanCalendar } from '@/components/PlanCalendar';
 
-type PlanView = 'board' | 'table';
+type PlanView = 'board' | 'table' | 'calendar';
 
 export function ContentPlanPage() {
   const api = useApi();
@@ -56,6 +58,21 @@ export function ContentPlanPage() {
     setItems((prev) => prev?.map((x) => (x.id === updated.id ? updated : x)) ?? null);
   }
 
+  // Dates and checklist ticks save straight away; the change shows at once and
+  // is rolled back if the server refuses it.
+  async function handleChange(item: ContentPlanItem, changes: PlanItemChanges) {
+    setError(null);
+    setItems((prev) => prev?.map((x) => (x.id === item.id ? { ...x, ...changes } : x)) ?? null);
+    const res = await api.updateContentPlanItem(item.id, changes);
+    if (res.error || !res.data) {
+      setItems((prev) => prev?.map((x) => (x.id === item.id ? item : x)) ?? null);
+      setError(res.error ?? 'Could not save that change.');
+      return;
+    }
+    const updated = res.data;
+    setItems((prev) => prev?.map((x) => (x.id === updated.id ? updated : x)) ?? null);
+  }
+
   async function handleRemove(item: ContentPlanItem) {
     setPendingRemove(null);
     setError(null);
@@ -93,7 +110,7 @@ export function ContentPlanPage() {
       <PageHeader
         title="Your"
         accent="content plan"
-        description="Videos you are filming. Move each one along as it gets scripted, filmed and posted."
+        description="Videos you are filming. Schedule when to film and publish each one, and tick off the production checklist."
         actions={
           items && items.length > 0 ? (
             <ViewToggle<PlanView>
@@ -103,6 +120,7 @@ export function ContentPlanPage() {
               options={[
                 { value: 'board', label: 'Board' },
                 { value: 'table', label: 'Table' },
+                { value: 'calendar', label: 'Calendar' },
               ]}
             />
           ) : undefined
@@ -134,6 +152,8 @@ export function ContentPlanPage() {
           description="Add videos from the Videos page to start your filming list."
           action={<Link to="/videos" className="btn-primary">Go to videos</Link>}
         />
+      ) : items && view === 'calendar' ? (
+        <PlanCalendar items={items} onChange={handleChange} />
       ) : items && view === 'board' ? (
         <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
           {PLAN_STATUSES.map((column) => (
@@ -152,6 +172,7 @@ export function ContentPlanPage() {
                       remix={remixByVideo[item.videoId]}
                       busy={busyId === item.id}
                       onStatus={(status) => handleStatus(item, status)}
+                      onChange={(changes) => handleChange(item, changes)}
                       onEditRemix={() => handleEditRemix(item)}
                       onRemove={() => setPendingRemove(item)}
                     />
@@ -162,12 +183,14 @@ export function ContentPlanPage() {
         </div>
       ) : items ? (
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[56rem] border-separate border-spacing-y-2 text-left text-sm">
+          <table className="w-full min-w-[72rem] border-separate border-spacing-y-2 text-left text-sm">
             <thead>
               <tr className="text-ink/60">
                 <th scope="col" className="px-4 py-2 font-medium">Video</th>
                 <th scope="col" className="px-4 py-2 font-medium">Competitor</th>
                 <th scope="col" className="px-4 py-2 font-medium">Status</th>
+                <th scope="col" className="px-4 py-2 font-medium">Schedule</th>
+                <th scope="col" className="px-4 py-2 font-medium">Checklist</th>
                 <th scope="col" className="px-4 py-2 font-medium">Hook</th>
                 <th scope="col" className="px-4 py-2 font-medium">Added</th>
                 <th scope="col" className="px-4 py-2 font-medium">Actions</th>
@@ -187,6 +210,13 @@ export function ContentPlanPage() {
                     <td className="px-4 py-4 align-top text-ink/70">{channelLabel(item.competitorUsername)}</td>
                     <td className="px-4 py-4 align-top">
                       <StatusControl item={item} busy={busyId === item.id} onChange={(s) => handleStatus(item, s)} />
+                    </td>
+                    <td className="w-40 px-4 py-4 align-top">
+                      <PlanDates item={item} compact onChange={(changes) => handleChange(item, changes)} />
+                    </td>
+                    <td className="w-36 px-4 py-4 align-top text-ink/70">
+                      <span className="tabular-nums text-ink">{checklistDone(item)}/{CHECKLIST.length}</span> done
+                      <ChecklistBar done={checklistDone(item)} className="mt-2" />
                     </td>
                     <td className="px-4 py-4 align-top text-ink/70">{remix ? remix.hook : 'No breakdown yet'}</td>
                     <td className="px-4 py-4 align-top text-ink/70">{formatDate(item.addedAt)}</td>
@@ -222,6 +252,7 @@ function PlanCard({
   remix,
   busy,
   onStatus,
+  onChange,
   onEditRemix,
   onRemove,
 }: {
@@ -229,6 +260,7 @@ function PlanCard({
   remix: RemixedVideo | undefined;
   busy: boolean;
   onStatus: (status: PlanStatus) => void;
+  onChange: (changes: PlanItemChanges) => void;
   onEditRemix: () => void;
   onRemove: () => void;
 }) {
@@ -246,6 +278,12 @@ function PlanCard({
       </div>
       <div className="mt-4">
         <StatusControl item={item} busy={busy} onChange={onStatus} />
+      </div>
+      <div className="mt-4 border-t border-white/5 pt-4">
+        <PlanDates item={item} onChange={onChange} />
+      </div>
+      <div className="mt-4">
+        <ProductionChecklist item={item} onChange={onChange} />
       </div>
       <div className="mt-3">
         <PlanLinks item={item} hasRemix={Boolean(remix)} busy={busy} onEditRemix={onEditRemix} />

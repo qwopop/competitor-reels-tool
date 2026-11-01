@@ -65,7 +65,20 @@ export interface ContentPlanItem {
   postedAt: string;
   addedAt: string;
   updatedAt: string;
+  // Calendar: the days to film and to publish (YYYY-MM-DD), or null when not scheduled.
+  filmDate: string | null;
+  publishDate: string | null;
+  // Production checklist.
+  scriptDone: boolean;
+  recordingDone: boolean;
+  captionDone: boolean;
+  publishedDone: boolean;
 }
+
+export type ChecklistKey = 'scriptDone' | 'recordingDone' | 'captionDone' | 'publishedDone';
+
+// Fields of a plan item that can be changed. Only the ones given are sent.
+export type PlanItemChanges = Partial<Pick<ContentPlanItem, 'status' | 'filmDate' | 'publishDate' | ChecklistKey>>;
 
 export type RemixTemplate = 'default' | 'educational' | 'storytelling' | 'promotional';
 
@@ -98,5 +111,6 @@ export interface VideosApi {
     id: string,
     status: PlanStatus
   ): Promise<ServiceResult<ContentPlanItem>>;
+  updateContentPlanItem(id: string, changes: PlanItemChanges): Promise<ServiceResult<ContentPlanItem>>;
   removeFromContentPlan(id: string): Promise<ServiceResult<void>>;
 }

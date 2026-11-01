@@ -220,7 +220,11 @@ def update_content_plan_item(
     item = store.get_plan_item(db, plan_item_id)
     if not item:
         raise not_found("Plan item not found.")
-    return store.update_plan_status(db, item, payload.status)
+    changes = {
+        name: (value.isoformat() if hasattr(value, "isoformat") else value)
+        for name, value in payload.model_dump(exclude_unset=True, by_alias=False).items()
+    }
+    return store.update_plan_item(db, item, changes)
 
 
 @router.delete(

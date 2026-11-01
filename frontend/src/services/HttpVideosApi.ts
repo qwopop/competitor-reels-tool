@@ -1,12 +1,13 @@
 import type {
   Competitor,
   ContentPlanItem,
+  PlanItemChanges,
   PlanStatus,
+  RemixTemplate,
+  RemixedVideo,
+  ServiceResult,
   Video,
   VideosApi,
-  RemixedVideo,
-  RemixTemplate,
-  ServiceResult,
 } from '@/types';
 
 // Real implementation of VideosApi that talks to the FastAPI backend in
@@ -141,6 +142,10 @@ export class HttpVideosApi implements VideosApi {
 
   updateContentPlanStatus(id: string, status: PlanStatus) {
     return request<ContentPlanItem>('PATCH', `/content-plan/${enc(id)}`, { status });
+  }
+
+  updateContentPlanItem(id: string, changes: PlanItemChanges) {
+    return request<ContentPlanItem>('PATCH', `/content-plan/${enc(id)}`, changes);
   }
 
   removeFromContentPlan(id: string) {

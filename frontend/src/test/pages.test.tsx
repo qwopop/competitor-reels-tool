@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import type {
@@ -35,6 +35,7 @@ class StubApi implements Partial<VideosApi> {
   listContentPlan = vi.fn(async (): Promise<ServiceResult<ContentPlanItem[]>> => ({ data: [], error: null }));
   addToContentPlan = vi.fn(async (): Promise<ServiceResult<ContentPlanItem>> => ({ data: null, error: 'nope' }));
   updateContentPlanStatus = vi.fn(async (): Promise<ServiceResult<ContentPlanItem>> => ({ data: null, error: 'nope' }));
+  updateContentPlanItem = vi.fn(async (): Promise<ServiceResult<ContentPlanItem>> => ({ data: null, error: 'nope' }));
   removeFromContentPlan = vi.fn(async (): Promise<ServiceResult<void>> => ({ data: undefined, error: null }));
 }
 
@@ -69,6 +70,12 @@ function planItem(overrides: Partial<ContentPlanItem> = {}): ContentPlanItem {
     postedAt: new Date(Date.now() - 86_400_000).toISOString(),
     addedAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
+    filmDate: null,
+    publishDate: null,
+    scriptDone: false,
+    recordingDone: false,
+    captionDone: false,
+    publishedDone: false,
     ...overrides,
   };
 }
@@ -536,5 +543,89 @@ describe('links to YouTube', () => {
 
     const links = await screen.findAllByRole('link', { name: /watch on youtube/i });
     expect(links[0]).toHaveAttribute('href', 'https://www.youtube.com/shorts/BBBBBBBBBB2');
+  });
+});
+
+describe('Content plan: schedule and production checklist', () => {
+  function today(offset = 0) {
+    const d = new Date();
+    d.setDate(d.getDate() + offset);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  }
+
+  it('each board card has the four-step checklist, and ticking a step saves it', async () => {
+    const user = userEvent.setup();
+    const stub = new StubApi();
+    stub.listContentPlan.mockResolvedValue({ data: [planItem({ recordingDone: true })], error: null });
+    stub.updateContentPlanItem.mockResolvedValue({ data: planItem({ recordingDone: true, scriptDone: true }), error: null });
+    renderAt(stub, '/content-plan', <ContentPlanPage />, '/content-plan');
+
+    const checklist = await screen.findByRole('group', { name: /production checklist/i });
+    expect(within(checklist).getByText('1/4')).toBeInTheDocument();
+    expect(within(checklist).getByRole('checkbox', { name: 'Script completed' })).not.toBeChecked();
+    expect(within(checklist).getByRole('checkbox', { name: 'Recording completed' })).toBeChecked();
+    expect(within(checklist).getByRole('checkbox', { name: 'Caption prepared' })).not.toBeChecked();
+    expect(within(checklist).getByRole('checkbox', { name: 'Published' })).not.toBeChecked();
+
+    await user.click(within(checklist).getByRole('checkbox', { name: 'Script completed' }));
+    expect(stub.updateContentPlanItem).toHaveBeenCalledWith('plan_1', { scriptDone: true });
+    expect(await within(checklist).findByText('2/4')).toBeInTheDocument();
+  });
+
+  it('a failed save puts the checkbox back and shows the error', async () => {
+    const user = userEvent.setup();
+    const stub = new StubApi();
+    stub.listContentPlan.mockResolvedValue({ data: [planItem()], error: null });
+    stub.updateContentPlanItem.mockResolvedValue({ data: null, error: 'Server is down' });
+    renderAt(stub, '/content-plan', <ContentPlanPage />, '/content-plan');
+
+    const box = await screen.findByRole('checkbox', { name: 'Caption prepared' });
+    await user.click(box);
+    expect(await screen.findByText('Server is down')).toBeInTheDocument();
+    expect(box).not.toBeChecked();
+  });
+
+  it('setting a film date saves it', async () => {
+    const stub = new StubApi();
+    stub.listContentPlan.mockResolvedValue({ data: [planItem()], error: null });
+    stub.updateContentPlanItem.mockResolvedValue({ data: planItem({ filmDate: '2026-11-10' }), error: null });
+    renderAt(stub, '/content-plan', <ContentPlanPage />, '/content-plan');
+
+    const input = await screen.findByLabelText(/film date for/i);
+    fireEvent.change(input, { target: { value: '2026-11-10' } });
+    expect(stub.updateContentPlanItem).toHaveBeenCalledWith('plan_1', { filmDate: '2026-11-10' });
+  });
+
+  it('the calendar shows film and publish days, and lists unscheduled videos', async () => {
+    const user = userEvent.setup();
+    const stub = new StubApi();
+    stub.listContentPlan.mockResolvedValue({
+      data: [
+        planItem({ filmDate: today(), publishDate: today(), scriptDone: true }),
+        planItem({ id: 'plan_2', videoId: 'video_2', caption: 'Unscheduled idea' }),
+      ],
+      error: null,
+    });
+    renderAt(stub, '/content-plan', <ContentPlanPage />, '/content-plan');
+
+    await user.click(await screen.findByRole('button', { name: 'Calendar' }));
+    expect(screen.getByRole('grid', { name: /content calendar/i })).toBeInTheDocument();
+    const film = screen.getByRole('button', { name: /^film: i let ai build my saas in 48 hours\. checklist 1 of 4/i });
+    expect(screen.getByRole('button', { name: /^publish: i let ai build my saas/i })).toBeInTheDocument();
+
+    const unscheduled = screen.getByRole('region', { name: /not scheduled yet/i });
+    expect(within(unscheduled).getByText('Unscheduled idea')).toBeInTheDocument();
+
+    await user.click(film);
+    const panel = screen.getByRole('region', { name: /selected video/i });
+    expect(within(panel).getByRole('checkbox', { name: 'Script completed' })).toBeChecked();
+    expect(within(panel).getByLabelText(/film date for/i)).toHaveValue(today());
+  });
+
+  it('warns when publishing is set before filming', async () => {
+    const stub = new StubApi();
+    stub.listContentPlan.mockResolvedValue({ data: [planItem({ filmDate: '2026-11-10', publishDate: '2026-11-08' })], error: null });
+    renderAt(stub, '/content-plan', <ContentPlanPage />, '/content-plan');
+    expect(await screen.findByText(/publishing is set before filming/i)).toBeInTheDocument();
   });
 });

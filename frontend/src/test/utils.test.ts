@@ -67,8 +67,8 @@ describe('dashboardStats', () => {
   ];
   const remixes: RemixedVideo[] = [{ id: 'm', videoId: 'a', title: '', hook: '', script: '', cta: '', createdAt: '', updatedAt: '' }];
   const plan: ContentPlanItem[] = [
-    { id: 'p1', videoId: 'a', status: 'filmed', competitorUsername: 'one', caption: '', thumbnailUrl: '', permalink: '', postedAt: '', addedAt: '', updatedAt: '' },
-    { id: 'p2', videoId: 'b', status: 'not_started', competitorUsername: 'one', caption: '', thumbnailUrl: '', permalink: '', postedAt: '', addedAt: '', updatedAt: '' },
+    { id: 'p1', videoId: 'a', status: 'filmed', competitorUsername: 'one', caption: '', thumbnailUrl: '', permalink: '', postedAt: '', addedAt: '', updatedAt: '', filmDate: null, publishDate: null, scriptDone: false, recordingDone: false, captionDone: false, publishedDone: false },
+    { id: 'p2', videoId: 'b', status: 'not_started', competitorUsername: 'one', caption: '', thumbnailUrl: '', permalink: '', postedAt: '', addedAt: '', updatedAt: '', filmDate: null, publishDate: null, scriptDone: false, recordingDone: false, captionDone: false, publishedDone: false },
   ];
 
   it('totals counts and engagement across stored Videos', () => {
@@ -130,5 +130,18 @@ describe('videoStats', () => {
     expect(videoStats({ viewCount: 1200, likeCount: 5, commentCount: 0 })).toBe('1.2K views · 5 likes');
     expect(videoStats({ viewCount: 2, likeCount: 1, commentCount: 1 })).toBe('2 views · 1 like · 1 comment');
     expect(videoStats({ viewCount: 0, likeCount: 0, commentCount: 0 })).toBe('');
+  });
+});
+
+describe('calendar month grid', () => {
+  it('starts on a Monday and covers whole weeks', async () => {
+    const { monthGrid } = await import('@/components/PlanCalendar');
+    const { isoDay } = await import('@/utils/plan');
+    const days = monthGrid(new Date(2026, 10, 1)); // November 2026 starts on a Sunday
+    expect(isoDay(days[0])).toBe('2026-10-26');
+    expect(days[0].getDay()).toBe(1);
+    expect(days.length % 7).toBe(0);
+    expect(isoDay(days[days.length - 1])).toBe('2026-12-06');
+    expect(days.map(isoDay)).toContain('2026-11-30');
   });
 });

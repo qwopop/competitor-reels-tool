@@ -1,6 +1,7 @@
 import type {
   Competitor,
   ContentPlanItem,
+  PlanItemChanges,
   PlanStatus,
   Video,
   VideosApi,
@@ -361,6 +362,12 @@ export class MockVideosApi implements VideosApi {
       postedAt: video.postedAt,
       addedAt: now,
       updatedAt: now,
+      filmDate: null,
+      publishDate: null,
+      scriptDone: false,
+      recordingDone: false,
+      captionDone: false,
+      publishedDone: false,
     };
     items.unshift(item);
     write(PLAN_KEY, items);
@@ -379,6 +386,16 @@ export class MockVideosApi implements VideosApi {
       status,
       updatedAt: new Date().toISOString(),
     };
+    items[idx] = updated;
+    write(PLAN_KEY, items);
+    return delay(ok(updated), 150);
+  }
+
+  async updateContentPlanItem(id: string, changes: PlanItemChanges): Promise<ServiceResult<ContentPlanItem>> {
+    const items = read<ContentPlanItem[]>(PLAN_KEY, []);
+    const idx = items.findIndex((item) => item.id === id);
+    if (idx === -1) return fail<ContentPlanItem>('Plan item not found.');
+    const updated: ContentPlanItem = { ...items[idx], ...changes, updatedAt: new Date().toISOString() };
     items[idx] = updated;
     write(PLAN_KEY, items);
     return delay(ok(updated), 150);

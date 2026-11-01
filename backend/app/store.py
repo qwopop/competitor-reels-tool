@@ -142,8 +142,10 @@ def add_plan_item(db: Session, video: VideoRow) -> tuple[ContentPlanRow, bool]:
     return _add_or_get(db, item, lambda: get_plan_item_for_video(db, video_id))
 
 
-def update_plan_status(db: Session, item: ContentPlanRow, status: str) -> ContentPlanRow:
-    item.status = status
+def update_plan_item(db: Session, item: ContentPlanRow, changes: dict) -> ContentPlanRow:
+    """Apply status, dates (YYYY-MM-DD or None) and checklist ticks."""
+    for field, value in changes.items():
+        setattr(item, field, value)
     item.updated_at = generator.now_iso()
     db.commit()
     return item
