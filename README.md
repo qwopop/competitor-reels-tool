@@ -47,6 +47,17 @@ Data is stored in `backend/data/clipremix.db` and survives restarts. Delete that
 
 API docs are at http://localhost:8091/docs while the backend runs.
 
+### Run the production image
+
+The `Dockerfile` builds one image: Node compiles the frontend into static files, and the FastAPI backend serves them next to the API.
+
+```bash
+make docker-build   # docker build -t clipremix:latest .
+make docker-run     # http://localhost:8000, data kept in the clipremix-data volume
+```
+
+`GET /api/health` reports whether the app and its database are up.
+
 ## Deploying
 
 The frontend, API and database deploy to Render from `render.yaml`. See [`docs/deploy.md`](docs/deploy.md).

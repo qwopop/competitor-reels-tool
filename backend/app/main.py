@@ -12,6 +12,7 @@ from sqlalchemy.orm import sessionmaker
 from app.generator import SampleSource
 from app.youtube import YouTubeSource
 from app.models import Base, make_engine, upgrade_schema
+from app.frontend import mount_frontend
 from app.routers import router
 
 # A new file name: the YouTube tables differ from the earlier Instagram ones.
@@ -56,6 +57,10 @@ def create_app(database_url: str | None = None, video_source=_FROM_ENV) -> FastA
         allow_headers=["*"],
     )
     app.include_router(router)
+    # Production: the same server also serves the built frontend (see Dockerfile).
+    static_dir = os.getenv("STATIC_DIR", "").strip()
+    if static_dir:
+        mount_frontend(app, static_dir)
     return app
 
 

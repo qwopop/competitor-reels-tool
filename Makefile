@@ -1,4 +1,4 @@
-.PHONY: install run frontend dev test check
+.PHONY: install run frontend dev test check docker-build docker-run
 
 install:
 	cd backend && uv sync
@@ -22,3 +22,11 @@ test:
 
 check: test
 	cd frontend && npm run typecheck && npm run build
+
+# One production image: the backend serves the built frontend. Open http://localhost:8000
+docker-build:
+	docker build -t clipremix:latest .
+
+# Runs the image with a named volume, so the SQLite file survives restarts.
+docker-run:
+	docker run --rm -p 8000:8000 -v clipremix-data:/app/data --name clipremix clipremix:latest

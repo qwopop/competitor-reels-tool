@@ -2,7 +2,10 @@
 
 from collections.abc import Iterator
 
+import os
+
 from fastapi import APIRouter, Body, Depends, HTTPException, Request, Response, status
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app import store
@@ -28,6 +31,21 @@ def get_db(request: Request) -> Iterator[Session]:
         yield session
     finally:
         session.close()
+
+
+@router.get("/health")
+def health(db: Session = Depends(get_db)):
+    """For load balancers, Docker and CI: is the app up, and can it reach its database?
+
+    `version` is the deployed git commit (Render sets RENDER_GIT_COMMIT; the
+    Dockerfile can set APP_VERSION), so CI can tell when a new deploy is live.
+    """
+    try:
+        db.execute(text("SELECT 1"))
+    except Exception as err:  # any database failure means "not healthy"
+        raise HTTPException(status_code=503, detail="Database unavailable.") from err
+    version = os.getenv("RENDER_GIT_COMMIT") or os.getenv("APP_VERSION") or "dev"
+    return {"status": "ok", "database": "ok", "version": version}
 
 
 def not_found(message: str) -> HTTPException:

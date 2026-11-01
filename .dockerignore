@@ -1,0 +1,13 @@
+# Keep the build context small and free of local state.
+.git
+**/node_modules
+**/dist
+**/.venv
+**/__pycache__
+**/.pytest_cache
+backend/data
+**/*.db
+e2e
+docs
+_docs
+**/.env
