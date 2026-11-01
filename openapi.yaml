@@ -70,6 +70,11 @@ paths:
       operationId: fetchReelsForCompetitor
       summary: Fetch the 20 most recent Reels for a competitor
       description: >
+        Real Reels come from the Instagram Graph API when the server has
+        INSTAGRAM_ACCESS_TOKEN and INSTAGRAM_USER_ID set; otherwise sample Reels
+        are generated. If Instagram fails (account is not a public Business or
+        Creator account, expired token, rate limit, no Reels), the response is
+        502 and the stored Reels are left as they were.
         Stores 20 new Reels for this competitor and removes the old ones, with one
         exception: a Reel that has a remix or a content plan item is kept, so a
         re-fetch never destroys the user's work. The library can therefore hold
@@ -84,6 +89,8 @@ paths:
                 items:
                   $ref: "#/components/schemas/Reel"
         "404":
+          $ref: "#/components/responses/Error"
+        "502":
           $ref: "#/components/responses/Error"
 
   /api/reels:
@@ -385,10 +392,15 @@ components:
         permalink:
           type: string
           format: uri
-          description: Link to the competitor's Instagram profile
+          description: >
+            Link to the Reel itself, e.g. https://www.instagram.com/reel/<shortcode>/.
+            Sample Reels have no real post and link to the competitor's profile.
+        viewCount:
+          type: integer
+          minimum: 0
+          description: 0 when unknown; the Graph API does not report views for other accounts.
         caption: { type: string }
         thumbnailUrl: { type: string, format: uri }
-        viewCount: { type: integer, minimum: 0 }
         likeCount: { type: integer, minimum: 0 }
         commentCount: { type: integer, minimum: 0 }
         postedAt: { type: string, format: date-time }

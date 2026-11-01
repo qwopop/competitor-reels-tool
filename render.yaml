@@ -15,6 +15,10 @@ services:
     envVars:
       - key: CORS_ORIGINS
         sync: false          # set to the frontend URL, e.g. https://reels-web.onrender.com
+      - key: INSTAGRAM_ACCESS_TOKEN
+        sync: false          # Graph API token; leave empty to use sample Reels (see README)
+      - key: INSTAGRAM_USER_ID
+        sync: false          # your own Instagram Business/Creator account ID
 
   - type: web
     name: reels-web

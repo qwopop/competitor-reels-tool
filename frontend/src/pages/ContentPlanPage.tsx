@@ -8,7 +8,7 @@ import { PageHeader } from '@/components/PageHeader';
 import { EmptyState, ErrorBanner, FullPageLoader, Spinner } from '@/components/ui';
 import { ViewToggle } from '@/components/ViewToggle';
 import { ConfirmDialog } from '@/components/Modal';
-import { InstagramReelsLink } from '@/components/InstagramReelsLink';
+import { ReelOnInstagramLink } from '@/components/InstagramReelsLink';
 
 type PlanView = 'board' | 'table';
 
@@ -305,7 +305,8 @@ function PlanLinks({
       <button type="button" onClick={onEditRemix} disabled={busy} className="btn-outline px-3 py-1.5 text-xs">
         {busy ? <Spinner /> : null} {hasRemix ? 'Edit remix' : 'Create breakdown'}
       </button>
-      <InstagramReelsLink
+      <ReelOnInstagramLink
+        permalink={item.permalink}
         username={item.competitorUsername}
         className="text-ink/60 underline-offset-4 transition-colors hover:text-ink hover:underline"
       />

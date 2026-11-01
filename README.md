@@ -67,7 +67,12 @@ make check      # tests, typecheck and production build
 
 ## Notes
 
-- Competitor Reels are **sample data**. The backend generates them the same way the original frontend mock did, because scraping Instagram is outside this project's scope. `backend/app/generator.py` is the single place to replace it with a real source.
+- **Real Reels** come from the official Instagram Graph API (Business Discovery) when the backend has these two environment variables. Each Reel then links to its own page, such as `https://www.instagram.com/reel/DfMPGCguhRQ/`:
+  - `INSTAGRAM_ACCESS_TOKEN`: a long-lived token with the `instagram_basic` permission, from a Meta developer app connected to your own Instagram Business or Creator account.
+  - `INSTAGRAM_USER_ID`: the Instagram user ID of that account of yours (not the competitor's).
+
+  Only public **Business or Creator** competitor accounts can be read this way. The API does not report view counts for other accounts, so real Reels show likes and comments only. The code is in `backend/app/instagram.py`.
+- Without those variables, competitor Reels are **sample data** from `backend/app/generator.py`, and their links open the competitor's Reels tab instead of a specific video.
 - Remixes are produced by a **template**, not an LLM. Swap `build_remix` in `backend/app/generator.py` to call a model.
 - There is no login. Anyone who can reach the server can use it.
 - Set `DATABASE_URL=sqlite://` to run with an in-memory database. Nothing is saved, which is useful for trying the API or for tests.

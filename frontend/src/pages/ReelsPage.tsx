@@ -10,7 +10,7 @@ import { EmptyState, ErrorBanner, FullPageLoader, Spinner } from '@/components/u
 import { Notice } from '@/components/Notice';
 import { ViewToggle } from '@/components/ViewToggle';
 import { useDialogFocus } from '@/components/useDialogFocus';
-import { InstagramReelsLink } from '@/components/InstagramReelsLink';
+import { ReelOnInstagramLink } from '@/components/InstagramReelsLink';
 
 type LibraryView = 'grid' | 'list';
 
@@ -295,7 +295,7 @@ function ReelActions({
         {busy ? <Spinner /> : null} Remix
       </button>
       <div className="basis-full">
-        <InstagramReelsLink username={reel.competitorUsername} />
+        <ReelOnInstagramLink permalink={reel.permalink} username={reel.competitorUsername} />
       </div>
     </div>
   );

@@ -34,3 +34,9 @@ export function parseUsername(input: string): string | null {
 export function instagramReelsUrl(username: string): string {
   return `https://www.instagram.com/${encodeURIComponent(username.toLowerCase())}/reels/`;
 }
+
+// True when the link opens one specific post or Reel (instagram.com/reel/<code>/),
+// not just a profile. Sample Reels only have the profile link.
+export function isPostLink(permalink: string): boolean {
+  return /instagram\.com\/(?:[^/?#]+\/)?(?:reel|reels|p|tv)\/[A-Za-z0-9_-]+/i.test(permalink);
+}

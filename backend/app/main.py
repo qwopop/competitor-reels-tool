@@ -9,6 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.engine import make_url
 from sqlalchemy.orm import sessionmaker
 
+from app.instagram import source_from_env
 from app.models import Base, make_engine
 from app.routers import router
 
@@ -16,7 +17,12 @@ DEFAULT_DATABASE_URL = "sqlite:///./data/app.db"
 DEV_CORS_ORIGINS = "http://localhost:5173,http://127.0.0.1:5173"
 
 
-def create_app(database_url: str | None = None) -> FastAPI:
+_FROM_ENV = object()
+
+
+def create_app(database_url: str | None = None, reel_source=_FROM_ENV) -> FastAPI:
+    """`reel_source` fetches real Reels; by default it is built from the INSTAGRAM_* env vars,
+    and None means sample data."""
     url = database_url or os.getenv("DATABASE_URL", DEFAULT_DATABASE_URL)
     engine = make_engine(url)
     session_factory = sessionmaker(bind=engine, expire_on_commit=False)
@@ -34,6 +40,7 @@ def create_app(database_url: str | None = None) -> FastAPI:
     origins = [o.strip() for o in os.getenv("CORS_ORIGINS", DEV_CORS_ORIGINS).split(",") if o.strip()]
     app = FastAPI(title="Competitor Reels API", version="0.1.0", lifespan=lifespan)
     app.state.session_factory = session_factory
+    app.state.reel_source = source_from_env() if reel_source is _FROM_ENV else reel_source
     # The Vite dev server proxies /api, so CORS only matters if you call the API directly.
     app.add_middleware(
         CORSMiddleware,

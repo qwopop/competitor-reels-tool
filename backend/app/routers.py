@@ -6,6 +6,7 @@ from fastapi import APIRouter, Body, Depends, HTTPException, Request, Response, 
 from sqlalchemy.orm import Session
 
 from app import generator, store
+from app.instagram import InstagramError
 from app.schemas import (
     AddCompetitorRequest,
     AddToPlanRequest,
@@ -75,11 +76,25 @@ def remove_competitor(competitor_id: str, db: Session = Depends(get_db)):
 
 
 @router.post("/competitors/{competitor_id}/reels/fetch", response_model=list[Reel])
-def fetch_reels_for_competitor(competitor_id: str, db: Session = Depends(get_db)):
+def fetch_reels_for_competitor(competitor_id: str, request: Request, db: Session = Depends(get_db)):
     competitor = store.get_competitor(db, competitor_id)
     if not competitor:
         raise not_found("Competitor not found.")
-    return store.replace_reels_for_competitor(db, competitor)
+    source = request.app.state.reel_source
+    if source is None:
+        return store.replace_reels_for_competitor(db, competitor)
+    try:
+        reels = source.fetch_reels(competitor)
+    except InstagramError as err:
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(err)) from err
+    if not reels:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"@{competitor.username} has no Reels on Instagram yet.",
+        )
+    return store.replace_reels_for_competitor(db, competitor, reels)
 
 
 @router.get("/reels", response_model=list[Reel])

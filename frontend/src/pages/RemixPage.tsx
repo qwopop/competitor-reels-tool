@@ -8,7 +8,7 @@ import { ErrorBanner, FullPageLoader, Spinner } from '@/components/ui';
 import { ConfirmDialog } from '@/components/Modal';
 import { REMIX_TEMPLATES } from '@/utils/templates';
 import { planStatusMeta } from '@/utils/plan';
-import { InstagramReelsLink } from '@/components/InstagramReelsLink';
+import { ReelOnInstagramLink } from '@/components/InstagramReelsLink';
 
 export function RemixPage() {
   const { id } = useParams<{ id: string }>();
@@ -166,7 +166,7 @@ export function RemixPage() {
                 {reelStats(reel)}
               </p>
               <div className="mt-4">
-                <InstagramReelsLink username={reel.competitorUsername} />
+                <ReelOnInstagramLink permalink={reel.permalink} username={reel.competitorUsername} />
               </div>
             </>
           ) : (

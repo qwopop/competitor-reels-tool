@@ -36,10 +36,11 @@ export function countLabel(count: number, singular: string): string {
   return `${compactNumber(count)} ${count === 1 ? singular : `${singular}s`}`;
 }
 
-// "710.7K views · 61K likes · 1 comment"
+// "710.7K views · 61K likes · 1 comment". Views are left out when unknown (0):
+// the Instagram API does not report them for other accounts' Reels.
 export function reelStats(reel: { viewCount: number; likeCount: number; commentCount: number }): string {
   return [
-    countLabel(reel.viewCount, 'view'),
+    ...(reel.viewCount > 0 ? [countLabel(reel.viewCount, 'view')] : []),
     countLabel(reel.likeCount, 'like'),
     countLabel(reel.commentCount, 'comment'),
   ].join(' · ');

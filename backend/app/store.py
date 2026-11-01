@@ -51,8 +51,10 @@ def delete_competitor(db: Session, competitor: CompetitorRow) -> None:
     db.commit()
 
 
-def replace_reels_for_competitor(db: Session, competitor: CompetitorRow) -> list[ReelRow]:
-    """Swap in 20 new Reels, keeping any Reel that has a remix or a plan item.
+def replace_reels_for_competitor(
+    db: Session, competitor: CompetitorRow, reels: list[ReelRow] | None = None
+) -> list[ReelRow]:
+    """Swap in new Reels (sample ones when `reels` is None), keeping any Reel that has a remix or a plan item.
 
     Deleting a remixed Reel would cascade to its remix and throw away the
     user's edits, and a planned Reel could no longer be remixed.
@@ -65,7 +67,8 @@ def replace_reels_for_competitor(db: Session, competitor: CompetitorRow) -> list
             ReelRow.competitor_id == competitor.id, ReelRow.id.not_in(keep_ids)
         )
     )
-    reels = generator.build_reels(competitor)
+    if reels is None:
+        reels = generator.build_reels(competitor)
     db.add_all(reels)
     db.commit()
     return reels

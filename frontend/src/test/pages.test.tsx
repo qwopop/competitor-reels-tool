@@ -505,3 +505,29 @@ describe('links to a profile’s Reels on Instagram', () => {
     for (const link of links) expect(link).toHaveAttribute('href', 'https://www.instagram.com/vibecoder/reels/');
   });
 });
+
+describe('links to the Reel itself', () => {
+  it('links a fetched Reel to its own page on Instagram', async () => {
+    const stub = new StubApi();
+    stub.listReels.mockResolvedValue({
+      data: [reel({ competitorUsername: 'nick_saraev', permalink: 'https://www.instagram.com/reel/DfMPGCguhRQ/' })],
+      error: null,
+    });
+    renderAt(stub, '/reels', <ReelsPage />, '/reels');
+
+    const links = await screen.findAllByRole('link', { name: /watch this reel on instagram/i });
+    for (const link of links) expect(link).toHaveAttribute('href', 'https://www.instagram.com/reel/DfMPGCguhRQ/');
+  });
+
+  it('links a plan item to its Reel', async () => {
+    const stub = new StubApi();
+    stub.listContentPlan.mockResolvedValue({
+      data: [planItem({ permalink: 'https://www.instagram.com/reel/DfMPGCguhRQ/' })],
+      error: null,
+    });
+    renderAt(stub, '/content-plan', <ContentPlanPage />, '/content-plan');
+
+    const links = await screen.findAllByRole('link', { name: /watch this reel on instagram/i });
+    expect(links[0]).toHaveAttribute('href', 'https://www.instagram.com/reel/DfMPGCguhRQ/');
+  });
+});

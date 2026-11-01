@@ -130,3 +130,20 @@ describe('instagramReelsUrl', () => {
     expect(instagramReelsUrl('Vibe.Coder_1')).toBe('https://www.instagram.com/vibe.coder_1/reels/');
   });
 });
+
+describe('isPostLink and reelStats', () => {
+  it('tells a Reel link from a profile link', async () => {
+    const { isPostLink } = await import('@/utils/instagram');
+    expect(isPostLink('https://www.instagram.com/reel/DfMPGCguhRQ/')).toBe(true);
+    expect(isPostLink('https://www.instagram.com/nick_saraev/reel/DfMPGCguhRQ/')).toBe(true);
+    expect(isPostLink('https://www.instagram.com/p/ABC_12-x/')).toBe(true);
+    expect(isPostLink('https://www.instagram.com/nick_saraev/')).toBe(false);
+    expect(isPostLink('https://www.instagram.com/nick_saraev/reels/')).toBe(false);
+  });
+
+  it('leaves views out when Instagram did not report them', async () => {
+    const { reelStats } = await import('@/utils/format');
+    expect(reelStats({ viewCount: 0, likeCount: 5, commentCount: 1 })).toBe('5 likes · 1 comment');
+    expect(reelStats({ viewCount: 2, likeCount: 1, commentCount: 0 })).toBe('2 views · 1 like · 0 comments');
+  });
+});
