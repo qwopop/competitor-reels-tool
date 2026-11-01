@@ -9,6 +9,7 @@ const TITLES: [prefix: string, title: string][] = [
   ['/videos', 'Videos'],
   ['/remixes', 'Remixes'],
   ['/remix/', 'Edit remix'],
+  ['/go-to-videos', 'Go to videos'],
 ];
 
 export function pageTitle(pathname: string): string {

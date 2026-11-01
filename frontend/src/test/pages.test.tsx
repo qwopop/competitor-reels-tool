@@ -629,3 +629,24 @@ describe('Content plan: schedule and production checklist', () => {
     expect(await screen.findByText(/publishing is set before filming/i)).toBeInTheDocument();
   });
 });
+
+describe('add-competitor modal after an error (found by e2e issue 53)', () => {
+  it('clears the old error as soon as the input changes, so the preview link shows', async () => {
+    const user = userEvent.setup();
+    const stub = new StubApi();
+    stub.addCompetitor.mockResolvedValue({ data: null, error: 'Please paste a YouTube channel link' });
+    renderAt(stub, '/competitors', <CompetitorsPage />, '/competitors');
+
+    await user.click(await screen.findByRole('button', { name: /add competitor/i }));
+    const dialog = screen.getByRole('dialog');
+    const input = within(dialog).getByRole('textbox');
+    await user.type(input, 'https://twitter.com/x');
+    await user.click(within(dialog).getByRole('button', { name: /add competitor/i }));
+    expect(await within(dialog).findByRole('alert')).toBeInTheDocument();
+
+    await user.clear(input);
+    await user.type(input, '@vibecoder');
+    expect(within(dialog).queryByRole('alert')).not.toBeInTheDocument();
+    expect(within(dialog).getByRole('link', { name: /open @vibecoder on youtube/i })).toBeInTheDocument();
+  });
+});

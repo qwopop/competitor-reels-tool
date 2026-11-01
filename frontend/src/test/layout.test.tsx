@@ -25,6 +25,7 @@ describe('page titles', () => {
     ['/remixes', 'Remixes · ClipRemix'],
     ['/remix/remix_1', 'Edit remix · ClipRemix'],
     ['/content-plan', 'Content plan · ClipRemix'],
+    ['/go-to-videos', 'Go to videos · ClipRemix'],
   ])('%s sets the tab title to %s', (path, title) => {
     renderAt(path);
     expect(document.title).toBe(title);

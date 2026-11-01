@@ -178,7 +178,10 @@ export function CompetitorsPage() {
               id="channel-url"
               type="text"
               value={url}
-              onChange={(e) => setUrl(e.target.value)}
+              onChange={(e) => {
+                setUrl(e.target.value);
+                setAddError(null); // an old error shouldn't hide the preview of what is typed now
+              }}
               placeholder="https://www.youtube.com/@mkbhd or @mkbhd"
               className="input mt-3"
               autoComplete="off"

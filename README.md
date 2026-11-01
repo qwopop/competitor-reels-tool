@@ -71,6 +71,17 @@ make down
 
 The app waits for PostgreSQL's health check before starting, and the database lives in the `pgdata` volume, so it survives `docker compose down` (add `-v` to wipe it). Set `VIDEO_SOURCE=sample` for generated videos without YouTube access.
 
+### End-to-end tests
+
+`e2e/` holds Playwright tests, one file per feature, each tracked by a GitHub issue labelled `e2e-test`. They run in Chromium against the Docker Compose stack, with sample videos:
+
+```bash
+cd e2e && npm ci && npx playwright install chromium   # once
+make e2e                                              # starts the stack, then runs every test
+```
+
+Each test creates its own channel with a unique handle, so the suite also runs on a database that already holds data.
+
 ## Deploying
 
 The frontend, API and database deploy to Render from `render.yaml`. See [`docs/deploy.md`](docs/deploy.md).

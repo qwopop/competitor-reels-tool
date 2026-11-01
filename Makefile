@@ -1,4 +1,4 @@
-.PHONY: install run frontend dev test check docker-build docker-run db test-postgres up down integration
+.PHONY: install run frontend dev test check docker-build docker-run db test-postgres up down integration e2e
 
 install:
 	cd backend && uv sync
@@ -55,3 +55,8 @@ down:
 # Integration tests against the running stack.
 integration: up
 	cd backend && BASE_URL=$(STACK_URL) uv run pytest ../integration -q
+
+# End-to-end tests (Playwright, e2e/) against the running stack.
+# First time: cd e2e && npm ci && npx playwright install chromium
+e2e: up
+	cd e2e && BASE_URL=$(STACK_URL) npx playwright test
