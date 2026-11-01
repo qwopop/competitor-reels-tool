@@ -8,12 +8,12 @@ import { ErrorBanner, FullPageLoader, Spinner } from '@/components/ui';
 import { Modal, ConfirmDialog } from '@/components/Modal';
 import { plural, relativeTime } from '@/utils/format';
 import { parseUsername } from '@/utils/instagram';
-import { InstagramReelsLink } from '@/components/InstagramReelsLink';
+import { InstagramVideosLink } from '@/components/InstagramVideosLink';
 
 export function CompetitorsPage() {
   const api = useApi();
   const [competitors, setCompetitors] = useState<Competitor[] | null>(null);
-  const [reelCounts, setReelCounts] = useState<Record<string, number>>({});
+  const [videoCounts, setVideoCounts] = useState<Record<string, number>>({});
   const [error, setError] = useState<string | null>(null);
   const [showAdd, setShowAdd] = useState(false);
   const [url, setUrl] = useState('');
@@ -31,8 +31,8 @@ export function CompetitorsPage() {
       if (res.error) setError(res.error);
       else setCompetitors(res.data ?? []);
     });
-    api.listReels().then((res) => {
-      if (active && res.data) setReelCounts(countByCompetitor(res.data));
+    api.listVideos().then((res) => {
+      if (active && res.data) setVideoCounts(countByCompetitor(res.data));
     });
     return () => {
       active = false;
@@ -60,15 +60,15 @@ export function CompetitorsPage() {
     setFetchingId(c.id);
     setFetchedId(null);
     setError(null);
-    const res = await api.fetchReelsForCompetitor(c.id);
+    const res = await api.fetchVideosForCompetitor(c.id);
     setFetchingId(null);
     if (res.error) {
       setError(res.error);
       return;
     }
     setFetchedId(c.id);
-    const reels = await api.listReels();
-    setReelCounts(countByCompetitor(reels.data ?? []));
+    const videos = await api.listVideos();
+    setVideoCounts(countByCompetitor(videos.data ?? []));
   }
 
   async function confirmRemove(c: Competitor) {
@@ -79,7 +79,7 @@ export function CompetitorsPage() {
       return;
     }
     setCompetitors((prev) => prev?.filter((x) => x.id !== c.id) ?? null);
-    setReelCounts((prev) => {
+    setVideoCounts((prev) => {
       const next = { ...prev };
       delete next[c.id];
       return next;
@@ -91,7 +91,7 @@ export function CompetitorsPage() {
       <PageHeader
         title="Track your"
         accent="competitors"
-        description="Track an Instagram profile, then fetch its 20 most recent Reels into your library."
+        description="Track an Instagram profile, then fetch its 20 most recent Videos into your library."
         actions={
           <button type="button" onClick={() => setShowAdd(true)} className="btn-primary">
             <Plus size={15} /> Add competitor
@@ -109,14 +109,14 @@ export function CompetitorsPage() {
         <FullPageLoader label="Loading competitors…" />
       ) : competitors && competitors.length === 0 ? (
         <p className="text-base text-ink/70">
-          No competitors yet. Add your first Instagram account to start collecting Reels.
+          No competitors yet. Add your first Instagram account to start collecting Videos.
         </p>
       ) : competitors ? (
         <ul className="max-w-3xl">
           {competitors.map((c) => {
             const isFetching = fetchingId === c.id;
             const justFetched = fetchedId === c.id;
-            const count = reelCounts[c.id] ?? 0;
+            const count = videoCounts[c.id] ?? 0;
             return (
               <li key={c.id} className="rise rounded-2xl bg-surface px-6 py-5 transition-colors duration-200 hover:bg-surface-2 [&+&]:mt-3">
                 <div className="flex flex-wrap items-center gap-x-6 gap-y-4">
@@ -124,11 +124,11 @@ export function CompetitorsPage() {
                   <div className="min-w-0 flex-1">
                     <h3 className="truncate text-lg font-medium text-ink">{c.displayName}</h3>
                     <p className="truncate text-sm text-ink/60">
-                      @{c.username} · added {relativeTime(c.addedAt)} · {plural(count, 'reel')}
+                      @{c.username} · added {relativeTime(c.addedAt)} · {plural(count, 'video')}
                     </p>
-                    <InstagramReelsLink username={c.username} className="mt-1 text-sm text-ink/60 underline-offset-4 transition-colors hover:text-ink hover:underline">
-                      Reels on Instagram
-                    </InstagramReelsLink>
+                    <InstagramVideosLink username={c.username} className="mt-1 text-sm text-ink/60 underline-offset-4 transition-colors hover:text-ink hover:underline">
+                      Videos on Instagram
+                    </InstagramVideosLink>
                   </div>
                   <div className="flex items-center gap-2">
                     <button
@@ -138,7 +138,7 @@ export function CompetitorsPage() {
                       className="btn-outline px-3.5 py-2 text-sm"
                     >
                       {isFetching ? <Spinner /> : justFetched ? <Check size={14} className="text-accent" /> : <RefreshCw size={14} />}
-                      {isFetching ? 'Fetching…' : justFetched ? 'Fetched' : 'Fetch reels'}
+                      {isFetching ? 'Fetching…' : justFetched ? 'Fetched' : 'Fetch videos'}
                     </button>
                     <button
                       type="button"
@@ -153,8 +153,8 @@ export function CompetitorsPage() {
                 </div>
                 {justFetched && (
                   <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl bg-accent/10 px-4 py-3 text-sm text-ink">
-                    <span>Pulled 20 Reels into your library.</span>
-                    <Link to="/reels" className="font-medium underline-offset-4 hover:underline">View reels</Link>
+                    <span>Pulled 20 Videos into your library.</span>
+                    <Link to="/videos" className="font-medium underline-offset-4 hover:underline">View videos</Link>
                   </div>
                 )}
               </li>
@@ -189,9 +189,9 @@ export function CompetitorsPage() {
             )}
             {!addError && typedUsername && (
               <p className="mt-3">
-                <InstagramReelsLink username={typedUsername}>
-                  Preview @{typedUsername}&rsquo;s Reels on Instagram
-                </InstagramReelsLink>
+                <InstagramVideosLink username={typedUsername}>
+                  Preview @{typedUsername}&rsquo;s Videos on Instagram
+                </InstagramVideosLink>
               </p>
             )}
             <div className="mt-8 flex flex-wrap justify-end gap-3">
@@ -207,7 +207,7 @@ export function CompetitorsPage() {
       {pendingRemove && (
         <ConfirmDialog
           title={`Remove @${pendingRemove.username}?`}
-          message="Their Reels and remixes will be deleted. Reels already in your Content Plan are kept."
+          message="Their Videos and remixes will be deleted. Videos already in your Content Plan are kept."
           confirmLabel="Remove competitor"
           onConfirm={() => confirmRemove(pendingRemove)}
           onCancel={() => setPendingRemove(null)}
@@ -217,8 +217,8 @@ export function CompetitorsPage() {
   );
 }
 
-function countByCompetitor(reels: { competitorId: string }[]): Record<string, number> {
+function countByCompetitor(videos: { competitorId: string }[]): Record<string, number> {
   const counts: Record<string, number> = {};
-  for (const r of reels) counts[r.competitorId] = (counts[r.competitorId] ?? 0) + 1;
+  for (const r of videos) counts[r.competitorId] = (counts[r.competitorId] ?? 0) + 1;
   return counts;
 }

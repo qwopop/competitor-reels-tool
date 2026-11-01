@@ -7,7 +7,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app import generator
-from app.models import ContentPlanRow, CompetitorRow, ReelRow, RemixRow
+from app.models import ContentPlanRow, CompetitorRow, VideoRow, RemixRow
 
 
 def _add_or_get(db: Session, row, find: Callable[[], object | None]):
@@ -47,44 +47,44 @@ def add_competitor(db: Session, username: str) -> tuple[CompetitorRow, bool]:
 
 
 def delete_competitor(db: Session, competitor: CompetitorRow) -> None:
-    db.delete(competitor)  # Reels and remixes go with it via ON DELETE CASCADE.
+    db.delete(competitor)  # Videos and remixes go with it via ON DELETE CASCADE.
     db.commit()
 
 
-def replace_reels_for_competitor(
-    db: Session, competitor: CompetitorRow, reels: list[ReelRow] | None = None
-) -> list[ReelRow]:
-    """Swap in new Reels (sample ones when `reels` is None), keeping any Reel that has a remix or a plan item.
+def replace_videos_for_competitor(
+    db: Session, competitor: CompetitorRow, videos: list[VideoRow] | None = None
+) -> list[VideoRow]:
+    """Swap in new Videos (sample ones when `videos` is None), keeping any Video that has a remix or a plan item.
 
-    Deleting a remixed Reel would cascade to its remix and throw away the
-    user's edits, and a planned Reel could no longer be remixed.
+    Deleting a remixed Video would cascade to its remix and throw away the
+    user's edits, and a planned Video could no longer be remixed.
     """
-    keep_ids = set(db.scalars(select(RemixRow.reel_id))) | set(
-        db.scalars(select(ContentPlanRow.reel_id))
+    keep_ids = set(db.scalars(select(RemixRow.video_id))) | set(
+        db.scalars(select(ContentPlanRow.video_id))
     )
     db.execute(
-        delete(ReelRow).where(
-            ReelRow.competitor_id == competitor.id, ReelRow.id.not_in(keep_ids)
+        delete(VideoRow).where(
+            VideoRow.competitor_id == competitor.id, VideoRow.id.not_in(keep_ids)
         )
     )
-    if reels is None:
-        reels = generator.build_reels(competitor)
-    db.add_all(reels)
+    if videos is None:
+        videos = generator.build_videos(competitor)
+    db.add_all(videos)
     db.commit()
-    return reels
+    return videos
 
 
-def list_reels(db: Session) -> list[ReelRow]:
-    stmt = select(ReelRow).order_by(ReelRow.posted_at.desc())
+def list_videos(db: Session) -> list[VideoRow]:
+    stmt = select(VideoRow).order_by(VideoRow.posted_at.desc())
     return list(db.scalars(stmt))
 
 
-def get_reel(db: Session, reel_id: str) -> ReelRow | None:
-    return db.get(ReelRow, reel_id)
+def get_video(db: Session, video_id: str) -> VideoRow | None:
+    return db.get(VideoRow, video_id)
 
 
-def get_remix_for_reel(db: Session, reel_id: str) -> RemixRow | None:
-    return db.scalars(select(RemixRow).where(RemixRow.reel_id == reel_id)).first()
+def get_remix_for_video(db: Session, video_id: str) -> RemixRow | None:
+    return db.scalars(select(RemixRow).where(RemixRow.video_id == video_id)).first()
 
 
 def list_remixes(db: Session) -> list[RemixRow]:
@@ -92,18 +92,18 @@ def list_remixes(db: Session) -> list[RemixRow]:
     return list(db.scalars(stmt))
 
 
-def add_remix(db: Session, reel: ReelRow, template: str = "default") -> tuple[RemixRow, bool]:
-    remix = generator.build_remix(reel, template)
-    reel_id = reel.id
-    return _add_or_get(db, remix, lambda: get_remix_for_reel(db, reel_id))
+def add_remix(db: Session, video: VideoRow, template: str = "default") -> tuple[RemixRow, bool]:
+    remix = generator.build_remix(video, template)
+    video_id = video.id
+    return _add_or_get(db, remix, lambda: get_remix_for_video(db, video_id))
 
 
 def get_remix(db: Session, remix_id: str) -> RemixRow | None:
     return db.get(RemixRow, remix_id)
 
 
-def apply_remix_template(db: Session, remix: RemixRow, reel: ReelRow, template: str) -> RemixRow:
-    return update_remix(db, remix, generator.template_fields(reel, template))
+def apply_remix_template(db: Session, remix: RemixRow, video: VideoRow, template: str) -> RemixRow:
+    return update_remix(db, remix, generator.template_fields(video, template))
 
 
 def update_remix(db: Session, remix: RemixRow, changes: dict[str, str]) -> RemixRow:
@@ -123,14 +123,14 @@ def get_plan_item(db: Session, item_id: str) -> ContentPlanRow | None:
     return db.get(ContentPlanRow, item_id)
 
 
-def get_plan_item_for_reel(db: Session, reel_id: str) -> ContentPlanRow | None:
-    return db.scalars(select(ContentPlanRow).where(ContentPlanRow.reel_id == reel_id)).first()
+def get_plan_item_for_video(db: Session, video_id: str) -> ContentPlanRow | None:
+    return db.scalars(select(ContentPlanRow).where(ContentPlanRow.video_id == video_id)).first()
 
 
-def add_plan_item(db: Session, reel: ReelRow) -> tuple[ContentPlanRow, bool]:
-    item = generator.build_plan_item(reel)
-    reel_id = reel.id
-    return _add_or_get(db, item, lambda: get_plan_item_for_reel(db, reel_id))
+def add_plan_item(db: Session, video: VideoRow) -> tuple[ContentPlanRow, bool]:
+    item = generator.build_plan_item(video)
+    video_id = video.id
+    return _add_or_get(db, item, lambda: get_plan_item_for_video(db, video_id))
 
 
 def update_plan_status(db: Session, item: ContentPlanRow, status: str) -> ContentPlanRow:

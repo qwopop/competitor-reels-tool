@@ -1,7 +1,7 @@
 """Stand-ins for the real Instagram scraper and the AI remix step.
 
 Both produce deterministic-looking sample data, the same way the frontend's
-MockReelsApi does. Replace these functions with real integrations later; the
+MockVideosApi does. Replace these functions with real integrations later; the
 store and routers only call into this module.
 """
 
@@ -11,9 +11,9 @@ from datetime import UTC, datetime, timedelta
 from urllib.parse import urlparse
 from uuid import uuid4
 
-from app.models import ContentPlanRow, CompetitorRow, ReelRow, RemixRow
+from app.models import ContentPlanRow, CompetitorRow, VideoRow, RemixRow
 
-REELS_PER_FETCH = 20
+VIDEOS_PER_FETCH = 20
 
 VIBECODING_TOPICS = [
     "I let AI build my entire SaaS in 48 hours",
@@ -65,7 +65,7 @@ USERNAME_RE = re.compile(r"^[A-Za-z0-9._]{1,30}$")
 INSTAGRAM_LINK_RE = re.compile(r"^(https?://)?([A-Za-z0-9-]+\.)*instagram\.com(/|$|\?)", re.IGNORECASE)
 # First path segments that are Instagram pages, not accounts.
 RESERVED_SEGMENTS = {
-    "p", "reel", "reels", "tv", "explore", "stories", "accounts", "direct",
+    "p", "video", "videos", "tv", "explore", "stories", "accounts", "direct",
     "about", "web", "developer", "legal", "privacy", "press", "api", "directory",
 }
 
@@ -83,8 +83,8 @@ def parse_username(raw: str) -> str | None:
     """Return the username from a profile link or a bare (optionally @-prefixed) name.
 
     Accepts links with or without a scheme, a www./m. host, a trailing slash,
-    a query string and a profile sub-path such as /name/reels/. Anything that
-    is not a profile (a post, Reel, explore page, another site) returns None.
+    a query string and a profile sub-path such as /name/videos/. Anything that
+    is not a profile (a post, Video, explore page, another site) returns None.
     """
     text = raw.strip()
     if not text:
@@ -112,19 +112,19 @@ def build_competitor(username: str) -> CompetitorRow:
     )
 
 
-def build_reels(competitor: CompetitorRow) -> list[ReelRow]:
-    """Sample the latest Reels for a competitor, newest first, two days apart."""
+def build_videos(competitor: CompetitorRow) -> list[VideoRow]:
+    """Sample the latest Videos for a competitor, newest first, two days apart."""
     now = datetime.now(UTC)
     fetched_at = now_iso()
-    reels: list[ReelRow] = []
-    for i in range(REELS_PER_FETCH):
+    videos: list[VideoRow] = []
+    for i in range(VIDEOS_PER_FETCH):
         shortcode = competitor.username[:3] + "".join(
             random.choices("abcdefghijklmnopqrstuvwxyz0123456789", k=7)
         )
         posted = now - timedelta(days=2 * i)
-        reels.append(
-            ReelRow(
-                id=new_id("reel"),
+        videos.append(
+            VideoRow(
+                id=new_id("video"),
                 competitor_id=competitor.id,
                 competitor_username=competitor.username,
                 shortcode=shortcode,
@@ -138,7 +138,7 @@ def build_reels(competitor: CompetitorRow) -> list[ReelRow]:
                 fetched_at=fetched_at,
             )
         )
-    return reels
+    return videos
 
 
 TEMPLATE_BANKS: dict[str, dict] = {
@@ -196,40 +196,40 @@ TEMPLATE_BANKS: dict[str, dict] = {
 }
 
 
-def template_fields(reel: ReelRow, template: str) -> dict[str, str]:
-    """Title, hook, script and CTA for a Reel, chosen deterministically from its shortcode."""
+def template_fields(video: VideoRow, template: str) -> dict[str, str]:
+    """Title, hook, script and CTA for a Video, chosen deterministically from its shortcode."""
     bank = TEMPLATE_BANKS[template]
-    seed = sum(ord(ch) for ch in reel.shortcode)
+    seed = sum(ord(ch) for ch in video.shortcode)
     return {
-        "title": f"{bank['title']}: {reel.caption}",
-        "hook": bank["hook"][seed % len(bank["hook"])].replace("{topic}", reel.caption),
-        "script": bank["script"][seed % len(bank["script"])].replace("{topic}", reel.caption),
-        "cta": bank["cta"][seed % len(bank["cta"])].replace("{topic}", reel.caption),
+        "title": f"{bank['title']}: {video.caption}",
+        "hook": bank["hook"][seed % len(bank["hook"])].replace("{topic}", video.caption),
+        "script": bank["script"][seed % len(bank["script"])].replace("{topic}", video.caption),
+        "cta": bank["cta"][seed % len(bank["cta"])].replace("{topic}", video.caption),
     }
 
 
-def build_remix(reel: ReelRow, template: str = "default") -> RemixRow:
+def build_remix(video: VideoRow, template: str = "default") -> RemixRow:
     stamp = now_iso()
     return RemixRow(
         id=new_id("remix"),
-        reel_id=reel.id,
+        video_id=video.id,
         created_at=stamp,
         updated_at=stamp,
-        **template_fields(reel, template),
+        **template_fields(video, template),
     )
 
 
-def build_plan_item(reel: ReelRow) -> ContentPlanRow:
+def build_plan_item(video: VideoRow) -> ContentPlanRow:
     stamp = now_iso()
     return ContentPlanRow(
         id=new_id("plan"),
-        reel_id=reel.id,
+        video_id=video.id,
         status="not_started",
-        competitor_username=reel.competitor_username,
-        caption=reel.caption,
-        thumbnail_url=reel.thumbnail_url,
-        permalink=reel.permalink,
-        posted_at=reel.posted_at,
+        competitor_username=video.competitor_username,
+        caption=video.caption,
+        thumbnail_url=video.thumbnail_url,
+        permalink=video.permalink,
+        posted_at=video.posted_at,
         added_at=stamp,
         updated_at=stamp,
     )

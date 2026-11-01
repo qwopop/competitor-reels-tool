@@ -6,21 +6,21 @@ import { USING_MOCK } from '@/services';
 const TITLES: [prefix: string, title: string][] = [
   ['/content-plan', 'Content plan'],
   ['/competitors', 'Competitors'],
-  ['/reels', 'Reels'],
+  ['/videos', 'Videos'],
   ['/remixes', 'Remixes'],
   ['/remix/', 'Edit remix'],
 ];
 
 export function pageTitle(pathname: string): string {
   if (pathname === '/') return 'Dashboard';
-  return TITLES.find(([prefix]) => pathname.startsWith(prefix))?.[1] ?? 'ReelRemix';
+  return TITLES.find(([prefix]) => pathname.startsWith(prefix))?.[1] ?? 'ClipRemix';
 }
 
 export function Layout() {
   const { pathname } = useLocation();
   useEffect(() => {
     const title = pageTitle(pathname);
-    document.title = title === 'ReelRemix' ? title : `${title} · ReelRemix`;
+    document.title = title === 'ClipRemix' ? title : `${title} · ClipRemix`;
   }, [pathname]);
 
   return (

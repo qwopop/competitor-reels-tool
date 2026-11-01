@@ -4,10 +4,10 @@ import { Film } from 'lucide-react';
 const navItems = [
   { to: '/', label: 'Dashboard', end: true },
   { to: '/competitors', label: 'Competitors', end: false },
-  { to: '/reels', label: 'Reels', end: false },
+  { to: '/videos', label: 'Videos', end: false },
   { to: '/remixes', label: 'Remixes', end: false },
   { to: '/content-plan', label: 'Content Plan', end: false },
-  { to: '/go-to-reels', label: 'Go to Reels', end: false },
+  { to: '/go-to-videos', label: 'Go to Videos', end: false },
 ];
 
 // Sticky top bar: wordmark, page links, and one action.
@@ -19,7 +19,7 @@ export function Header() {
           <span aria-hidden="true" className="grid h-8 w-8 place-items-center rounded-xl bg-brand text-ground">
             <Film size={16} strokeWidth={2.6} />
           </span>
-          ReelRemix
+          ClipRemix
         </Link>
 
         <nav aria-label="Main" className="order-last flex w-full flex-wrap gap-1 md:order-none md:w-auto">

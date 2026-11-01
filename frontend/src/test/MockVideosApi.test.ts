@@ -1,13 +1,13 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { MockReelsApi, parseUsername } from '@/services/MockReelsApi';
-import type { ReelsApi } from '@/types';
+import { MockVideosApi, parseUsername } from '@/services/MockVideosApi';
+import type { VideosApi } from '@/types';
 
-// The whole app depends only on the ReelsApi interface. These tests exercise
+// The whole app depends only on the VideosApi interface. These tests exercise
 // the mock implementation that ships with the app so swapping backends later
 // keeps the same contract.
 
-function freshApi(): ReelsApi {
-  return new MockReelsApi();
+function freshApi(): VideosApi {
+  return new MockVideosApi();
 }
 
 beforeEach(() => {
@@ -42,7 +42,7 @@ describe('parseUsername', () => {
   });
 });
 
-describe('MockReelsApi.addCompetitor', () => {
+describe('MockVideosApi.addCompetitor', () => {
   it('stores a competitor from an Instagram URL', async () => {
     const api = freshApi();
     const res = await api.addCompetitor('https://instagram.com/vibecoder');
@@ -68,48 +68,48 @@ describe('MockReelsApi.addCompetitor', () => {
   });
 });
 
-describe('MockReelsApi.fetchReelsForCompetitor', () => {
-  it('fetches exactly 20 reels and stores them', async () => {
+describe('MockVideosApi.fetchVideosForCompetitor', () => {
+  it('fetches exactly 20 videos and stores them', async () => {
     const api = freshApi();
     const comp = await api.addCompetitor('https://instagram.com/creator');
-    const reels = await api.fetchReelsForCompetitor(comp.data!.id);
-    expect(reels.data).toHaveLength(20);
-    expect(reels.data?.[0].competitorUsername).toBe('creator');
-    expect(reels.data?.[0].permalink).toBe(comp.data!.instagramUrl);
+    const videos = await api.fetchVideosForCompetitor(comp.data!.id);
+    expect(videos.data).toHaveLength(20);
+    expect(videos.data?.[0].competitorUsername).toBe('creator');
+    expect(videos.data?.[0].permalink).toBe(comp.data!.instagramUrl);
 
-    const stored = await api.listReels();
+    const stored = await api.listVideos();
     expect(stored.data).toHaveLength(20);
   });
 
-  it('replaces reels on refetch instead of duplicating', async () => {
+  it('replaces videos on refetch instead of duplicating', async () => {
     const api = freshApi();
     const comp = await api.addCompetitor('https://instagram.com/creator');
-    await api.fetchReelsForCompetitor(comp.data!.id);
-    await api.fetchReelsForCompetitor(comp.data!.id);
-    const stored = await api.listReels();
+    await api.fetchVideosForCompetitor(comp.data!.id);
+    await api.fetchVideosForCompetitor(comp.data!.id);
+    const stored = await api.listVideos();
     expect(stored.data).toHaveLength(20);
   });
 
   it('errors for an unknown competitor', async () => {
     const api = freshApi();
-    const res = await api.fetchReelsForCompetitor('nope');
+    const res = await api.fetchVideosForCompetitor('nope');
     expect(res.data).toBeNull();
     expect(res.error).toMatch(/not found/);
   });
 });
 
-describe('MockReelsApi.remixReel', () => {
+describe('MockVideosApi.remixVideo', () => {
   it('produces a breakdown with hook, script, and cta', async () => {
     const api = freshApi();
     const comp = await api.addCompetitor('https://instagram.com/creator');
-    const reels = await api.fetchReelsForCompetitor(comp.data!.id);
-    const reelId = reels.data![0].id;
+    const videos = await api.fetchVideosForCompetitor(comp.data!.id);
+    const videoId = videos.data![0].id;
 
-    const remix = await api.remixReel(reelId);
+    const remix = await api.remixVideo(videoId);
     expect(remix.data?.hook).toBeTruthy();
     expect(remix.data?.script).toBeTruthy();
     expect(remix.data?.cta).toBeTruthy();
-    expect(remix.data?.reelId).toBe(reelId);
+    expect(remix.data?.videoId).toBe(videoId);
 
     const fetched = await api.getRemix(remix.data!.id);
     expect(fetched.data?.id).toBe(remix.data!.id);
@@ -118,28 +118,28 @@ describe('MockReelsApi.remixReel', () => {
   it('returns the existing remix instead of regenerating', async () => {
     const api = freshApi();
     const comp = await api.addCompetitor('https://instagram.com/creator');
-    const reels = await api.fetchReelsForCompetitor(comp.data!.id);
-    const reelId = reels.data![0].id;
+    const videos = await api.fetchVideosForCompetitor(comp.data!.id);
+    const videoId = videos.data![0].id;
 
-    const first = await api.remixReel(reelId);
-    const second = await api.remixReel(reelId);
+    const first = await api.remixVideo(videoId);
+    const second = await api.remixVideo(videoId);
     expect(second.data?.id).toBe(first.data?.id);
   });
 
-  it('errors for an unknown reel', async () => {
+  it('errors for an unknown video', async () => {
     const api = freshApi();
-    const res = await api.remixReel('nope');
+    const res = await api.remixVideo('nope');
     expect(res.data).toBeNull();
     expect(res.error).toMatch(/not found/);
   });
 });
 
-describe('MockReelsApi.updateRemix', () => {
+describe('MockVideosApi.updateRemix', () => {
   it('persists edits to the remix', async () => {
     const api = freshApi();
     const comp = await api.addCompetitor('https://instagram.com/creator');
-    const reels = await api.fetchReelsForCompetitor(comp.data!.id);
-    const remix = await api.remixReel(reels.data![0].id);
+    const videos = await api.fetchVideosForCompetitor(comp.data!.id);
+    const remix = await api.remixVideo(videos.data![0].id);
 
     const updated = await api.updateRemix(remix.data!.id, {
       hook: 'My new hook',
@@ -162,20 +162,20 @@ describe('MockReelsApi.updateRemix', () => {
   });
 });
 
-describe('MockReelsApi.removeCompetitor', () => {
-  it('removes the competitor and its reels', async () => {
+describe('MockVideosApi.removeCompetitor', () => {
+  it('removes the competitor and its videos', async () => {
     const api = freshApi();
     const comp = await api.addCompetitor('https://instagram.com/creator');
-    await api.fetchReelsForCompetitor(comp.data!.id);
-    expect((await api.listReels()).data).toHaveLength(20);
+    await api.fetchVideosForCompetitor(comp.data!.id);
+    expect((await api.listVideos()).data).toHaveLength(20);
 
     await api.removeCompetitor(comp.data!.id);
     expect((await api.listCompetitors()).data).toHaveLength(0);
-    expect((await api.listReels()).data).toHaveLength(0);
+    expect((await api.listVideos()).data).toHaveLength(0);
   });
 });
 
-describe('MockReelsApi persistence', () => {
+describe('MockVideosApi persistence', () => {
   it('survives a new instance pointing at the same storage', async () => {
     const apiA = freshApi();
     await apiA.addCompetitor('https://instagram.com/creator');
@@ -187,28 +187,28 @@ describe('MockReelsApi persistence', () => {
   });
 });
 
-describe('MockReelsApi content plan', () => {
-  async function seededReel() {
+describe('MockVideosApi content plan', () => {
+  async function seededVideo() {
     const api = freshApi();
     const comp = await api.addCompetitor('https://instagram.com/creator');
-    const reels = await api.fetchReelsForCompetitor(comp.data!.id);
-    return { api, reel: reels.data![0] };
+    const videos = await api.fetchVideosForCompetitor(comp.data!.id);
+    return { api, video: videos.data![0] };
   }
 
-  it('adds a Reel as not_started and returns the existing item on repeat', async () => {
-    const { api, reel } = await seededReel();
-    const first = await api.addToContentPlan(reel.id);
+  it('adds a Video as not_started and returns the existing item on repeat', async () => {
+    const { api, video } = await seededVideo();
+    const first = await api.addToContentPlan(video.id);
     expect(first.data?.status).toBe('not_started');
-    expect(first.data?.reelId).toBe(reel.id);
+    expect(first.data?.videoId).toBe(video.id);
 
-    const second = await api.addToContentPlan(reel.id);
+    const second = await api.addToContentPlan(video.id);
     expect(second.data?.id).toBe(first.data?.id);
     expect((await api.listContentPlan()).data).toHaveLength(1);
   });
 
   it('updates status and removes items', async () => {
-    const { api, reel } = await seededReel();
-    const item = (await api.addToContentPlan(reel.id)).data!;
+    const { api, video } = await seededVideo();
+    const item = (await api.addToContentPlan(video.id)).data!;
 
     const updated = await api.updateContentPlanStatus(item.id, 'filmed');
     expect(updated.data?.status).toBe('filmed');
@@ -217,7 +217,7 @@ describe('MockReelsApi content plan', () => {
     expect((await api.listContentPlan()).data).toEqual([]);
   });
 
-  it('errors for an unknown Reel', async () => {
+  it('errors for an unknown Video', async () => {
     const res = await freshApi().addToContentPlan('nope');
     expect(res.error).toMatch(/not found/);
   });
@@ -232,7 +232,7 @@ describe('parseUsername: links people actually paste', () => {
     ['m.instagram.com/vibecoder/', 'vibecoder'],
     ['http://instagram.com/vibecoder', 'vibecoder'],
     ['https://www.instagram.com/vibecoder/?igsh=abc123', 'vibecoder'],
-    ['https://instagram.com/vibecoder/reels/', 'vibecoder'],
+    ['https://instagram.com/vibecoder/videos/', 'vibecoder'],
     ['@vibe.coder_1', 'vibe.coder_1'],
   ])('accepts %s', (input, expected) => {
     expect(parseUsername(input)).toBe(expected);
@@ -243,7 +243,7 @@ describe('parseUsername: links people actually paste', () => {
     'notinstagram.com/vibecoder',
     'https://evil.com/instagram.com/vibecoder',
     'https://www.instagram.com/p/ABC123/',
-    'https://www.instagram.com/reel/XYZ789/',
+    'https://www.instagram.com/video/XYZ789/',
     'https://www.instagram.com/explore/',
     'https://www.instagram.com/accounts/login/',
     'https://instagram.com/vibe coder',
@@ -259,34 +259,34 @@ describe('parseUsername: links people actually paste', () => {
   });
 });
 
-describe('MockReelsApi re-fetch keeps the user work', () => {
-  it('keeps a remixed Reel and its remix, and does not duplicate it', async () => {
+describe('MockVideosApi re-fetch keeps the user work', () => {
+  it('keeps a remixed Video and its remix, and does not duplicate it', async () => {
     const api = freshApi();
     const comp = await api.addCompetitor('https://instagram.com/creator');
-    const first = await api.fetchReelsForCompetitor(comp.data!.id);
+    const first = await api.fetchVideosForCompetitor(comp.data!.id);
     const kept = first.data![0];
-    const remix = await api.remixReel(kept.id);
+    const remix = await api.remixVideo(kept.id);
     await api.updateRemix(remix.data!.id, { hook: 'my hand-edited hook' });
 
-    await api.fetchReelsForCompetitor(comp.data!.id);
+    await api.fetchVideosForCompetitor(comp.data!.id);
 
     const remixes = await api.listRemixes();
     expect(remixes.data).toHaveLength(1);
     expect(remixes.data![0].hook).toBe('my hand-edited hook');
-    const reels = (await api.listReels()).data!;
-    expect(reels.filter((r) => r.id === kept.id)).toHaveLength(1);
-    expect(reels).toHaveLength(21);
+    const videos = (await api.listVideos()).data!;
+    expect(videos.filter((r) => r.id === kept.id)).toHaveLength(1);
+    expect(videos).toHaveLength(21);
   });
 
-  it('keeps a Reel that is in the content plan so it can still be remixed', async () => {
+  it('keeps a Video that is in the content plan so it can still be remixed', async () => {
     const api = freshApi();
     const comp = await api.addCompetitor('https://instagram.com/creator');
-    const first = await api.fetchReelsForCompetitor(comp.data!.id);
+    const first = await api.fetchVideosForCompetitor(comp.data!.id);
     const item = await api.addToContentPlan(first.data![0].id);
 
-    await api.fetchReelsForCompetitor(comp.data!.id);
+    await api.fetchVideosForCompetitor(comp.data!.id);
 
-    const remix = await api.remixReel(item.data!.reelId);
+    const remix = await api.remixVideo(item.data!.videoId);
     expect(remix.error).toBeNull();
   });
 });

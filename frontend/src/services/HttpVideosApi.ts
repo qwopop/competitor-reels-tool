@@ -2,14 +2,14 @@ import type {
   Competitor,
   ContentPlanItem,
   PlanStatus,
-  Reel,
-  ReelsApi,
-  RemixedReel,
+  Video,
+  VideosApi,
+  RemixedVideo,
   RemixTemplate,
   ServiceResult,
 } from '@/types';
 
-// Real implementation of ReelsApi that talks to the FastAPI backend in
+// Real implementation of VideosApi that talks to the FastAPI backend in
 // ../backend. Paths and payloads follow ../openapi.yaml.
 //
 // In dev, Vite proxies /api to the backend (see vite.config.ts), so the default
@@ -75,7 +75,7 @@ function validationMessage(detail: unknown[]): string {
 
 const enc = encodeURIComponent;
 
-export class HttpReelsApi implements ReelsApi {
+export class HttpVideosApi implements VideosApi {
   listCompetitors() {
     return request<Competitor[]>('GET', '/competitors');
   }
@@ -88,55 +88,55 @@ export class HttpReelsApi implements ReelsApi {
     return request<void>('DELETE', `/competitors/${enc(id)}`);
   }
 
-  fetchReelsForCompetitor(competitorId: string) {
-    return request<Reel[]>('POST', `/competitors/${enc(competitorId)}/reels/fetch`);
+  fetchVideosForCompetitor(competitorId: string) {
+    return request<Video[]>('POST', `/competitors/${enc(competitorId)}/videos/fetch`);
   }
 
-  listReels() {
-    return request<Reel[]>('GET', '/reels');
+  listVideos() {
+    return request<Video[]>('GET', '/videos');
   }
 
-  getReel(id: string) {
-    return request<Reel>('GET', `/reels/${enc(id)}`);
+  getVideo(id: string) {
+    return request<Video>('GET', `/videos/${enc(id)}`);
   }
 
-  remixReel(reelId: string, template?: RemixTemplate) {
-    return request<RemixedReel>(
+  remixVideo(videoId: string, template?: RemixTemplate) {
+    return request<RemixedVideo>(
       'POST',
-      `/reels/${enc(reelId)}/remix`,
+      `/videos/${enc(videoId)}/remix`,
       template ? { template } : undefined
     );
   }
 
   listRemixes() {
-    return request<RemixedReel[]>('GET', '/remixes');
+    return request<RemixedVideo[]>('GET', '/remixes');
   }
 
-  getRemixForReel(reelId: string) {
-    return request<RemixedReel>('GET', `/reels/${enc(reelId)}/remix/current`);
+  getRemixForVideo(videoId: string) {
+    return request<RemixedVideo>('GET', `/videos/${enc(videoId)}/remix/current`);
   }
 
   applyRemixTemplate(id: string, template: RemixTemplate) {
-    return request<RemixedReel>('POST', `/remixes/${enc(id)}/apply-template`, { template });
+    return request<RemixedVideo>('POST', `/remixes/${enc(id)}/apply-template`, { template });
   }
 
   getRemix(id: string) {
-    return request<RemixedReel>('GET', `/remixes/${enc(id)}`);
+    return request<RemixedVideo>('GET', `/remixes/${enc(id)}`);
   }
 
   updateRemix(
     id: string,
-    patch: Partial<Pick<RemixedReel, 'title' | 'hook' | 'script' | 'cta'>>
+    patch: Partial<Pick<RemixedVideo, 'title' | 'hook' | 'script' | 'cta'>>
   ) {
-    return request<RemixedReel>('PATCH', `/remixes/${enc(id)}`, patch);
+    return request<RemixedVideo>('PATCH', `/remixes/${enc(id)}`, patch);
   }
 
   listContentPlan() {
     return request<ContentPlanItem[]>('GET', '/content-plan');
   }
 
-  addToContentPlan(reelId: string) {
-    return request<ContentPlanItem>('POST', '/content-plan', { reelId });
+  addToContentPlan(videoId: string) {
+    return request<ContentPlanItem>('POST', '/content-plan', { videoId });
   }
 
   updateContentPlanStatus(id: string, status: PlanStatus) {

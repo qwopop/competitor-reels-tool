@@ -20,8 +20,8 @@ DEV_CORS_ORIGINS = "http://localhost:5173,http://127.0.0.1:5173"
 _FROM_ENV = object()
 
 
-def create_app(database_url: str | None = None, reel_source=_FROM_ENV) -> FastAPI:
-    """`reel_source` fetches real Reels; by default it is built from the INSTAGRAM_* env vars,
+def create_app(database_url: str | None = None, video_source=_FROM_ENV) -> FastAPI:
+    """`video_source` fetches real Videos; by default it is built from the INSTAGRAM_* env vars,
     and None means sample data."""
     url = database_url or os.getenv("DATABASE_URL", DEFAULT_DATABASE_URL)
     engine = make_engine(url)
@@ -38,9 +38,9 @@ def create_app(database_url: str | None = None, reel_source=_FROM_ENV) -> FastAP
 
     # Comma-separated list. Set CORS_ORIGINS to the deployed frontend's URL.
     origins = [o.strip() for o in os.getenv("CORS_ORIGINS", DEV_CORS_ORIGINS).split(",") if o.strip()]
-    app = FastAPI(title="Competitor Reels API", version="0.1.0", lifespan=lifespan)
+    app = FastAPI(title="Competitor Videos API", version="0.1.0", lifespan=lifespan)
     app.state.session_factory = session_factory
-    app.state.reel_source = source_from_env() if reel_source is _FROM_ENV else reel_source
+    app.state.video_source = source_from_env() if video_source is _FROM_ENV else video_source
     # The Vite dev server proxies /api, so CORS only matters if you call the API directly.
     app.add_middleware(
         CORSMiddleware,

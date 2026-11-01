@@ -27,7 +27,7 @@ class AddCompetitorRequest(ApiModel):
     instagram_url: str = Field(max_length=2048, examples=["https://instagram.com/vibecoder"])
 
 
-class Reel(ApiModel):
+class Video(ApiModel):
     id: str
     competitor_id: str
     competitor_username: str
@@ -42,9 +42,9 @@ class Reel(ApiModel):
     fetched_at: str
 
 
-class RemixedReel(ApiModel):
+class RemixedVideo(ApiModel):
     id: str
-    reel_id: str
+    video_id: str
     title: str
     hook: str
     script: str
@@ -59,7 +59,7 @@ RemixTemplate = Literal["default", "educational", "storytelling", "promotional"]
 
 class ContentPlanItem(ApiModel):
     id: str
-    reel_id: str
+    video_id: str
     status: PlanStatus
     competitor_username: str
     caption: str
@@ -71,7 +71,7 @@ class ContentPlanItem(ApiModel):
 
 
 class AddToPlanRequest(ApiModel):
-    reel_id: str
+    video_id: str
 
 
 class UpdatePlanItemRequest(ApiModel):

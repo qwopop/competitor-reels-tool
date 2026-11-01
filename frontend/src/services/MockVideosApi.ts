@@ -2,25 +2,25 @@ import type {
   Competitor,
   ContentPlanItem,
   PlanStatus,
-  Reel,
-  ReelsApi,
-  RemixedReel,
+  Video,
+  VideosApi,
+  RemixedVideo,
   RemixTemplate,
   ServiceResult,
 } from '@/types';
 import { parseUsername } from '@/utils/instagram';
 
 // ----------------------------------------------------------------------------
-// Offline mock of the ReelsApi service, persisted to localStorage. It is no
+// Offline mock of the VideosApi service, persisted to localStorage. It is no
 // longer the app default (see ApiContext.tsx); use it in tests or to demo the
 // UI without the backend. It mirrors the backend's behavior in backend/app.
 // ----------------------------------------------------------------------------
 
 const COMPETITORS_KEY = 'mock.competitors';
-const REELS_KEY = 'mock.reels';
+const VIDEOS_KEY = 'mock.videos';
 const REMIXES_KEY = 'mock.remixes';
 const PLAN_KEY = 'mock.plan';
-const MAX_REELS = 20;
+const MAX_VIDEOS = 20;
 
 const ok = <T>(data: T): ServiceResult<T> => ({ data, error: null });
 const fail = <T>(error: string): ServiceResult<T> => ({ data: null, error });
@@ -111,8 +111,8 @@ const TEMPLATE_TITLES: Record<RemixTemplate, string> = {
 };
 
 // Mirrors the backend templates in spirit: a title prefix and one line per field.
-function templateText(template: RemixTemplate, reel: Reel, seedIndex: number) {
-  const topic = reel.caption;
+function templateText(template: RemixTemplate, video: Video, seedIndex: number) {
+  const topic = video.caption;
   const hooks: Record<RemixTemplate, string[]> = {
     default: HOOK_BANK,
     educational: [`Most people get ${topic} wrong. Here is the fix.`],
@@ -131,16 +131,16 @@ function pick<T>(arr: T[], i: number): T {
   return arr[i % arr.length];
 }
 
-function mockReelsFor(competitor: Competitor): Reel[] {
+function mockVideosFor(competitor: Competitor): Video[] {
   const now = Date.now();
-  const reels: Reel[] = [];
-  for (let i = 0; i < MAX_REELS; i++) {
+  const videos: Video[] = [];
+  for (let i = 0; i < MAX_VIDEOS; i++) {
     const shortcode = `${competitor.username.slice(0, 3)}${Math.random()
       .toString(36)
       .slice(2, 9)}`;
     const posted = new Date(now - i * 86_400_000 * 2).toISOString();
-    reels.push({
-      id: uid('reel'),
+    videos.push({
+      id: uid('video'),
       competitorId: competitor.id,
       competitorUsername: competitor.username,
       shortcode,
@@ -154,7 +154,7 @@ function mockReelsFor(competitor: Competitor): Reel[] {
       fetchedAt: new Date().toISOString(),
     });
   }
-  return reels;
+  return videos;
 }
 
 // Simulate network / AI latency so the UI reflects real async behavior.
@@ -164,7 +164,7 @@ function delay<T>(value: T, ms = 600): Promise<T> {
 
 // ----- Service implementation -----------------------------------------------
 
-export class MockReelsApi implements ReelsApi {
+export class MockVideosApi implements VideosApi {
   async listCompetitors(): Promise<ServiceResult<Competitor[]>> {
     const competitors = read<Competitor[]>(COMPETITORS_KEY, []);
     return delay(ok(competitors), 150);
@@ -204,69 +204,69 @@ export class MockReelsApi implements ReelsApi {
       COMPETITORS_KEY,
       competitors.filter((c) => c.id !== id)
     );
-    const reels = read<Reel[]>(REELS_KEY, []);
+    const videos = read<Video[]>(VIDEOS_KEY, []);
     write(
-      REELS_KEY,
-      reels.filter((r) => r.competitorId !== id)
+      VIDEOS_KEY,
+      videos.filter((r) => r.competitorId !== id)
     );
     return delay(ok(undefined), 150);
   }
 
-  async fetchReelsForCompetitor(
+  async fetchVideosForCompetitor(
     competitorId: string
-  ): Promise<ServiceResult<Reel[]>> {
+  ): Promise<ServiceResult<Video[]>> {
     const competitors = read<Competitor[]>(COMPETITORS_KEY, []);
     const competitor = competitors.find((c) => c.id === competitorId);
     if (!competitor) {
-      return fail<Reel[]>('Competitor not found.');
+      return fail<Video[]>('Competitor not found.');
     }
-    const newReels = mockReelsFor(competitor);
-    const existing = read<Reel[]>(REELS_KEY, []);
-    // Replace this competitor's Reels, but keep any that have a remix or a plan item.
+    const newVideos = mockVideosFor(competitor);
+    const existing = read<Video[]>(VIDEOS_KEY, []);
+    // Replace this competitor's Videos, but keep any that have a remix or a plan item.
     const keep = new Set([
-      ...read<RemixedReel[]>(REMIXES_KEY, []).map((rm) => rm.reelId),
-      ...read<ContentPlanItem[]>(PLAN_KEY, []).map((item) => item.reelId),
+      ...read<RemixedVideo[]>(REMIXES_KEY, []).map((rm) => rm.videoId),
+      ...read<ContentPlanItem[]>(PLAN_KEY, []).map((item) => item.videoId),
     ]);
     const merged = [
-      ...newReels,
+      ...newVideos,
       ...existing.filter((r) => r.competitorId !== competitorId || keep.has(r.id)),
     ];
-    write(REELS_KEY, merged);
-    return delay(ok(newReels));
+    write(VIDEOS_KEY, merged);
+    return delay(ok(newVideos));
   }
 
-  async listReels(): Promise<ServiceResult<Reel[]>> {
-    const reels = read<Reel[]>(REELS_KEY, []);
-    reels.sort((a, b) => +new Date(b.postedAt) - +new Date(a.postedAt));
-    return delay(ok(reels), 200);
+  async listVideos(): Promise<ServiceResult<Video[]>> {
+    const videos = read<Video[]>(VIDEOS_KEY, []);
+    videos.sort((a, b) => +new Date(b.postedAt) - +new Date(a.postedAt));
+    return delay(ok(videos), 200);
   }
 
-  async getReel(id: string): Promise<ServiceResult<Reel>> {
-    const reels = read<Reel[]>(REELS_KEY, []);
-    const reel = reels.find((r) => r.id === id);
-    if (!reel) return fail<Reel>('Reel not found.');
-    return delay(ok(reel), 150);
+  async getVideo(id: string): Promise<ServiceResult<Video>> {
+    const videos = read<Video[]>(VIDEOS_KEY, []);
+    const video = videos.find((r) => r.id === id);
+    if (!video) return fail<Video>('Video not found.');
+    return delay(ok(video), 150);
   }
 
-  async remixReel(reelId: string, template: RemixTemplate = 'default'): Promise<ServiceResult<RemixedReel>> {
-    const reels = read<Reel[]>(REELS_KEY, []);
-    const reel = reels.find((r) => r.id === reelId);
-    if (!reel) return fail<RemixedReel>('Reel not found.');
+  async remixVideo(videoId: string, template: RemixTemplate = 'default'): Promise<ServiceResult<RemixedVideo>> {
+    const videos = read<Video[]>(VIDEOS_KEY, []);
+    const video = videos.find((r) => r.id === videoId);
+    if (!video) return fail<RemixedVideo>('Video not found.');
 
-    const remixes = read<RemixedReel[]>(REMIXES_KEY, []);
-    const existing = remixes.find((rm) => rm.reelId === reelId);
+    const remixes = read<RemixedVideo[]>(REMIXES_KEY, []);
+    const existing = remixes.find((rm) => rm.videoId === videoId);
     if (existing) {
       return delay(ok(existing));
     }
 
     const seedIndex = Math.abs(
-      Array.from(reel.shortcode).reduce((acc, ch) => acc + ch.charCodeAt(0), 0)
+      Array.from(video.shortcode).reduce((acc, ch) => acc + ch.charCodeAt(0), 0)
     );
     const now = new Date().toISOString();
-    const remix: RemixedReel = {
+    const remix: RemixedVideo = {
       id: uid('remix'),
-      reelId,
-      ...templateText(template, reel, seedIndex),
+      videoId,
+      ...templateText(template, video, seedIndex),
       createdAt: now,
       updatedAt: now,
     };
@@ -276,36 +276,36 @@ export class MockReelsApi implements ReelsApi {
     return delay(ok(remix), 1100);
   }
 
-  async getRemix(id: string): Promise<ServiceResult<RemixedReel>> {
-    const remixes = read<RemixedReel[]>(REMIXES_KEY, []);
+  async getRemix(id: string): Promise<ServiceResult<RemixedVideo>> {
+    const remixes = read<RemixedVideo[]>(REMIXES_KEY, []);
     const remix = remixes.find((rm) => rm.id === id);
-    if (!remix) return fail<RemixedReel>('Remix not found.');
+    if (!remix) return fail<RemixedVideo>('Remix not found.');
     return delay(ok(remix), 150);
   }
 
-  async listRemixes(): Promise<ServiceResult<RemixedReel[]>> {
-    const remixes = read<RemixedReel[]>(REMIXES_KEY, []);
+  async listRemixes(): Promise<ServiceResult<RemixedVideo[]>> {
+    const remixes = read<RemixedVideo[]>(REMIXES_KEY, []);
     return delay(ok(remixes), 150);
   }
 
-  async getRemixForReel(reelId: string): Promise<ServiceResult<RemixedReel>> {
-    const remixes = read<RemixedReel[]>(REMIXES_KEY, []);
-    const remix = remixes.find((rm) => rm.reelId === reelId);
-    if (!remix) return fail<RemixedReel>('No remix for this Reel yet.');
+  async getRemixForVideo(videoId: string): Promise<ServiceResult<RemixedVideo>> {
+    const remixes = read<RemixedVideo[]>(REMIXES_KEY, []);
+    const remix = remixes.find((rm) => rm.videoId === videoId);
+    if (!remix) return fail<RemixedVideo>('No remix for this Video yet.');
     return delay(ok(remix), 100);
   }
 
-  async applyRemixTemplate(id: string, template: RemixTemplate): Promise<ServiceResult<RemixedReel>> {
-    const remixes = read<RemixedReel[]>(REMIXES_KEY, []);
+  async applyRemixTemplate(id: string, template: RemixTemplate): Promise<ServiceResult<RemixedVideo>> {
+    const remixes = read<RemixedVideo[]>(REMIXES_KEY, []);
     const idx = remixes.findIndex((rm) => rm.id === id);
-    if (idx === -1) return fail<RemixedReel>('Remix not found.');
-    const reels = read<Reel[]>(REELS_KEY, []);
-    const reel = reels.find((r) => r.id === remixes[idx].reelId);
-    if (!reel) return fail<RemixedReel>('Reel not found.');
-    const seedIndex = Math.abs(Array.from(reel.shortcode).reduce((acc, ch) => acc + ch.charCodeAt(0), 0));
-    const updated: RemixedReel = {
+    if (idx === -1) return fail<RemixedVideo>('Remix not found.');
+    const videos = read<Video[]>(VIDEOS_KEY, []);
+    const video = videos.find((r) => r.id === remixes[idx].videoId);
+    if (!video) return fail<RemixedVideo>('Video not found.');
+    const seedIndex = Math.abs(Array.from(video.shortcode).reduce((acc, ch) => acc + ch.charCodeAt(0), 0));
+    const updated: RemixedVideo = {
       ...remixes[idx],
-      ...templateText(template, reel, seedIndex),
+      ...templateText(template, video, seedIndex),
       updatedAt: new Date().toISOString(),
     };
     remixes[idx] = updated;
@@ -315,12 +315,12 @@ export class MockReelsApi implements ReelsApi {
 
   async updateRemix(
     id: string,
-    patch: Partial<Pick<RemixedReel, 'title' | 'hook' | 'script' | 'cta'>>
-  ): Promise<ServiceResult<RemixedReel>> {
-    const remixes = read<RemixedReel[]>(REMIXES_KEY, []);
+    patch: Partial<Pick<RemixedVideo, 'title' | 'hook' | 'script' | 'cta'>>
+  ): Promise<ServiceResult<RemixedVideo>> {
+    const remixes = read<RemixedVideo[]>(REMIXES_KEY, []);
     const idx = remixes.findIndex((rm) => rm.id === id);
-    if (idx === -1) return fail<RemixedReel>('Remix not found.');
-    const updated: RemixedReel = {
+    if (idx === -1) return fail<RemixedVideo>('Remix not found.');
+    const updated: RemixedVideo = {
       ...remixes[idx],
       ...patch,
       updatedAt: new Date().toISOString(),
@@ -335,25 +335,25 @@ export class MockReelsApi implements ReelsApi {
     return delay(ok(items), 150);
   }
 
-  async addToContentPlan(reelId: string): Promise<ServiceResult<ContentPlanItem>> {
-    const reels = read<Reel[]>(REELS_KEY, []);
-    const reel = reels.find((r) => r.id === reelId);
-    if (!reel) return fail<ContentPlanItem>('Reel not found.');
+  async addToContentPlan(videoId: string): Promise<ServiceResult<ContentPlanItem>> {
+    const videos = read<Video[]>(VIDEOS_KEY, []);
+    const video = videos.find((r) => r.id === videoId);
+    if (!video) return fail<ContentPlanItem>('Video not found.');
 
     const items = read<ContentPlanItem[]>(PLAN_KEY, []);
-    const existing = items.find((item) => item.reelId === reelId);
+    const existing = items.find((item) => item.videoId === videoId);
     if (existing) return delay(ok(existing), 150);
 
     const now = new Date().toISOString();
     const item: ContentPlanItem = {
       id: uid('plan'),
-      reelId,
+      videoId,
       status: 'not_started',
-      competitorUsername: reel.competitorUsername,
-      caption: reel.caption,
-      thumbnailUrl: reel.thumbnailUrl,
-      permalink: reel.permalink,
-      postedAt: reel.postedAt,
+      competitorUsername: video.competitorUsername,
+      caption: video.caption,
+      thumbnailUrl: video.thumbnailUrl,
+      permalink: video.permalink,
+      postedAt: video.postedAt,
       addedAt: now,
       updatedAt: now,
     };

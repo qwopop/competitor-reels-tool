@@ -1,4 +1,4 @@
-"""Real Reels from Instagram, through the official Instagram Graph API.
+"""Real Videos from Instagram, through the official Instagram Graph API.
 
 Uses Business Discovery, which reads another account's public media:
 https://developers.facebook.com/docs/instagram-platform/instagram-graph-api/reference/ig-user/business_discovery
@@ -22,17 +22,17 @@ import urllib.request
 from collections.abc import Callable
 from datetime import datetime
 
-from app.generator import REELS_PER_FETCH, new_id, now_iso
-from app.models import CompetitorRow, ReelRow
+from app.generator import VIDEOS_PER_FETCH, new_id, now_iso
+from app.models import CompetitorRow, VideoRow
 
 DEFAULT_GRAPH_VERSION = "v21.0"
-# Business Discovery returns posts newest first; fetch enough to find 20 Reels among them.
+# Business Discovery returns posts newest first; fetch enough to find 20 Videos among them.
 MEDIA_PAGE_SIZE = 50
 MEDIA_FIELDS = (
     "id,caption,media_type,media_product_type,permalink,thumbnail_url,media_url,"
     "like_count,comments_count,timestamp"
 )
-SHORTCODE_RE = re.compile(r"instagram\.com/(?:[^/]+/)?(?:reel|reels|p|tv)/([A-Za-z0-9_-]+)")
+SHORTCODE_RE = re.compile(r"instagram\.com/(?:[^/]+/)?(?:video|videos|p|tv)/([A-Za-z0-9_-]+)")
 
 FetchJson = Callable[[str], dict]
 
@@ -54,7 +54,7 @@ def _http_get_json(url: str) -> dict:
         raise InstagramError("Could not reach the Instagram API. Try again in a minute.") from err
 
 
-class GraphApiReelSource:
+class GraphApiVideoSource:
     def __init__(
         self,
         access_token: str,
@@ -75,7 +75,7 @@ class GraphApiReelSource:
         query = urllib.parse.urlencode({"fields": fields, "access_token": self.access_token})
         return f"https://graph.facebook.com/{self.graph_version}/{self.ig_user_id}?{query}"
 
-    def fetch_reels(self, competitor: CompetitorRow) -> list[ReelRow]:
+    def fetch_videos(self, competitor: CompetitorRow) -> list[VideoRow]:
         body = self.fetch_json(self.build_url(competitor.username))
         if "error" in body:
             raise InstagramError(_explain_error(competitor.username, body["error"]))
@@ -86,34 +86,34 @@ class GraphApiReelSource:
             competitor.avatar_url = profile["profile_picture_url"]
 
         fetched_at = now_iso()
-        reels = []
+        videos = []
         for media in (profile.get("media") or {}).get("data", []):
-            if not _is_reel(media) or not media.get("permalink"):
+            if not _is_video(media) or not media.get("permalink"):
                 continue
-            reels.append(_to_row(competitor, media, fetched_at))
-            if len(reels) == REELS_PER_FETCH:
+            videos.append(_to_row(competitor, media, fetched_at))
+            if len(videos) == VIDEOS_PER_FETCH:
                 break
-        return reels
+        return videos
 
 
-def _is_reel(media: dict) -> bool:
+def _is_video(media: dict) -> bool:
     if "media_product_type" in media:
-        return media["media_product_type"] == "REELS"
+        return media["media_product_type"] == "VIDEOS"
     return media.get("media_type") == "VIDEO"
 
 
-def _to_row(competitor: CompetitorRow, media: dict, fetched_at: str) -> ReelRow:
+def _to_row(competitor: CompetitorRow, media: dict, fetched_at: str) -> VideoRow:
     permalink = media["permalink"]
     match = SHORTCODE_RE.search(permalink)
-    return ReelRow(
-        id=new_id("reel"),
+    return VideoRow(
+        id=new_id("video"),
         competitor_id=competitor.id,
         competitor_username=competitor.username,
         shortcode=match.group(1) if match else str(media.get("id", ""))[:32],
         permalink=permalink[:255],
         caption=(media.get("caption") or "").strip()[:500],
         thumbnail_url=(media.get("thumbnail_url") or media.get("media_url") or "")[:512],
-        # The Graph API does not report views for other accounts' Reels.
+        # The Graph API does not report views for other accounts' Videos.
         view_count=0,
         like_count=int(media.get("like_count") or 0),
         comment_count=int(media.get("comments_count") or 0),
@@ -141,15 +141,15 @@ def _explain_error(username: str, error: dict) -> str:
         return "Instagram's rate limit was reached. Try again later."
     if code == 110 or "business" in str(error.get("message", "")).lower():
         return (
-            f"Instagram did not return Reels for @{username}. The account must exist, be public, "
+            f"Instagram did not return Videos for @{username}. The account must exist, be public, "
             "and be a Business or Creator account."
         )
     return f"Instagram API error: {error.get('message', 'unknown error')}"
 
 
-def source_from_env() -> GraphApiReelSource | None:
+def source_from_env() -> GraphApiVideoSource | None:
     token = os.getenv("INSTAGRAM_ACCESS_TOKEN", "").strip()
     user_id = os.getenv("INSTAGRAM_USER_ID", "").strip()
     if not token or not user_id:
         return None
-    return GraphApiReelSource(token, user_id, os.getenv("INSTAGRAM_GRAPH_VERSION", DEFAULT_GRAPH_VERSION))
+    return GraphApiVideoSource(token, user_id, os.getenv("INSTAGRAM_GRAPH_VERSION", DEFAULT_GRAPH_VERSION))

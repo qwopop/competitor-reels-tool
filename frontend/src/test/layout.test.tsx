@@ -19,19 +19,19 @@ function renderAt(path: string) {
 
 describe('page titles', () => {
   it.each([
-    ['/', 'Dashboard · ReelRemix'],
-    ['/competitors', 'Competitors · ReelRemix'],
-    ['/reels', 'Reels · ReelRemix'],
-    ['/remixes', 'Remixes · ReelRemix'],
-    ['/remix/remix_1', 'Edit remix · ReelRemix'],
-    ['/content-plan', 'Content plan · ReelRemix'],
+    ['/', 'Dashboard · ClipRemix'],
+    ['/competitors', 'Competitors · ClipRemix'],
+    ['/videos', 'Videos · ClipRemix'],
+    ['/remixes', 'Remixes · ClipRemix'],
+    ['/remix/remix_1', 'Edit remix · ClipRemix'],
+    ['/content-plan', 'Content plan · ClipRemix'],
   ])('%s sets the tab title to %s', (path, title) => {
     renderAt(path);
     expect(document.title).toBe(title);
   });
 
   it('falls back to the app name for unknown paths', () => {
-    expect(pageTitle('/nowhere')).toBe('ReelRemix');
+    expect(pageTitle('/nowhere')).toBe('ClipRemix');
   });
 });
 
@@ -56,7 +56,7 @@ describe('index.html', () => {
 
 describe('footer contrast (user-test-bug #48)', () => {
   it('footer text uses at least ink/60, which is 4.5:1 or better on the ground', () => {
-    const { container } = renderAt('/reels');
+    const { container } = renderAt('/videos');
     const footer = container.querySelector('footer');
     expect(footer?.className).toContain('text-ink/60');
     expect(footer?.className).not.toContain('text-ink/40');

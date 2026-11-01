@@ -1,1 +1,1 @@
-"""Competitor Reels API: FastAPI app backed by SQLite via SQLAlchemy."""
+"""Competitor Videos API: FastAPI app backed by SQLite via SQLAlchemy."""

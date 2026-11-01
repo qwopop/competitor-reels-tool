@@ -1,9 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { filterReels } from '@/utils/reels';
+import { filterVideos } from '@/utils/videos';
 import { dashboardStats } from '@/utils/stats';
-import type { Competitor, ContentPlanItem, Reel, RemixedReel } from '@/types';
+import type { Competitor, ContentPlanItem, Video, RemixedVideo } from '@/types';
 
-function reel(overrides: Partial<Reel>): Reel {
+function video(overrides: Partial<Video>): Video {
   return {
     id: 'r',
     competitorId: 'c1',
@@ -23,34 +23,34 @@ function reel(overrides: Partial<Reel>): Reel {
 
 const all = { competitorId: '', query: '', sort: 'newest' as const };
 
-describe('filterReels', () => {
-  const reels = [
-    reel({ id: 'a', caption: 'Prompt tips', postedAt: '2026-01-01T00:00:00.000Z', viewCount: 5, likeCount: 50 }),
-    reel({ id: 'b', caption: 'SaaS build', competitorId: 'c2', postedAt: '2026-02-01T00:00:00.000Z', viewCount: 500, likeCount: 1 }),
-    reel({ id: 'c', caption: 'Another SaaS', postedAt: '2026-03-01T00:00:00.000Z', viewCount: 50, likeCount: 10 }),
+describe('filterVideos', () => {
+  const videos = [
+    video({ id: 'a', caption: 'Prompt tips', postedAt: '2026-01-01T00:00:00.000Z', viewCount: 5, likeCount: 50 }),
+    video({ id: 'b', caption: 'SaaS build', competitorId: 'c2', postedAt: '2026-02-01T00:00:00.000Z', viewCount: 500, likeCount: 1 }),
+    video({ id: 'c', caption: 'Another SaaS', postedAt: '2026-03-01T00:00:00.000Z', viewCount: 50, likeCount: 10 }),
   ];
 
   it('sorts newest first by default', () => {
-    expect(filterReels(reels, all).map((r) => r.id)).toEqual(['c', 'b', 'a']);
+    expect(filterVideos(videos, all).map((r) => r.id)).toEqual(['c', 'b', 'a']);
   });
 
   it('sorts by views and by likes', () => {
-    expect(filterReels(reels, { ...all, sort: 'views' }).map((r) => r.id)).toEqual(['b', 'c', 'a']);
-    expect(filterReels(reels, { ...all, sort: 'likes' }).map((r) => r.id)).toEqual(['a', 'c', 'b']);
+    expect(filterVideos(videos, { ...all, sort: 'views' }).map((r) => r.id)).toEqual(['b', 'c', 'a']);
+    expect(filterVideos(videos, { ...all, sort: 'likes' }).map((r) => r.id)).toEqual(['a', 'c', 'b']);
   });
 
   it('searches captions case-insensitively', () => {
-    expect(filterReels(reels, { ...all, query: '  saas ' }).map((r) => r.id)).toEqual(['c', 'b']);
+    expect(filterVideos(videos, { ...all, query: '  saas ' }).map((r) => r.id)).toEqual(['c', 'b']);
   });
 
   it('filters by competitor', () => {
-    expect(filterReels(reels, { ...all, competitorId: 'c2' }).map((r) => r.id)).toEqual(['b']);
+    expect(filterVideos(videos, { ...all, competitorId: 'c2' }).map((r) => r.id)).toEqual(['b']);
   });
 
   it('does not mutate the input', () => {
-    const copy = [...reels];
-    filterReels(reels, { ...all, sort: 'views' });
-    expect(reels).toEqual(copy);
+    const copy = [...videos];
+    filterVideos(videos, { ...all, sort: 'views' });
+    expect(videos).toEqual(copy);
   });
 });
 
@@ -59,21 +59,21 @@ describe('dashboardStats', () => {
     { id: 'c1', username: 'one', instagramUrl: '', displayName: 'One', avatarUrl: '', addedAt: '' },
     { id: 'c2', username: 'two', instagramUrl: '', displayName: 'Two', avatarUrl: '', addedAt: '' },
   ];
-  const reels = [
-    reel({ id: 'a', competitorId: 'c1', viewCount: 100, likeCount: 10, commentCount: 1, postedAt: '2026-01-01T00:00:00.000Z' }),
-    reel({ id: 'b', competitorId: 'c1', viewCount: 300, likeCount: 20, commentCount: 2, postedAt: '2026-02-01T00:00:00.000Z' }),
-    reel({ id: 'c', competitorId: 'c2', competitorUsername: 'two', viewCount: 250, likeCount: 30, commentCount: 3, postedAt: '2026-03-01T00:00:00.000Z' }),
+  const videos = [
+    video({ id: 'a', competitorId: 'c1', viewCount: 100, likeCount: 10, commentCount: 1, postedAt: '2026-01-01T00:00:00.000Z' }),
+    video({ id: 'b', competitorId: 'c1', viewCount: 300, likeCount: 20, commentCount: 2, postedAt: '2026-02-01T00:00:00.000Z' }),
+    video({ id: 'c', competitorId: 'c2', competitorUsername: 'two', viewCount: 250, likeCount: 30, commentCount: 3, postedAt: '2026-03-01T00:00:00.000Z' }),
   ];
-  const remixes: RemixedReel[] = [{ id: 'm', reelId: 'a', title: '', hook: '', script: '', cta: '', createdAt: '', updatedAt: '' }];
+  const remixes: RemixedVideo[] = [{ id: 'm', videoId: 'a', title: '', hook: '', script: '', cta: '', createdAt: '', updatedAt: '' }];
   const plan: ContentPlanItem[] = [
-    { id: 'p1', reelId: 'a', status: 'filmed', competitorUsername: 'one', caption: '', thumbnailUrl: '', permalink: '', postedAt: '', addedAt: '', updatedAt: '' },
-    { id: 'p2', reelId: 'b', status: 'not_started', competitorUsername: 'one', caption: '', thumbnailUrl: '', permalink: '', postedAt: '', addedAt: '', updatedAt: '' },
+    { id: 'p1', videoId: 'a', status: 'filmed', competitorUsername: 'one', caption: '', thumbnailUrl: '', permalink: '', postedAt: '', addedAt: '', updatedAt: '' },
+    { id: 'p2', videoId: 'b', status: 'not_started', competitorUsername: 'one', caption: '', thumbnailUrl: '', permalink: '', postedAt: '', addedAt: '', updatedAt: '' },
   ];
 
-  it('totals counts and engagement across stored Reels', () => {
-    const s = dashboardStats(competitors, reels, remixes, plan);
+  it('totals counts and engagement across stored Videos', () => {
+    const s = dashboardStats(competitors, videos, remixes, plan);
     expect(s.totalCompetitors).toBe(2);
-    expect(s.totalReels).toBe(3);
+    expect(s.totalVideos).toBe(3);
     expect(s.totalRemixes).toBe(1);
     expect(s.plannedVideos).toBe(2);
     expect(s.totalViews).toBe(650);
@@ -81,28 +81,28 @@ describe('dashboardStats', () => {
     expect(s.totalComments).toBe(6);
   });
 
-  it('picks the top Reel by views and the most-viewed competitor by total views', () => {
-    const s = dashboardStats(competitors, reels, remixes, plan);
-    expect(s.topReel?.id).toBe('b');
+  it('picks the top Video by views and the most-viewed competitor by total views', () => {
+    const s = dashboardStats(competitors, videos, remixes, plan);
+    expect(s.topVideo?.id).toBe('b');
     expect(s.mostViewedCompetitor).toEqual({ username: 'one', views: 400 });
   });
 
-  it('counts plan items by status and lists the five newest Reels', () => {
-    const s = dashboardStats(competitors, reels, remixes, plan);
+  it('counts plan items by status and lists the five newest Videos', () => {
+    const s = dashboardStats(competitors, videos, remixes, plan);
     expect(s.planCounts).toEqual({ not_started: 1, ready: 0, filmed: 1 });
-    expect(s.recentReels.map((r) => r.id)).toEqual(['c', 'b', 'a']);
+    expect(s.recentVideos.map((r) => r.id)).toEqual(['c', 'b', 'a']);
   });
 
   it('handles an empty library', () => {
     const s = dashboardStats([], [], [], []);
-    expect(s.topReel).toBeNull();
+    expect(s.topVideo).toBeNull();
     expect(s.mostViewedCompetitor).toBeNull();
     expect(s.totalViews).toBe(0);
   });
 });
 
 
-import { countLabel, plural, reelStats } from '@/utils/format';
+import { countLabel, plural, videoStats } from '@/utils/format';
 
 describe('wording helpers', () => {
   it('plural uses the singular only for exactly one', () => {
@@ -118,32 +118,32 @@ describe('wording helpers', () => {
     expect(countLabel(12_300, 'view')).toBe('12.3K views');
   });
 
-  it('reelStats joins views, likes and comments', () => {
-    expect(reelStats({ viewCount: 1, likeCount: 2, commentCount: 1 })).toBe('1 view · 2 likes · 1 comment');
+  it('videoStats joins views, likes and comments', () => {
+    expect(videoStats({ viewCount: 1, likeCount: 2, commentCount: 1 })).toBe('1 view · 2 likes · 1 comment');
   });
 });
 
-describe('instagramReelsUrl', () => {
-  it('builds the Reels tab link for a username', async () => {
-    const { instagramReelsUrl } = await import('@/utils/instagram');
-    expect(instagramReelsUrl('vibecoder')).toBe('https://www.instagram.com/vibecoder/reels/');
-    expect(instagramReelsUrl('Vibe.Coder_1')).toBe('https://www.instagram.com/vibe.coder_1/reels/');
+describe('instagramVideosUrl', () => {
+  it('builds the Videos tab link for a username', async () => {
+    const { instagramVideosUrl } = await import('@/utils/instagram');
+    expect(instagramVideosUrl('vibecoder')).toBe('https://www.instagram.com/vibecoder/videos/');
+    expect(instagramVideosUrl('Vibe.Coder_1')).toBe('https://www.instagram.com/vibe.coder_1/videos/');
   });
 });
 
-describe('isPostLink and reelStats', () => {
-  it('tells a Reel link from a profile link', async () => {
+describe('isPostLink and videoStats', () => {
+  it('tells a Video link from a profile link', async () => {
     const { isPostLink } = await import('@/utils/instagram');
-    expect(isPostLink('https://www.instagram.com/reel/DfMPGCguhRQ/')).toBe(true);
-    expect(isPostLink('https://www.instagram.com/nick_saraev/reel/DfMPGCguhRQ/')).toBe(true);
+    expect(isPostLink('https://www.instagram.com/video/DfMPGCguhRQ/')).toBe(true);
+    expect(isPostLink('https://www.instagram.com/nick_saraev/video/DfMPGCguhRQ/')).toBe(true);
     expect(isPostLink('https://www.instagram.com/p/ABC_12-x/')).toBe(true);
     expect(isPostLink('https://www.instagram.com/nick_saraev/')).toBe(false);
-    expect(isPostLink('https://www.instagram.com/nick_saraev/reels/')).toBe(false);
+    expect(isPostLink('https://www.instagram.com/nick_saraev/videos/')).toBe(false);
   });
 
   it('leaves views out when Instagram did not report them', async () => {
-    const { reelStats } = await import('@/utils/format');
-    expect(reelStats({ viewCount: 0, likeCount: 5, commentCount: 1 })).toBe('5 likes · 1 comment');
-    expect(reelStats({ viewCount: 2, likeCount: 1, commentCount: 0 })).toBe('2 views · 1 like · 0 comments');
+    const { videoStats } = await import('@/utils/format');
+    expect(videoStats({ viewCount: 0, likeCount: 5, commentCount: 1 })).toBe('5 likes · 1 comment');
+    expect(videoStats({ viewCount: 2, likeCount: 1, commentCount: 0 })).toBe('2 views · 1 like · 0 comments');
   });
 });

@@ -9,11 +9,11 @@ export interface Competitor {
   addedAt: string;
 }
 
-export interface Reel {
+export interface Video {
   id: string;
   competitorId: string;
   competitorUsername: string;
-  // Instagram's short code. Sample Reels have no real post, so `permalink`
+  // Instagram's short code. Sample Videos have no real post, so `permalink`
   // points at the competitor's profile instead.
   shortcode: string;
   permalink: string;
@@ -26,7 +26,7 @@ export interface Reel {
   fetchedAt: string;
 }
 
-export interface ReelBreakdown {
+export interface VideoBreakdown {
   hook: string;
   script: string;
   cta: string;
@@ -35,9 +35,9 @@ export interface ReelBreakdown {
   generatedAt: string;
 }
 
-export interface RemixedReel {
+export interface RemixedVideo {
   id: string;
-  reelId: string;
+  videoId: string;
   title: string;
   hook: string;
   script: string;
@@ -51,7 +51,7 @@ export type PlanStatus = 'not_started' | 'ready' | 'filmed';
 
 export interface ContentPlanItem {
   id: string;
-  reelId: string;
+  videoId: string;
   status: PlanStatus;
   competitorUsername: string;
   caption: string;
@@ -69,26 +69,26 @@ export interface ServiceResult<T> {
   error: string | null;
 }
 
-export interface ReelsApi {
+export interface VideosApi {
   listCompetitors(): Promise<ServiceResult<Competitor[]>>;
   addCompetitor(instagramUrl: string): Promise<ServiceResult<Competitor>>;
   removeCompetitor(id: string): Promise<ServiceResult<void>>;
-  // Fetches the 20 most recent Reels for a competitor and stores them.
-  fetchReelsForCompetitor(competitorId: string): Promise<ServiceResult<Reel[]>>;
-  listReels(): Promise<ServiceResult<Reel[]>>;
-  getReel(id: string): Promise<ServiceResult<Reel>>;
-  // AI-powered: builds the breakdown (hook / script / cta) for a Reel.
-  remixReel(reelId: string, template?: RemixTemplate): Promise<ServiceResult<RemixedReel>>;
-  listRemixes(): Promise<ServiceResult<RemixedReel[]>>;
-  getRemixForReel(reelId: string): Promise<ServiceResult<RemixedReel>>;
-  applyRemixTemplate(id: string, template: RemixTemplate): Promise<ServiceResult<RemixedReel>>;
-  getRemix(id: string): Promise<ServiceResult<RemixedReel>>;
+  // Fetches the 20 most recent Videos for a competitor and stores them.
+  fetchVideosForCompetitor(competitorId: string): Promise<ServiceResult<Video[]>>;
+  listVideos(): Promise<ServiceResult<Video[]>>;
+  getVideo(id: string): Promise<ServiceResult<Video>>;
+  // AI-powered: builds the breakdown (hook / script / cta) for a Video.
+  remixVideo(videoId: string, template?: RemixTemplate): Promise<ServiceResult<RemixedVideo>>;
+  listRemixes(): Promise<ServiceResult<RemixedVideo[]>>;
+  getRemixForVideo(videoId: string): Promise<ServiceResult<RemixedVideo>>;
+  applyRemixTemplate(id: string, template: RemixTemplate): Promise<ServiceResult<RemixedVideo>>;
+  getRemix(id: string): Promise<ServiceResult<RemixedVideo>>;
   updateRemix(
     id: string,
-    patch: Partial<Pick<RemixedReel, 'title' | 'hook' | 'script' | 'cta'>>
-  ): Promise<ServiceResult<RemixedReel>>;
+    patch: Partial<Pick<RemixedVideo, 'title' | 'hook' | 'script' | 'cta'>>
+  ): Promise<ServiceResult<RemixedVideo>>;
   listContentPlan(): Promise<ServiceResult<ContentPlanItem[]>>;
-  addToContentPlan(reelId: string): Promise<ServiceResult<ContentPlanItem>>;
+  addToContentPlan(videoId: string): Promise<ServiceResult<ContentPlanItem>>;
   updateContentPlanStatus(
     id: string,
     status: PlanStatus

@@ -1,53 +1,53 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import type { ContentPlanItem, Reel, RemixedReel } from '@/types';
+import type { ContentPlanItem, Video, RemixedVideo } from '@/types';
 import { useApi } from '@/services';
-import { relativeTime, reelStats } from '@/utils/format';
-import { filterReels, type ReelSort } from '@/utils/reels';
+import { relativeTime, videoStats } from '@/utils/format';
+import { filterVideos, type VideoSort } from '@/utils/videos';
 import { planStatusMeta } from '@/utils/plan';
 import { PageHeader } from '@/components/PageHeader';
 import { EmptyState, ErrorBanner, FullPageLoader, Spinner } from '@/components/ui';
 import { Notice } from '@/components/Notice';
 import { ViewToggle } from '@/components/ViewToggle';
 import { useDialogFocus } from '@/components/useDialogFocus';
-import { ReelOnInstagramLink } from '@/components/InstagramReelsLink';
+import { VideoOnInstagramLink } from '@/components/InstagramVideosLink';
 
 type LibraryView = 'grid' | 'list';
 
-const SORT_OPTIONS: { value: ReelSort; label: string }[] = [
+const SORT_OPTIONS: { value: VideoSort; label: string }[] = [
   { value: 'newest', label: 'Newest' },
   { value: 'views', label: 'Most views' },
   { value: 'likes', label: 'Most likes' },
 ];
 
-export function ReelsPage() {
+export function VideosPage() {
   const api = useApi();
   const navigate = useNavigate();
-  const [reels, setReels] = useState<Reel[] | null>(null);
-  const [remixByReel, setRemixByReel] = useState<Record<string, RemixedReel>>({});
-  const [planByReel, setPlanByReel] = useState<Record<string, ContentPlanItem>>({});
+  const [videos, setVideos] = useState<Video[] | null>(null);
+  const [remixByVideo, setRemixByVideo] = useState<Record<string, RemixedVideo>>({});
+  const [planByVideo, setPlanByVideo] = useState<Record<string, ContentPlanItem>>({});
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
-  const [preview, setPreview] = useState<RemixedReel | null>(null);
+  const [preview, setPreview] = useState<RemixedVideo | null>(null);
 
   const [view, setView] = useState<LibraryView>('grid');
   const [competitorId, setCompetitorId] = useState('');
   const [query, setQuery] = useState('');
-  const [sort, setSort] = useState<ReelSort>('newest');
+  const [sort, setSort] = useState<VideoSort>('newest');
 
   useEffect(() => {
     let active = true;
-    api.listReels().then((res) => {
+    api.listVideos().then((res) => {
       if (!active) return;
       if (res.error) setError(res.error);
-      else setReels(res.data ?? []);
+      else setVideos(res.data ?? []);
     });
     api.listRemixes().then((res) => {
-      if (active && res.data) setRemixByReel(Object.fromEntries(res.data.map((r) => [r.reelId, r])));
+      if (active && res.data) setRemixByVideo(Object.fromEntries(res.data.map((r) => [r.videoId, r])));
     });
     api.listContentPlan().then((res) => {
-      if (active && res.data) setPlanByReel(Object.fromEntries(res.data.map((i) => [i.reelId, i])));
+      if (active && res.data) setPlanByVideo(Object.fromEntries(res.data.map((i) => [i.videoId, i])));
     });
     return () => {
       active = false;
@@ -56,18 +56,18 @@ export function ReelsPage() {
 
   const competitors = useMemo(() => {
     const seen = new Map<string, string>();
-    for (const r of reels ?? []) seen.set(r.competitorId, r.competitorUsername);
+    for (const r of videos ?? []) seen.set(r.competitorId, r.competitorUsername);
     return [...seen.entries()];
-  }, [reels]);
+  }, [videos]);
 
   const visible = useMemo(
-    () => (reels ? filterReels(reels, { competitorId, query, sort }) : []),
-    [reels, competitorId, query, sort]
+    () => (videos ? filterVideos(videos, { competitorId, query, sort }) : []),
+    [videos, competitorId, query, sort]
   );
 
-  async function handleRemix(reel: Reel) {
-    setBusyId(reel.id);
-    const res = await api.remixReel(reel.id);
+  async function handleRemix(video: Video) {
+    setBusyId(video.id);
+    const res = await api.remixVideo(video.id);
     setBusyId(null);
     if (res.error || !res.data) {
       setError(res.error ?? 'Could not create the breakdown.');
@@ -76,20 +76,20 @@ export function ReelsPage() {
     navigate(`/remix/${res.data.id}`);
   }
 
-  async function handleAddToPlan(reel: Reel) {
-    if (planByReel[reel.id]) {
+  async function handleAddToPlan(video: Video) {
+    if (planByVideo[video.id]) {
       setNotice('Already in your Content Plan.');
       return;
     }
-    setBusyId(reel.id);
-    const res = await api.addToContentPlan(reel.id);
+    setBusyId(video.id);
+    const res = await api.addToContentPlan(video.id);
     setBusyId(null);
     if (res.error || !res.data) {
       setError(res.error ?? 'Could not add to the Content Plan.');
       return;
     }
     const item = res.data;
-    setPlanByReel((prev) => ({ ...prev, [reel.id]: item }));
+    setPlanByVideo((prev) => ({ ...prev, [video.id]: item }));
     setNotice('Added to your Content Plan.');
   }
 
@@ -97,15 +97,15 @@ export function ReelsPage() {
     <div>
       <PageHeader
         title="Browse"
-        accent="reels"
-        description="Every Reel from your tracked competitors. Search, filter and sort them, then remix or queue the ones worth making."
+        accent="videos"
+        description="Every Video from your tracked competitors. Search, filter and sort them, then remix or queue the ones worth making."
       />
 
       <div className="mb-8 flex flex-wrap items-end gap-4">
         <div className="min-w-[12rem]">
-          <label htmlFor="reel-competitor" className="label">Competitor</label>
+          <label htmlFor="video-competitor" className="label">Competitor</label>
           <select
-            id="reel-competitor"
+            id="video-competitor"
             className="input mt-2"
             value={competitorId}
             onChange={(e) => setCompetitorId(e.target.value)}
@@ -117,9 +117,9 @@ export function ReelsPage() {
           </select>
         </div>
         <div className="min-w-[14rem] flex-1">
-          <label htmlFor="reel-search" className="label">Search captions</label>
+          <label htmlFor="video-search" className="label">Search captions</label>
           <input
-            id="reel-search"
+            id="video-search"
             type="search"
             className="input mt-2"
             value={query}
@@ -128,12 +128,12 @@ export function ReelsPage() {
           />
         </div>
         <div className="min-w-[10rem]">
-          <label htmlFor="reel-sort" className="label">Sort by</label>
+          <label htmlFor="video-sort" className="label">Sort by</label>
           <select
-            id="reel-sort"
+            id="video-sort"
             className="input mt-2"
             value={sort}
-            onChange={(e) => setSort(e.target.value as ReelSort)}
+            onChange={(e) => setSort(e.target.value as VideoSort)}
           >
             {SORT_OPTIONS.map((o) => (
               <option key={o.value} value={o.value}>{o.label}</option>
@@ -162,17 +162,17 @@ export function ReelsPage() {
         </div>
       )}
 
-      {reels === null && !error ? (
-        <FullPageLoader label="Loading your reels…" />
-      ) : reels && reels.length === 0 ? (
+      {videos === null && !error ? (
+        <FullPageLoader label="Loading your videos…" />
+      ) : videos && videos.length === 0 ? (
         <EmptyState
-          title="No reels yet"
-          description="Track an Instagram competitor and fetch their latest Reels to fill this library."
+          title="No videos yet"
+          description="Track an Instagram competitor and fetch their latest Videos to fill this library."
           action={<Link to="/competitors" className="btn-primary">Go to competitors</Link>}
         />
-      ) : reels && visible.length === 0 ? (
+      ) : videos && visible.length === 0 ? (
         <div className="flex flex-wrap items-center gap-4">
-          <p className="text-base text-ink/70">No Reels match these filters.</p>
+          <p className="text-base text-ink/70">No Videos match these filters.</p>
           <button
             type="button"
             className="btn-outline px-4 py-2 text-sm"
@@ -187,65 +187,65 @@ export function ReelsPage() {
         </div>
       ) : view === 'grid' ? (
         <div className="grid grid-cols-1 gap-x-8 gap-y-14 sm:grid-cols-2 lg:grid-cols-3">
-          {visible.map((reel, index) => (
-            <article key={reel.id} className="rise" style={{ '--i': Math.min(index, 8) } as React.CSSProperties}>
+          {visible.map((video, index) => (
+            <article key={video.id} className="rise" style={{ '--i': Math.min(index, 8) } as React.CSSProperties}>
               <img
-                src={reel.thumbnailUrl}
-                alt={reel.caption}
+                src={video.thumbnailUrl}
+                alt={video.caption}
                 loading="lazy"
                 className="aspect-[4/5] w-full rounded-2xl bg-surface-2 object-cover"
               />
               <div className="mt-5 space-y-2">
                 <p className="text-sm text-ink/60">
-                  @{reel.competitorUsername} · {relativeTime(reel.postedAt)}
+                  @{video.competitorUsername} · {relativeTime(video.postedAt)}
                 </p>
                 <h3 className="line-clamp-2 min-h-[3.5rem] text-lg font-medium leading-snug text-ink">
-                  {reel.caption}
+                  {video.caption}
                 </h3>
                 <p className="stat">
-                  {reelStats(reel)}
+                  {videoStats(video)}
                 </p>
               </div>
-              <ReelActions
-                reel={reel}
-                busy={busyId === reel.id}
-                inPlan={planByReel[reel.id]}
-                hasRemix={Boolean(remixByReel[reel.id])}
-                onRemix={() => handleRemix(reel)}
-                onAddToPlan={() => handleAddToPlan(reel)}
-                onPreview={() => setPreview(remixByReel[reel.id])}
+              <VideoActions
+                video={video}
+                busy={busyId === video.id}
+                inPlan={planByVideo[video.id]}
+                hasRemix={Boolean(remixByVideo[video.id])}
+                onRemix={() => handleRemix(video)}
+                onAddToPlan={() => handleAddToPlan(video)}
+                onPreview={() => setPreview(remixByVideo[video.id])}
               />
             </article>
           ))}
         </div>
       ) : (
         <ul className="max-w-5xl">
-          {visible.map((reel) => (
-            <li key={reel.id} className="rise rounded-2xl bg-surface p-4 transition-colors duration-200 hover:bg-surface-2 [&+&]:mt-3">
+          {visible.map((video) => (
+            <li key={video.id} className="rise rounded-2xl bg-surface p-4 transition-colors duration-200 hover:bg-surface-2 [&+&]:mt-3">
               <div className="flex flex-wrap items-center gap-5">
                 <img
-                  src={reel.thumbnailUrl}
-                  alt={reel.caption}
+                  src={video.thumbnailUrl}
+                  alt={video.caption}
                   loading="lazy"
                   className="aspect-[4/5] w-16 rounded-xl bg-surface-2 object-cover"
                 />
                 <div className="min-w-0 flex-1 basis-64">
                   <p className="text-sm text-ink/60">
-                    @{reel.competitorUsername} · {relativeTime(reel.postedAt)}
+                    @{video.competitorUsername} · {relativeTime(video.postedAt)}
                   </p>
-                  <h3 className="text-base font-medium text-ink">{reel.caption}</h3>
+                  <h3 className="text-base font-medium text-ink">{video.caption}</h3>
                   <p className="stat mt-1">
-                    {reelStats(reel)}
+                    {videoStats(video)}
                   </p>
                 </div>
-                <ReelActions
-                  reel={reel}
-                  busy={busyId === reel.id}
-                  inPlan={planByReel[reel.id]}
-                  hasRemix={Boolean(remixByReel[reel.id])}
-                  onRemix={() => handleRemix(reel)}
-                  onAddToPlan={() => handleAddToPlan(reel)}
-                  onPreview={() => setPreview(remixByReel[reel.id])}
+                <VideoActions
+                  video={video}
+                  busy={busyId === video.id}
+                  inPlan={planByVideo[video.id]}
+                  hasRemix={Boolean(remixByVideo[video.id])}
+                  onRemix={() => handleRemix(video)}
+                  onAddToPlan={() => handleAddToPlan(video)}
+                  onPreview={() => setPreview(remixByVideo[video.id])}
                 />
               </div>
             </li>
@@ -258,8 +258,8 @@ export function ReelsPage() {
   );
 }
 
-function ReelActions({
-  reel,
+function VideoActions({
+  video,
   busy,
   inPlan,
   hasRemix,
@@ -267,7 +267,7 @@ function ReelActions({
   onAddToPlan,
   onPreview,
 }: {
-  reel: Reel;
+  video: Video;
   busy: boolean;
   inPlan: ContentPlanItem | undefined;
   hasRemix: boolean;
@@ -295,13 +295,13 @@ function ReelActions({
         {busy ? <Spinner /> : null} Remix
       </button>
       <div className="basis-full">
-        <ReelOnInstagramLink permalink={reel.permalink} username={reel.competitorUsername} />
+        <VideoOnInstagramLink permalink={video.permalink} username={video.competitorUsername} />
       </div>
     </div>
   );
 }
 
-function RemixPreview({ remix, onClose }: { remix: RemixedReel; onClose: () => void }) {
+function RemixPreview({ remix, onClose }: { remix: RemixedVideo; onClose: () => void }) {
   const panelRef = useRef<HTMLElement>(null);
   // Escape closes it, focus moves in, and returns to the Preview button afterwards.
   useDialogFocus(panelRef, onClose, { trap: false });

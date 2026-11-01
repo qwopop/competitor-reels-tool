@@ -2,12 +2,12 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { ApiProvider } from '@/services';
 import { Layout } from '@/components/Layout';
 import { DashboardPage } from '@/pages/DashboardPage';
-import { ReelsPage } from '@/pages/ReelsPage';
+import { VideosPage } from '@/pages/VideosPage';
 import { CompetitorsPage } from '@/pages/CompetitorsPage';
 import { RemixesPage } from '@/pages/RemixesPage';
 import { RemixPage } from '@/pages/RemixPage';
 import { ContentPlanPage } from '@/pages/ContentPlanPage';
-import { ReelsLinkPage } from '@/pages/ReelsLinkPage';
+import { VideosLinkPage } from '@/pages/VideosLinkPage';
 
 export default function App() {
   return (
@@ -16,12 +16,12 @@ export default function App() {
         <Routes>
           <Route element={<Layout />}>
             <Route index element={<DashboardPage />} />
-            <Route path="/reels" element={<ReelsPage />} />
+            <Route path="/videos" element={<VideosPage />} />
             <Route path="/competitors" element={<CompetitorsPage />} />
             <Route path="/remixes" element={<RemixesPage />} />
             <Route path="/remix/:id" element={<RemixPage />} />
             <Route path="/content-plan" element={<ContentPlanPage />} />
-            <Route path="/go-to-reels" element={<ReelsLinkPage />} />
+            <Route path="/go-to-videos" element={<VideosLinkPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>
         </Routes>

@@ -22,8 +22,8 @@ class CompetitorRow(Base):
     added_at: Mapped[str] = mapped_column(String(40))
 
 
-class ReelRow(Base):
-    __tablename__ = "reels"
+class VideoRow(Base):
+    __tablename__ = "videos"
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     competitor_id: Mapped[str] = mapped_column(
@@ -45,8 +45,8 @@ class RemixRow(Base):
     __tablename__ = "remixes"
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
-    reel_id: Mapped[str] = mapped_column(
-        ForeignKey("reels.id", ondelete="CASCADE"), unique=True
+    video_id: Mapped[str] = mapped_column(
+        ForeignKey("videos.id", ondelete="CASCADE"), unique=True
     )
     title: Mapped[str] = mapped_column(String(500))
     hook: Mapped[str] = mapped_column(String(1000))
@@ -57,17 +57,17 @@ class RemixRow(Base):
 
 
 class ContentPlanRow(Base):
-    """A Reel queued for filming. Fields are copied from the Reel, not linked to it.
+    """A Video queued for filming. Fields are copied from the Video, not linked to it.
 
-    Re-fetching a competitor replaces their Reels with new rows. Keeping a
+    Re-fetching a competitor replaces their Videos with new rows. Keeping a
     snapshot here means the filming list survives those refreshes.
     """
 
     __tablename__ = "content_plan"
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
-    # One plan item per source Reel. Not a foreign key: plan items outlive their Reel.
-    reel_id: Mapped[str] = mapped_column(String(64), unique=True)
+    # One plan item per source Video. Not a foreign key: plan items outlive their Video.
+    video_id: Mapped[str] = mapped_column(String(64), unique=True)
     status: Mapped[str] = mapped_column(String(20))
     competitor_username: Mapped[str] = mapped_column(String(64))
     caption: Mapped[str] = mapped_column(String(500))

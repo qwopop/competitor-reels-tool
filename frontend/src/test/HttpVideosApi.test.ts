@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { HttpReelsApi } from '@/services/HttpReelsApi';
+import { HttpVideosApi } from '@/services/HttpVideosApi';
 
 function jsonResponse(status: number, body: unknown): Response {
   return new Response(status === 204 ? null : JSON.stringify(body), {
@@ -8,7 +8,7 @@ function jsonResponse(status: number, body: unknown): Response {
   });
 }
 
-describe('HttpReelsApi', () => {
+describe('HttpVideosApi', () => {
   let fetchMock: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
@@ -22,7 +22,7 @@ describe('HttpReelsApi', () => {
 
   it('lists competitors from GET /api/competitors', async () => {
     fetchMock.mockResolvedValue(jsonResponse(200, [{ id: 'comp_1' }]));
-    const res = await new HttpReelsApi().listCompetitors();
+    const res = await new HttpVideosApi().listCompetitors();
     expect(fetchMock).toHaveBeenCalledWith('/api/competitors', {
       method: 'GET',
       headers: undefined,
@@ -33,7 +33,7 @@ describe('HttpReelsApi', () => {
 
   it('posts the Instagram URL as JSON when adding a competitor', async () => {
     fetchMock.mockResolvedValue(jsonResponse(201, { id: 'comp_1' }));
-    await new HttpReelsApi().addCompetitor('https://instagram.com/vibecoder');
+    await new HttpVideosApi().addCompetitor('https://instagram.com/vibecoder');
     const [url, init] = fetchMock.mock.calls[0];
     expect(url).toBe('/api/competitors');
     expect(init.method).toBe('POST');
@@ -45,28 +45,28 @@ describe('HttpReelsApi', () => {
     fetchMock.mockResolvedValue(
       jsonResponse(400, { detail: 'Please paste a valid Instagram profile URL' })
     );
-    const res = await new HttpReelsApi().addCompetitor('https://twitter.com/x');
+    const res = await new HttpVideosApi().addCompetitor('https://twitter.com/x');
     expect(res.data).toBeNull();
     expect(res.error).toMatch(/valid Instagram/);
   });
 
   it('handles 204 responses with no body', async () => {
     fetchMock.mockResolvedValue(jsonResponse(204, undefined));
-    const res = await new HttpReelsApi().removeCompetitor('comp_1');
+    const res = await new HttpVideosApi().removeCompetitor('comp_1');
     expect(fetchMock.mock.calls[0][0]).toBe('/api/competitors/comp_1');
     expect(res).toEqual({ data: null, error: null });
   });
 
   it('reports a friendly error when the backend is unreachable', async () => {
     fetchMock.mockRejectedValue(new TypeError('Failed to fetch'));
-    const res = await new HttpReelsApi().listReels();
+    const res = await new HttpVideosApi().listVideos();
     expect(res.data).toBeNull();
     expect(res.error).toMatch(/Could not reach the server/);
   });
 
   it('sends PATCH with only the changed fields', async () => {
     fetchMock.mockResolvedValue(jsonResponse(200, { id: 'remix_1' }));
-    await new HttpReelsApi().updateRemix('remix_1', { hook: 'New hook' });
+    await new HttpVideosApi().updateRemix('remix_1', { hook: 'New hook' });
     const [url, init] = fetchMock.mock.calls[0];
     expect(url).toBe('/api/remixes/remix_1');
     expect(init.method).toBe('PATCH');
@@ -75,7 +75,7 @@ describe('HttpReelsApi', () => {
 });
 
 
-describe('HttpReelsApi when the server is down', () => {
+describe('HttpVideosApi when the server is down', () => {
   beforeEach(() => {
     vi.stubGlobal('fetch', vi.fn());
   });
@@ -85,25 +85,25 @@ describe('HttpReelsApi when the server is down', () => {
 
   it.each([500, 502, 503, 504])('turns an empty %i into a clear message', async (status) => {
     vi.mocked(fetch).mockResolvedValue(new Response(null, { status }));
-    const res = await new HttpReelsApi().listCompetitors();
+    const res = await new HttpVideosApi().listCompetitors();
     expect(res.data).toBeNull();
     expect(res.error).toBe('Could not reach the server. Check that the backend is running.');
   });
 
   it('still shows the detail the server sent with a 500', async () => {
     vi.mocked(fetch).mockResolvedValue(jsonResponse(500, { detail: 'boom' }));
-    const res = await new HttpReelsApi().listCompetitors();
+    const res = await new HttpVideosApi().listCompetitors();
     expect(res.error).toBe('boom');
   });
 
   it('keeps a plain message for other failures', async () => {
     vi.mocked(fetch).mockResolvedValue(new Response(null, { status: 418 }));
-    const res = await new HttpReelsApi().listCompetitors();
+    const res = await new HttpVideosApi().listCompetitors();
     expect(res.error).toBe('Request failed (418).');
   });
 });
 
-describe('HttpReelsApi validation messages', () => {
+describe('HttpVideosApi validation messages', () => {
   beforeEach(() => {
     vi.stubGlobal('fetch', vi.fn());
   });
@@ -124,7 +124,7 @@ describe('HttpReelsApi validation messages', () => {
         ],
       })
     );
-    const res = await new HttpReelsApi().updateRemix('remix_1', { script: 'x' });
+    const res = await new HttpVideosApi().updateRemix('remix_1', { script: 'x' });
     expect(res.error).toBe('The script is too long (at most 2000 characters).');
   });
 
@@ -132,7 +132,7 @@ describe('HttpReelsApi validation messages', () => {
     vi.mocked(fetch).mockResolvedValue(
       jsonResponse(422, { detail: [{ type: 'missing', loc: ['body', 'instagramUrl'], msg: 'Field required' }] })
     );
-    const res = await new HttpReelsApi().addCompetitor('');
+    const res = await new HttpVideosApi().addCompetitor('');
     expect(res.error).toBe('Field required');
   });
 });

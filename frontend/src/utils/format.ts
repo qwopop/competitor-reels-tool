@@ -37,11 +37,11 @@ export function countLabel(count: number, singular: string): string {
 }
 
 // "710.7K views · 61K likes · 1 comment". Views are left out when unknown (0):
-// the Instagram API does not report them for other accounts' Reels.
-export function reelStats(reel: { viewCount: number; likeCount: number; commentCount: number }): string {
+// the Instagram API does not report them for other accounts' Videos.
+export function videoStats(video: { viewCount: number; likeCount: number; commentCount: number }): string {
   return [
-    ...(reel.viewCount > 0 ? [countLabel(reel.viewCount, 'view')] : []),
-    countLabel(reel.likeCount, 'like'),
-    countLabel(reel.commentCount, 'comment'),
+    ...(video.viewCount > 0 ? [countLabel(video.viewCount, 'view')] : []),
+    countLabel(video.likeCount, 'like'),
+    countLabel(video.commentCount, 'comment'),
   ].join(' · ');
 }

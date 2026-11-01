@@ -1,10 +1,10 @@
 openapi: 3.1.0
 info:
-  title: Competitor Reels API
+  title: Competitor Videos API
   version: 0.1.0
   description: >
     Contract between the React frontend (frontend/) and the FastAPI backend
-    (backend/). Mirrors the ReelsApi service interface in frontend/src/types.ts.
+    (backend/). Mirrors the VideosApi service interface in frontend/src/types.ts.
 servers:
   - url: http://localhost:8091
     description: Local development server
@@ -56,82 +56,82 @@ paths:
       - $ref: "#/components/parameters/CompetitorId"
     delete:
       operationId: removeCompetitor
-      summary: Stop tracking a competitor and delete its Reels
+      summary: Stop tracking a competitor and delete its Videos
       responses:
         "204":
           description: Removed
         "404":
           $ref: "#/components/responses/Error"
 
-  /api/competitors/{competitor_id}/reels/fetch:
+  /api/competitors/{competitor_id}/videos/fetch:
     parameters:
       - $ref: "#/components/parameters/CompetitorId"
     post:
-      operationId: fetchReelsForCompetitor
-      summary: Fetch the 20 most recent Reels for a competitor
+      operationId: fetchVideosForCompetitor
+      summary: Fetch the 20 most recent Videos for a competitor
       description: >
-        Real Reels come from the Instagram Graph API when the server has
-        INSTAGRAM_ACCESS_TOKEN and INSTAGRAM_USER_ID set; otherwise sample Reels
+        Real Videos come from the Instagram Graph API when the server has
+        INSTAGRAM_ACCESS_TOKEN and INSTAGRAM_USER_ID set; otherwise sample Videos
         are generated. If Instagram fails (account is not a public Business or
-        Creator account, expired token, rate limit, no Reels), the response is
-        502 and the stored Reels are left as they were.
-        Stores 20 new Reels for this competitor and removes the old ones, with one
-        exception: a Reel that has a remix or a content plan item is kept, so a
+        Creator account, expired token, rate limit, no Videos), the response is
+        502 and the stored Videos are left as they were.
+        Stores 20 new Videos for this competitor and removes the old ones, with one
+        exception: a Video that has a remix or a content plan item is kept, so a
         re-fetch never destroys the user's work. The library can therefore hold
-        more than 20 Reels for a competitor. The response lists only the new Reels.
+        more than 20 Videos for a competitor. The response lists only the new Videos.
       responses:
         "200":
-          description: The freshly fetched Reels
+          description: The freshly fetched Videos
           content:
             application/json:
               schema:
                 type: array
                 items:
-                  $ref: "#/components/schemas/Reel"
+                  $ref: "#/components/schemas/Video"
         "404":
           $ref: "#/components/responses/Error"
         "502":
           $ref: "#/components/responses/Error"
 
-  /api/reels:
+  /api/videos:
     get:
-      operationId: listReels
-      summary: List all stored Reels, most recently posted first
+      operationId: listVideos
+      summary: List all stored Videos, most recently posted first
       responses:
         "200":
-          description: Reels
+          description: Videos
           content:
             application/json:
               schema:
                 type: array
                 items:
-                  $ref: "#/components/schemas/Reel"
+                  $ref: "#/components/schemas/Video"
 
-  /api/reels/{reel_id}:
+  /api/videos/{video_id}:
     parameters:
-      - $ref: "#/components/parameters/ReelId"
+      - $ref: "#/components/parameters/VideoId"
     get:
-      operationId: getReel
-      summary: Get one Reel
+      operationId: getVideo
+      summary: Get one Video
       responses:
         "200":
-          description: Reel
+          description: Video
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Reel"
+                $ref: "#/components/schemas/Video"
         "404":
           $ref: "#/components/responses/Error"
 
-  /api/reels/{reel_id}/remix:
+  /api/videos/{video_id}/remix:
     parameters:
-      - $ref: "#/components/parameters/ReelId"
+      - $ref: "#/components/parameters/VideoId"
     post:
-      operationId: remixReel
-      summary: Generate a breakdown (title, hook, script, CTA) for a Reel from a template
+      operationId: remixVideo
+      summary: Generate a breakdown (title, hook, script, CTA) for a Video from a template
       description: >
         Returns the existing remix with status 200 if one was already generated
-        for this Reel, otherwise generates a new one from the chosen template
+        for this Video, otherwise generates a new one from the chosen template
         (default: default) and returns it with 201.
       requestBody:
         required: false
@@ -145,13 +145,13 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/RemixedReel"
+                $ref: "#/components/schemas/RemixedVideo"
         "200":
           description: Existing remix returned
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/RemixedReel"
+                $ref: "#/components/schemas/RemixedVideo"
         "404":
           $ref: "#/components/responses/Error"
 
@@ -167,7 +167,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/RemixedReel"
+                $ref: "#/components/schemas/RemixedVideo"
         "404":
           $ref: "#/components/responses/Error"
     patch:
@@ -185,23 +185,23 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/RemixedReel"
+                $ref: "#/components/schemas/RemixedVideo"
         "404":
           $ref: "#/components/responses/Error"
 
-  /api/reels/{reel_id}/remix/current:
+  /api/videos/{video_id}/remix/current:
     parameters:
-      - $ref: "#/components/parameters/ReelId"
+      - $ref: "#/components/parameters/VideoId"
     get:
-      operationId: getRemixForReel
-      summary: Get the remix that already exists for a Reel
+      operationId: getRemixForVideo
+      summary: Get the remix that already exists for a Video
       responses:
         "200":
           description: Remix
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/RemixedReel"
+                $ref: "#/components/schemas/RemixedVideo"
         "404":
           $ref: "#/components/responses/Error"
 
@@ -217,7 +217,7 @@ paths:
               schema:
                 type: array
                 items:
-                  $ref: "#/components/schemas/RemixedReel"
+                  $ref: "#/components/schemas/RemixedVideo"
 
   /api/remixes/{remix_id}/apply-template:
     parameters:
@@ -240,14 +240,14 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/RemixedReel"
+                $ref: "#/components/schemas/RemixedVideo"
         "404":
           $ref: "#/components/responses/Error"
 
   /api/content-plan:
     get:
       operationId: listContentPlan
-      summary: List the Reels in the content plan, most recently added first
+      summary: List the Videos in the content plan, most recently added first
       responses:
         "200":
           description: Content plan items
@@ -259,9 +259,9 @@ paths:
                   $ref: "#/components/schemas/ContentPlanItem"
     post:
       operationId: addToContentPlan
-      summary: Add a Reel to the content plan
+      summary: Add a Video to the content plan
       description: >
-        New items start as not_started. If the Reel is already in the plan, the
+        New items start as not_started. If the Video is already in the plan, the
         existing item is returned with status 200 instead of creating a duplicate.
       requestBody:
         required: true
@@ -277,7 +277,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/ContentPlanItem"
         "200":
-          description: Reel already in the plan
+          description: Video already in the plan
           content:
             application/json:
               schema:
@@ -308,7 +308,7 @@ paths:
           $ref: "#/components/responses/Error"
     delete:
       operationId: removeFromContentPlan
-      summary: Remove a Reel from the content plan
+      summary: Remove a Video from the content plan
       responses:
         "204":
           description: Removed
@@ -323,8 +323,8 @@ components:
       required: true
       schema:
         type: string
-    ReelId:
-      name: reel_id
+    VideoId:
+      name: video_id
       in: path
       required: true
       schema:
@@ -373,11 +373,11 @@ components:
           description: >
             An Instagram profile link (with or without https:// and www.) or a bare
             username such as @vibecoder. Usernames are 1 to 30 characters of letters,
-            digits, periods and underscores. Post, Reel, Explore and other non-profile
+            digits, periods and underscores. Post, Video, Explore and other non-profile
             links are rejected with HTTP 400.
           examples: ["https://instagram.com/vibecoder"]
 
-    Reel:
+    Video:
       type: object
       required:
         [id, competitorId, competitorUsername, shortcode, permalink, caption,
@@ -388,13 +388,13 @@ components:
         competitorUsername: { type: string }
         shortcode:
           type: string
-          description: Instagram short code (sample Reels use generated values)
+          description: Instagram short code (sample Videos use generated values)
         permalink:
           type: string
           format: uri
           description: >
-            Link to the Reel itself, e.g. https://www.instagram.com/reel/<shortcode>/.
-            Sample Reels have no real post and link to the competitor's profile.
+            Link to the Video itself, e.g. https://www.instagram.com/video/<shortcode>/.
+            Sample Videos have no real post and link to the competitor's profile.
         viewCount:
           type: integer
           minimum: 0
@@ -406,12 +406,12 @@ components:
         postedAt: { type: string, format: date-time }
         fetchedAt: { type: string, format: date-time }
 
-    RemixedReel:
+    RemixedVideo:
       type: object
-      required: [id, reelId, title, hook, script, cta, createdAt, updatedAt]
+      required: [id, videoId, title, hook, script, cta, createdAt, updatedAt]
       properties:
         id: { type: string }
-        reelId: { type: string }
+        videoId: { type: string }
         title: { type: string }
         hook: { type: string }
         script: { type: string }
@@ -423,7 +423,7 @@ components:
       type: string
       description: >
         default, educational, storytelling or promotional. Each produces
-        template-generated drafts from the Reel's details, not AI analysis.
+        template-generated drafts from the Video's details, not AI analysis.
       enum: [default, educational, storytelling, promotional]
 
     RemixRequest:
@@ -452,10 +452,10 @@ components:
 
     ContentPlanItem:
       type: object
-      required: [id, reelId, status, competitorUsername, caption, thumbnailUrl, permalink, postedAt, addedAt, updatedAt]
+      required: [id, videoId, status, competitorUsername, caption, thumbnailUrl, permalink, postedAt, addedAt, updatedAt]
       properties:
         id: { type: string }
-        reelId: { type: string, description: The Reel this item was added from }
+        videoId: { type: string, description: The Video this item was added from }
         status: { $ref: "#/components/schemas/PlanStatus" }
         competitorUsername: { type: string }
         caption: { type: string }
@@ -467,9 +467,9 @@ components:
 
     AddToPlanRequest:
       type: object
-      required: [reelId]
+      required: [videoId]
       properties:
-        reelId: { type: string }
+        videoId: { type: string }
 
     UpdatePlanItemRequest:
       type: object

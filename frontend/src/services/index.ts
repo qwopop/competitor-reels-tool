@@ -1,4 +1,4 @@
 export { ApiProvider, useApi, USING_MOCK } from './ApiContext';
-export { HttpReelsApi } from './HttpReelsApi';
-export { MockReelsApi, parseUsername } from './MockReelsApi';
-export type { ReelsApi } from '@/types';
+export { HttpVideosApi } from './HttpVideosApi';
+export { MockVideosApi, parseUsername } from './MockVideosApi';
+export type { VideosApi } from '@/types';

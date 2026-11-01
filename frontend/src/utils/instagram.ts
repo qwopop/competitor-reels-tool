@@ -5,7 +5,7 @@ const USERNAME_RE = /^[A-Za-z0-9._]{1,30}$/;
 const INSTAGRAM_LINK_RE = /^(https?:\/\/)?([A-Za-z0-9-]+\.)*instagram\.com(\/|$|\?)/i;
 // First path segments that are Instagram pages, not accounts.
 const RESERVED_SEGMENTS = new Set([
-  'p', 'reel', 'reels', 'tv', 'explore', 'stories', 'accounts', 'direct',
+  'p', 'video', 'videos', 'tv', 'explore', 'stories', 'accounts', 'direct',
   'about', 'web', 'developer', 'legal', 'privacy', 'press', 'api', 'directory',
 ]);
 
@@ -30,13 +30,13 @@ export function parseUsername(input: string): string | null {
   return USERNAME_RE.test(name) ? name : null;
 }
 
-// The Reels tab of an Instagram profile, e.g. https://www.instagram.com/vibecoder/reels/
-export function instagramReelsUrl(username: string): string {
-  return `https://www.instagram.com/${encodeURIComponent(username.toLowerCase())}/reels/`;
+// The Videos tab of an Instagram profile, e.g. https://www.instagram.com/vibecoder/videos/
+export function instagramVideosUrl(username: string): string {
+  return `https://www.instagram.com/${encodeURIComponent(username.toLowerCase())}/videos/`;
 }
 
-// True when the link opens one specific post or Reel (instagram.com/reel/<code>/),
-// not just a profile. Sample Reels only have the profile link.
+// True when the link opens one specific post or Video (instagram.com/video/<code>/),
+// not just a profile. Sample Videos only have the profile link.
 export function isPostLink(permalink: string): boolean {
-  return /instagram\.com\/(?:[^/?#]+\/)?(?:reel|reels|p|tv)\/[A-Za-z0-9_-]+/i.test(permalink);
+  return /instagram\.com\/(?:[^/?#]+\/)?(?:video|videos|p|tv)\/[A-Za-z0-9_-]+/i.test(permalink);
 }

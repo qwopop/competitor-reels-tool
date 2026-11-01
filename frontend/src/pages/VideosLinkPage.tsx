@@ -1,17 +1,17 @@
 import { useState } from 'react';
 import { ArrowUpRight, Check, Copy, Play } from 'lucide-react';
 import { PageHeader } from '@/components/PageHeader';
-import { instagramReelsUrl, parseUsername } from '@/utils/instagram';
+import { instagramVideosUrl, parseUsername } from '@/utils/instagram';
 
-// Turns a username or profile link into a link to that account's Reels tab.
+// Turns a username or profile link into a link to that account's Videos tab.
 // Works on its own: nothing is saved and the backend is not called.
-export function ReelsLinkPage() {
+export function VideosLinkPage() {
   const [input, setInput] = useState('');
   const [username, setUsername] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
-  const link = username ? instagramReelsUrl(username) : null;
+  const link = username ? instagramVideosUrl(username) : null;
 
   function handleGenerate(e: React.FormEvent) {
     e.preventDefault();
@@ -44,16 +44,16 @@ export function ReelsLinkPage() {
     <div>
       <PageHeader
         title="Go to"
-        accent="Reels"
-        description="Enter an Instagram username or paste a profile link to get a direct link to that account's Reels."
+        accent="Videos"
+        description="Enter an Instagram username or paste a profile link to get a direct link to that account's Videos."
       />
 
       <section className="max-w-xl rounded-3xl bg-surface p-6 sm:p-8">
         <form onSubmit={handleGenerate} noValidate>
-          <label htmlFor="reels-username" className="label">Instagram username</label>
+          <label htmlFor="videos-username" className="label">Instagram username</label>
           <div className="mt-3 flex flex-col gap-3 sm:flex-row">
             <input
-              id="reels-username"
+              id="videos-username"
               type="text"
               value={input}
               onChange={(e) => setInput(e.target.value)}
@@ -63,14 +63,14 @@ export function ReelsLinkPage() {
               spellCheck={false}
               className="input flex-1"
               aria-invalid={error ? true : undefined}
-              aria-describedby={error ? 'reels-username-error' : undefined}
+              aria-describedby={error ? 'videos-username-error' : undefined}
             />
             <button type="submit" className="btn-primary whitespace-nowrap">
               Generate link
             </button>
           </div>
           {error && (
-            <p id="reels-username-error" role="alert" className="mt-3 text-sm text-danger">{error}</p>
+            <p id="videos-username-error" role="alert" className="mt-3 text-sm text-danger">{error}</p>
           )}
         </form>
 
@@ -83,7 +83,7 @@ export function ReelsLinkPage() {
               rel="noopener noreferrer"
               className="btn-primary mt-3 w-full justify-center sm:w-auto"
             >
-              <Play size={15} aria-hidden="true" /> Watch Reels @{username}
+              <Play size={15} aria-hidden="true" /> Watch Videos @{username}
               <ArrowUpRight size={15} aria-hidden="true" />
               <span className="sr-only">(opens in a new tab)</span>
             </a>

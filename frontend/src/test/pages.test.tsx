@@ -3,44 +3,44 @@ import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import type {
-  ReelsApi,
-  Reel,
+  VideosApi,
+  Video,
   Competitor,
   ContentPlanItem,
-  RemixedReel,
+  RemixedVideo,
   ServiceResult,
 } from '@/types';
 import { ApiProvider } from '@/services/ApiContext';
 import { DashboardPage } from '@/pages/DashboardPage';
-import { ReelsPage } from '@/pages/ReelsPage';
+import { VideosPage } from '@/pages/VideosPage';
 import { CompetitorsPage } from '@/pages/CompetitorsPage';
 import { RemixesPage } from '@/pages/RemixesPage';
 import { ContentPlanPage } from '@/pages/ContentPlanPage';
 import { RemixPage } from '@/pages/RemixPage';
 
-// A stub service whose returns we control per test. Pages depend only on ReelsApi.
-class StubApi implements Partial<ReelsApi> {
-  listReels = vi.fn(async (): Promise<ServiceResult<Reel[]>> => ({ data: [], error: null }));
+// A stub service whose returns we control per test. Pages depend only on VideosApi.
+class StubApi implements Partial<VideosApi> {
+  listVideos = vi.fn(async (): Promise<ServiceResult<Video[]>> => ({ data: [], error: null }));
   listCompetitors = vi.fn(async (): Promise<ServiceResult<Competitor[]>> => ({ data: [], error: null }));
   addCompetitor = vi.fn(async (): Promise<ServiceResult<Competitor>> => ({ data: null, error: 'Invalid' }));
-  fetchReelsForCompetitor = vi.fn(async (): Promise<ServiceResult<Reel[]>> => ({ data: [], error: null }));
+  fetchVideosForCompetitor = vi.fn(async (): Promise<ServiceResult<Video[]>> => ({ data: [], error: null }));
   removeCompetitor = vi.fn(async (): Promise<ServiceResult<void>> => ({ data: null, error: null }));
-  remixReel = vi.fn(async (): Promise<ServiceResult<RemixedReel>> => ({ data: null, error: 'nope' }));
-  getReel = vi.fn(async (): Promise<ServiceResult<Reel>> => ({ data: null, error: 'nope' }));
-  getRemix = vi.fn(async (): Promise<ServiceResult<RemixedReel>> => ({ data: null, error: 'nope' }));
-  updateRemix = vi.fn(async (): Promise<ServiceResult<RemixedReel>> => ({ data: null, error: 'nope' }));
-  listRemixes = vi.fn(async (): Promise<ServiceResult<RemixedReel[]>> => ({ data: [], error: null }));
-  getRemixForReel = vi.fn(async (): Promise<ServiceResult<RemixedReel>> => ({ data: null, error: 'none' }));
-  applyRemixTemplate = vi.fn(async (): Promise<ServiceResult<RemixedReel>> => ({ data: null, error: 'nope' }));
+  remixVideo = vi.fn(async (): Promise<ServiceResult<RemixedVideo>> => ({ data: null, error: 'nope' }));
+  getVideo = vi.fn(async (): Promise<ServiceResult<Video>> => ({ data: null, error: 'nope' }));
+  getRemix = vi.fn(async (): Promise<ServiceResult<RemixedVideo>> => ({ data: null, error: 'nope' }));
+  updateRemix = vi.fn(async (): Promise<ServiceResult<RemixedVideo>> => ({ data: null, error: 'nope' }));
+  listRemixes = vi.fn(async (): Promise<ServiceResult<RemixedVideo[]>> => ({ data: [], error: null }));
+  getRemixForVideo = vi.fn(async (): Promise<ServiceResult<RemixedVideo>> => ({ data: null, error: 'none' }));
+  applyRemixTemplate = vi.fn(async (): Promise<ServiceResult<RemixedVideo>> => ({ data: null, error: 'nope' }));
   listContentPlan = vi.fn(async (): Promise<ServiceResult<ContentPlanItem[]>> => ({ data: [], error: null }));
   addToContentPlan = vi.fn(async (): Promise<ServiceResult<ContentPlanItem>> => ({ data: null, error: 'nope' }));
   updateContentPlanStatus = vi.fn(async (): Promise<ServiceResult<ContentPlanItem>> => ({ data: null, error: 'nope' }));
   removeFromContentPlan = vi.fn(async (): Promise<ServiceResult<void>> => ({ data: undefined, error: null }));
 }
 
-function reel(overrides: Partial<Reel> = {}): Reel {
+function video(overrides: Partial<Video> = {}): Video {
   return {
-    id: 'reel_1',
+    id: 'video_1',
     competitorId: 'comp_1',
     competitorUsername: 'vibecoder',
     shortcode: 'ABC123',
@@ -59,7 +59,7 @@ function reel(overrides: Partial<Reel> = {}): Reel {
 function planItem(overrides: Partial<ContentPlanItem> = {}): ContentPlanItem {
   return {
     id: 'plan_1',
-    reelId: 'reel_1',
+    videoId: 'video_1',
     status: 'not_started',
     competitorUsername: 'vibecoder',
     caption: 'I let AI build my SaaS in 48 hours',
@@ -74,7 +74,7 @@ function planItem(overrides: Partial<ContentPlanItem> = {}): ContentPlanItem {
 
 function renderAt(stub: StubApi, path: string, element: React.ReactElement, route: string) {
   return render(
-    <ApiProvider api={stub as unknown as ReelsApi}>
+    <ApiProvider api={stub as unknown as VideosApi}>
       <MemoryRouter initialEntries={[path]}>
         <Routes>
           <Route path={route} element={element} />
@@ -98,22 +98,22 @@ describe('DashboardPage', () => {
     await waitFor(() => expect(stub.listCompetitors).toHaveBeenCalled());
   });
 
-  it('adds a competitor and fetches its Reels in one step', async () => {
+  it('adds a competitor and fetches its Videos in one step', async () => {
     const user = userEvent.setup();
     const stub = new StubApi();
     stub.addCompetitor.mockResolvedValue({
       data: { id: 'comp_1', username: 'vibecoder', instagramUrl: '', displayName: 'Vibecoder', avatarUrl: '', addedAt: '' },
       error: null,
     });
-    stub.fetchReelsForCompetitor.mockResolvedValue({ data: [reel(), reel({ id: 'reel_2' })], error: null });
+    stub.fetchVideosForCompetitor.mockResolvedValue({ data: [video(), video({ id: 'video_2' })], error: null });
     renderAt(stub, '/', <DashboardPage />, '/');
 
     await user.type(screen.getByLabelText(/instagram profile link/i), '@vibecoder');
     await user.click(screen.getByRole('button', { name: /track & fetch/i }));
 
     expect(stub.addCompetitor).toHaveBeenCalledWith('@vibecoder');
-    await waitFor(() => expect(stub.fetchReelsForCompetitor).toHaveBeenCalledWith('comp_1'));
-    expect(await screen.findByText('Pulled 2 Reels from @vibecoder.')).toBeInTheDocument();
+    await waitFor(() => expect(stub.fetchVideosForCompetitor).toHaveBeenCalledWith('comp_1'));
+    expect(await screen.findByText('Pulled 2 Videos from @vibecoder.')).toBeInTheDocument();
   });
 
   it('shows the validation error and does not fetch when the link is invalid', async () => {
@@ -126,59 +126,59 @@ describe('DashboardPage', () => {
     await user.click(screen.getByRole('button', { name: /track & fetch/i }));
 
     expect(await screen.findByText(/not a valid instagram url/i)).toBeInTheDocument();
-    expect(stub.fetchReelsForCompetitor).not.toHaveBeenCalled();
+    expect(stub.fetchVideosForCompetitor).not.toHaveBeenCalled();
   });
 
-  it('shows totals, the top Reel and the most-viewed competitor', async () => {
+  it('shows totals, the top Video and the most-viewed competitor', async () => {
     const stub = new StubApi();
     stub.listCompetitors.mockResolvedValue({
       data: [{ id: 'comp_1', username: 'vibecoder', instagramUrl: '', displayName: 'Vibecoder', avatarUrl: '', addedAt: '' }],
       error: null,
     });
-    stub.listReels.mockResolvedValue({
-      data: [reel({ viewCount: 500 }), reel({ id: 'reel_2', caption: 'Top one', viewCount: 9000 })],
+    stub.listVideos.mockResolvedValue({
+      data: [video({ viewCount: 500 }), video({ id: 'video_2', caption: 'Top one', viewCount: 9000 })],
       error: null,
     });
     stub.listContentPlan.mockResolvedValue({ data: [planItem({ status: 'filmed' })], error: null });
     renderAt(stub, '/', <DashboardPage />, '/');
 
     const totals = await screen.findByRole('region', { name: /totals/i });
-    expect(within(totals).getByText('Reels').previousSibling).toHaveTextContent('2');
+    expect(within(totals).getByText('Videos').previousSibling).toHaveTextContent('2');
     expect((await screen.findAllByText('Top one')).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/@vibecoder/).length).toBeGreaterThan(0);
   });
 });
 
-describe('ReelsPage', () => {
-  it('shows the empty state when there are no reels', async () => {
+describe('VideosPage', () => {
+  it('shows the empty state when there are no videos', async () => {
     const stub = new StubApi();
-    renderAt(stub, '/reels', <ReelsPage />, '/reels');
-    expect(await screen.findByText(/no reels yet/i)).toBeInTheDocument();
+    renderAt(stub, '/videos', <VideosPage />, '/videos');
+    expect(await screen.findByText(/no videos yet/i)).toBeInTheDocument();
   });
 
-  it('renders reels with a Remix button for each', async () => {
+  it('renders videos with a Remix button for each', async () => {
     const stub = new StubApi();
-    stub.listReels.mockResolvedValue({
-      data: [reel(), reel({ id: 'reel_2', caption: 'Second reel' })],
+    stub.listVideos.mockResolvedValue({
+      data: [video(), video({ id: 'video_2', caption: 'Second video' })],
       error: null,
     });
-    renderAt(stub, '/reels', <ReelsPage />, '/reels');
+    renderAt(stub, '/videos', <VideosPage />, '/videos');
     expect(await screen.findByText(/I let AI build my SaaS/)).toBeInTheDocument();
-    expect(screen.getByText('Second reel')).toBeInTheDocument();
+    expect(screen.getByText('Second video')).toBeInTheDocument();
     expect(screen.getAllByRole('button', { name: /^remix$/i })).toHaveLength(2);
   });
 
   it('filters by caption search and sorts by views', async () => {
     const user = userEvent.setup();
     const stub = new StubApi();
-    stub.listReels.mockResolvedValue({
+    stub.listVideos.mockResolvedValue({
       data: [
-        reel({ id: 'a', caption: 'Prompt tips', viewCount: 10 }),
-        reel({ id: 'b', caption: 'SaaS build', viewCount: 900 }),
+        video({ id: 'a', caption: 'Prompt tips', viewCount: 10 }),
+        video({ id: 'b', caption: 'SaaS build', viewCount: 900 }),
       ],
       error: null,
     });
-    renderAt(stub, '/reels', <ReelsPage />, '/reels');
+    renderAt(stub, '/videos', <VideosPage />, '/videos');
     await screen.findByText('Prompt tips');
 
     await user.type(screen.getByLabelText(/search captions/i), 'saas');
@@ -189,33 +189,33 @@ describe('ReelsPage', () => {
   it('switches to the list layout', async () => {
     const user = userEvent.setup();
     const stub = new StubApi();
-    stub.listReels.mockResolvedValue({ data: [reel()], error: null });
-    renderAt(stub, '/reels', <ReelsPage />, '/reels');
+    stub.listVideos.mockResolvedValue({ data: [video()], error: null });
+    renderAt(stub, '/videos', <VideosPage />, '/videos');
     await screen.findByText(/I let AI build my SaaS/);
     await user.click(screen.getByRole('button', { name: 'List' }));
     expect(screen.getByRole('button', { name: 'List' })).toHaveAttribute('aria-pressed', 'true');
   });
 
-  it('adds a Reel to the plan and shows a success message', async () => {
+  it('adds a Video to the plan and shows a success message', async () => {
     const user = userEvent.setup();
     const stub = new StubApi();
-    stub.listReels.mockResolvedValue({ data: [reel()], error: null });
+    stub.listVideos.mockResolvedValue({ data: [video()], error: null });
     stub.addToContentPlan.mockResolvedValue({ data: planItem(), error: null });
-    renderAt(stub, '/reels', <ReelsPage />, '/reels');
+    renderAt(stub, '/videos', <VideosPage />, '/videos');
 
     await user.click(await screen.findByRole('button', { name: /add to plan/i }));
 
-    expect(stub.addToContentPlan).toHaveBeenCalledWith('reel_1');
+    expect(stub.addToContentPlan).toHaveBeenCalledWith('video_1');
     expect(await screen.findByText('Added to your Content Plan.')).toBeInTheDocument();
     expect(screen.getByText(/in content plan/i)).toBeInTheDocument();
   });
 
-  it('says so when the Reel is already in the plan', async () => {
+  it('says so when the Video is already in the plan', async () => {
     const user = userEvent.setup();
     const stub = new StubApi();
-    stub.listReels.mockResolvedValue({ data: [reel()], error: null });
+    stub.listVideos.mockResolvedValue({ data: [video()], error: null });
     stub.listContentPlan.mockResolvedValue({ data: [planItem({ status: 'ready' })], error: null });
-    renderAt(stub, '/reels', <ReelsPage />, '/reels');
+    renderAt(stub, '/videos', <VideosPage />, '/videos');
     expect(await screen.findByText(/in content plan/i)).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /add to plan/i })).toBeNull();
   });
@@ -223,12 +223,12 @@ describe('ReelsPage', () => {
   it('opens a preview of an existing remix', async () => {
     const user = userEvent.setup();
     const stub = new StubApi();
-    stub.listReels.mockResolvedValue({ data: [reel()], error: null });
+    stub.listVideos.mockResolvedValue({ data: [video()], error: null });
     stub.listRemixes.mockResolvedValue({
-      data: [{ id: 'remix_1', reelId: 'reel_1', title: 'Remix: SaaS', hook: 'Hook text', script: 's', cta: 'c', createdAt: '', updatedAt: '' }],
+      data: [{ id: 'remix_1', videoId: 'video_1', title: 'Remix: SaaS', hook: 'Hook text', script: 's', cta: 'c', createdAt: '', updatedAt: '' }],
       error: null,
     });
-    renderAt(stub, '/reels', <ReelsPage />, '/reels');
+    renderAt(stub, '/videos', <VideosPage />, '/videos');
     await user.click(await screen.findByRole('button', { name: 'Preview' }));
     expect(await screen.findByRole('complementary', { name: /remix preview/i })).toHaveTextContent('Hook text');
   });
@@ -334,27 +334,27 @@ describe('ContentPlanPage', () => {
 
 
 describe('bugs found while testing the running app', () => {
-  it('"Back to reels" on the remix page goes to /reels', async () => {
+  it('"Back to videos" on the remix page goes to /videos', async () => {
     const stub = new StubApi();
     stub.getRemix.mockResolvedValue({
-      data: { id: 'remix_1', reelId: 'reel_1', title: 'Remix: x', hook: 'h', script: 's', cta: 'c', createdAt: '', updatedAt: '' },
+      data: { id: 'remix_1', videoId: 'video_1', title: 'Remix: x', hook: 'h', script: 's', cta: 'c', createdAt: '', updatedAt: '' },
       error: null,
     });
-    stub.getReel.mockResolvedValue({ data: reel(), error: null });
+    stub.getVideo.mockResolvedValue({ data: video(), error: null });
     renderAt(stub, '/remix/remix_1', <RemixPage />, '/remix/:id');
-    const link = await screen.findByRole('link', { name: /back to reels/i });
-    expect(link).toHaveAttribute('href', '/reels');
+    const link = await screen.findByRole('link', { name: /back to videos/i });
+    expect(link).toHaveAttribute('href', '/videos');
   });
 
   it('Escape closes the remix preview and focus goes back to Preview', async () => {
     const user = userEvent.setup();
     const stub = new StubApi();
-    stub.listReels.mockResolvedValue({ data: [reel()], error: null });
+    stub.listVideos.mockResolvedValue({ data: [video()], error: null });
     stub.listRemixes.mockResolvedValue({
-      data: [{ id: 'remix_1', reelId: 'reel_1', title: 'Remix: SaaS', hook: 'Hook text', script: 's', cta: 'c', createdAt: '', updatedAt: '' }],
+      data: [{ id: 'remix_1', videoId: 'video_1', title: 'Remix: SaaS', hook: 'Hook text', script: 's', cta: 'c', createdAt: '', updatedAt: '' }],
       error: null,
     });
-    renderAt(stub, '/reels', <ReelsPage />, '/reels');
+    renderAt(stub, '/videos', <VideosPage />, '/videos');
     await user.click(await screen.findByRole('button', { name: 'Preview' }));
     expect(await screen.findByRole('complementary', { name: /remix preview/i })).toBeInTheDocument();
 
@@ -364,18 +364,18 @@ describe('bugs found while testing the running app', () => {
     expect(screen.getByRole('button', { name: 'Preview' })).toHaveFocus();
   });
 
-  it('offers Clear filters when nothing matches and restores every Reel', async () => {
+  it('offers Clear filters when nothing matches and restores every Video', async () => {
     const user = userEvent.setup();
     const stub = new StubApi();
-    stub.listReels.mockResolvedValue({
-      data: [reel({ id: 'a', caption: 'Prompt tips' }), reel({ id: 'b', caption: 'SaaS build' })],
+    stub.listVideos.mockResolvedValue({
+      data: [video({ id: 'a', caption: 'Prompt tips' }), video({ id: 'b', caption: 'SaaS build' })],
       error: null,
     });
-    renderAt(stub, '/reels', <ReelsPage />, '/reels');
+    renderAt(stub, '/videos', <VideosPage />, '/videos');
     await screen.findByText('Prompt tips');
 
     await user.type(screen.getByLabelText(/search captions/i), 'zzzzzz');
-    expect(screen.getByText('No Reels match these filters.')).toBeInTheDocument();
+    expect(screen.getByText('No Videos match these filters.')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Clear filters' }));
 
     expect(screen.getByText('Prompt tips')).toBeInTheDocument();
@@ -389,32 +389,32 @@ describe('bugs found while testing the running app', () => {
       data: [{ id: 'comp_1', username: 'vibecoder', instagramUrl: '', displayName: 'Vibecoder', avatarUrl: '', addedAt: '' }],
       error: null,
     });
-    stub.listReels.mockResolvedValue({ data: [reel()], error: null });
+    stub.listVideos.mockResolvedValue({ data: [video()], error: null });
     renderAt(stub, '/', <DashboardPage />, '/');
-    expect(await screen.findByText(/Tracking 1 competitor · 1 Reel/)).toBeInTheDocument();
+    expect(await screen.findByText(/Tracking 1 competitor · 1 Video/)).toBeInTheDocument();
     expect(screen.queryByText(/1 competitors/)).toBeNull();
   });
 
-  it('explains plainly when a planned Reel has been removed from the library', async () => {
+  it('explains plainly when a planned Video has been removed from the library', async () => {
     const user = userEvent.setup();
     const stub = new StubApi();
     stub.listContentPlan.mockResolvedValue({ data: [planItem()], error: null });
-    stub.remixReel.mockResolvedValue({ data: null, error: 'Reel not found.' });
+    stub.remixVideo.mockResolvedValue({ data: null, error: 'Video not found.' });
     renderAt(stub, '/content-plan', <ContentPlanPage />, '/content-plan');
 
     await user.click(await screen.findByRole('button', { name: 'Create breakdown' }));
 
     expect(await screen.findByText(/no longer in your library/i)).toBeInTheDocument();
-    expect(screen.queryByText('Reel not found.')).toBeNull();
+    expect(screen.queryByText('Video not found.')).toBeNull();
   });
 
   it('limits the remix editor fields to what the database stores', async () => {
     const stub = new StubApi();
     stub.getRemix.mockResolvedValue({
-      data: { id: 'remix_1', reelId: 'reel_1', title: 't', hook: 'h', script: 's', cta: 'c', createdAt: '', updatedAt: '' },
+      data: { id: 'remix_1', videoId: 'video_1', title: 't', hook: 'h', script: 's', cta: 'c', createdAt: '', updatedAt: '' },
       error: null,
     });
-    stub.getReel.mockResolvedValue({ data: reel(), error: null });
+    stub.getVideo.mockResolvedValue({ data: video(), error: null });
     renderAt(stub, '/remix/remix_1', <RemixPage />, '/remix/:id');
     expect(await screen.findByLabelText('Title')).toHaveAttribute('maxlength', '500');
     expect(screen.getByLabelText('Hook')).toHaveAttribute('maxlength', '1000');
@@ -451,26 +451,26 @@ describe('bugs #49 and #52', () => {
   });
 });
 
-describe('links to a profile’s Reels on Instagram', () => {
-  it('shows a Reels link on the dashboard as soon as a valid username is typed', async () => {
+describe('links to a profile’s Videos on Instagram', () => {
+  it('shows a Videos link on the dashboard as soon as a valid username is typed', async () => {
     const user = userEvent.setup();
     const stub = new StubApi();
     renderAt(stub, '/', <DashboardPage />, '/');
     const input = screen.getByLabelText(/instagram profile link/i);
 
     await user.type(input, 'https://twitter.com/x');
-    expect(screen.queryByRole('link', { name: /reels on instagram/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /videos on instagram/i })).not.toBeInTheDocument();
 
     await user.clear(input);
     await user.type(input, 'https://www.instagram.com/Vibe.Coder/?hl=en');
-    const link = screen.getByRole('link', { name: /open @vibe\.coder’s reels on instagram/i });
-    expect(link).toHaveAttribute('href', 'https://www.instagram.com/vibe.coder/reels/');
+    const link = screen.getByRole('link', { name: /open @vibe\.coder’s videos on instagram/i });
+    expect(link).toHaveAttribute('href', 'https://www.instagram.com/vibe.coder/videos/');
     expect(link).toHaveAttribute('target', '_blank');
     expect(link.getAttribute('rel')).toContain('noopener');
     expect(stub.addCompetitor).not.toHaveBeenCalled();
   });
 
-  it('links each tracked competitor to its Reels tab', async () => {
+  it('links each tracked competitor to its Videos tab', async () => {
     const stub = new StubApi();
     stub.listCompetitors.mockResolvedValue({
       data: [{ id: 'comp_1', username: 'vibecoder', instagramUrl: '', displayName: 'Vibecoder', avatarUrl: '', addedAt: new Date().toISOString() }],
@@ -478,11 +478,11 @@ describe('links to a profile’s Reels on Instagram', () => {
     });
     renderAt(stub, '/competitors', <CompetitorsPage />, '/competitors');
 
-    const link = await screen.findByRole('link', { name: /reels on instagram/i });
-    expect(link).toHaveAttribute('href', 'https://www.instagram.com/vibecoder/reels/');
+    const link = await screen.findByRole('link', { name: /videos on instagram/i });
+    expect(link).toHaveAttribute('href', 'https://www.instagram.com/vibecoder/videos/');
   });
 
-  it('previews the Reels link in the add-competitor modal', async () => {
+  it('previews the Videos link in the add-competitor modal', async () => {
     const user = userEvent.setup();
     const stub = new StubApi();
     renderAt(stub, '/competitors', <CompetitorsPage />, '/competitors');
@@ -490,44 +490,44 @@ describe('links to a profile’s Reels on Instagram', () => {
     await user.click(await screen.findByRole('button', { name: /add competitor/i }));
     const dialog = screen.getByRole('dialog');
     await user.type(within(dialog).getByRole('textbox'), '@vibecoder');
-    expect(within(dialog).getByRole('link', { name: /preview @vibecoder’s reels/i })).toHaveAttribute(
+    expect(within(dialog).getByRole('link', { name: /preview @vibecoder’s videos/i })).toHaveAttribute(
       'href',
-      'https://www.instagram.com/vibecoder/reels/'
+      'https://www.instagram.com/vibecoder/videos/'
     );
   });
 
-  it('points the Reel cards at the competitor’s Reels tab', async () => {
+  it('points the Video cards at the competitor’s Videos tab', async () => {
     const stub = new StubApi();
-    stub.listReels.mockResolvedValue({ data: [reel()], error: null });
-    renderAt(stub, '/reels', <ReelsPage />, '/reels');
+    stub.listVideos.mockResolvedValue({ data: [video()], error: null });
+    renderAt(stub, '/videos', <VideosPage />, '/videos');
 
-    const links = await screen.findAllByRole('link', { name: /@vibecoder’s reels on instagram/i });
-    for (const link of links) expect(link).toHaveAttribute('href', 'https://www.instagram.com/vibecoder/reels/');
+    const links = await screen.findAllByRole('link', { name: /@vibecoder’s videos on instagram/i });
+    for (const link of links) expect(link).toHaveAttribute('href', 'https://www.instagram.com/vibecoder/videos/');
   });
 });
 
-describe('links to the Reel itself', () => {
-  it('links a fetched Reel to its own page on Instagram', async () => {
+describe('links to the Video itself', () => {
+  it('links a fetched Video to its own page on Instagram', async () => {
     const stub = new StubApi();
-    stub.listReels.mockResolvedValue({
-      data: [reel({ competitorUsername: 'nick_saraev', permalink: 'https://www.instagram.com/reel/DfMPGCguhRQ/' })],
+    stub.listVideos.mockResolvedValue({
+      data: [video({ competitorUsername: 'nick_saraev', permalink: 'https://www.instagram.com/video/DfMPGCguhRQ/' })],
       error: null,
     });
-    renderAt(stub, '/reels', <ReelsPage />, '/reels');
+    renderAt(stub, '/videos', <VideosPage />, '/videos');
 
-    const links = await screen.findAllByRole('link', { name: /watch this reel on instagram/i });
-    for (const link of links) expect(link).toHaveAttribute('href', 'https://www.instagram.com/reel/DfMPGCguhRQ/');
+    const links = await screen.findAllByRole('link', { name: /watch this video on instagram/i });
+    for (const link of links) expect(link).toHaveAttribute('href', 'https://www.instagram.com/video/DfMPGCguhRQ/');
   });
 
-  it('links a plan item to its Reel', async () => {
+  it('links a plan item to its Video', async () => {
     const stub = new StubApi();
     stub.listContentPlan.mockResolvedValue({
-      data: [planItem({ permalink: 'https://www.instagram.com/reel/DfMPGCguhRQ/' })],
+      data: [planItem({ permalink: 'https://www.instagram.com/video/DfMPGCguhRQ/' })],
       error: null,
     });
     renderAt(stub, '/content-plan', <ContentPlanPage />, '/content-plan');
 
-    const links = await screen.findAllByRole('link', { name: /watch this reel on instagram/i });
-    expect(links[0]).toHaveAttribute('href', 'https://www.instagram.com/reel/DfMPGCguhRQ/');
+    const links = await screen.findAllByRole('link', { name: /watch this video on instagram/i });
+    expect(links[0]).toHaveAttribute('href', 'https://www.instagram.com/video/DfMPGCguhRQ/');
   });
 });

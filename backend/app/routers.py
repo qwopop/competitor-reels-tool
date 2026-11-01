@@ -12,8 +12,8 @@ from app.schemas import (
     AddToPlanRequest,
     Competitor,
     ContentPlanItem,
-    Reel,
-    RemixedReel,
+    Video,
+    RemixedVideo,
     RemixRequest,
     UpdatePlanItemRequest,
     UpdateRemixRequest,
@@ -75,92 +75,92 @@ def remove_competitor(competitor_id: str, db: Session = Depends(get_db)):
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
-@router.post("/competitors/{competitor_id}/reels/fetch", response_model=list[Reel])
-def fetch_reels_for_competitor(competitor_id: str, request: Request, db: Session = Depends(get_db)):
+@router.post("/competitors/{competitor_id}/videos/fetch", response_model=list[Video])
+def fetch_videos_for_competitor(competitor_id: str, request: Request, db: Session = Depends(get_db)):
     competitor = store.get_competitor(db, competitor_id)
     if not competitor:
         raise not_found("Competitor not found.")
-    source = request.app.state.reel_source
+    source = request.app.state.video_source
     if source is None:
-        return store.replace_reels_for_competitor(db, competitor)
+        return store.replace_videos_for_competitor(db, competitor)
     try:
-        reels = source.fetch_reels(competitor)
+        videos = source.fetch_videos(competitor)
     except InstagramError as err:
         db.rollback()
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(err)) from err
-    if not reels:
+    if not videos:
         db.rollback()
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=f"@{competitor.username} has no Reels on Instagram yet.",
+            detail=f"@{competitor.username} has no Videos on Instagram yet.",
         )
-    return store.replace_reels_for_competitor(db, competitor, reels)
+    return store.replace_videos_for_competitor(db, competitor, videos)
 
 
-@router.get("/reels", response_model=list[Reel])
-def list_reels(db: Session = Depends(get_db)):
-    return store.list_reels(db)
+@router.get("/videos", response_model=list[Video])
+def list_videos(db: Session = Depends(get_db)):
+    return store.list_videos(db)
 
 
-@router.get("/reels/{reel_id}", response_model=Reel)
-def get_reel(reel_id: str, db: Session = Depends(get_db)):
-    reel = store.get_reel(db, reel_id)
-    if not reel:
-        raise not_found("Reel not found.")
-    return reel
+@router.get("/videos/{video_id}", response_model=Video)
+def get_video(video_id: str, db: Session = Depends(get_db)):
+    video = store.get_video(db, video_id)
+    if not video:
+        raise not_found("Video not found.")
+    return video
 
 
 @router.post(
-    "/reels/{reel_id}/remix",
-    response_model=RemixedReel,
+    "/videos/{video_id}/remix",
+    response_model=RemixedVideo,
     status_code=status.HTTP_201_CREATED,
-    responses={200: {"model": RemixedReel, "description": "Existing remix returned"}},
+    responses={200: {"model": RemixedVideo, "description": "Existing remix returned"}},
 )
-def remix_reel(
-    reel_id: str,
+def remix_video(
+    video_id: str,
     response: Response,
     payload: RemixRequest | None = Body(default=None),
     db: Session = Depends(get_db),
 ):
-    reel = store.get_reel(db, reel_id)
-    if not reel:
-        raise not_found("Reel not found.")
-    existing = store.get_remix_for_reel(db, reel_id)
+    video = store.get_video(db, video_id)
+    if not video:
+        raise not_found("Video not found.")
+    existing = store.get_remix_for_video(db, video_id)
     if existing:
         response.status_code = status.HTTP_200_OK
         return existing
     template = payload.template if payload else "default"
-    remix, created = store.add_remix(db, reel, template)
+    remix, created = store.add_remix(db, video, template)
     if not created:
         response.status_code = status.HTTP_200_OK
     return remix
 
 
-@router.get("/reels/{reel_id}/remix/current", response_model=RemixedReel)
-def get_remix_for_reel(reel_id: str, db: Session = Depends(get_db)):
-    remix = store.get_remix_for_reel(db, reel_id)
+@router.get("/videos/{video_id}/remix/current", response_model=RemixedVideo)
+def get_remix_for_video(video_id: str, db: Session = Depends(get_db)):
+    remix = store.get_remix_for_video(db, video_id)
     if not remix:
-        raise not_found("No remix for this Reel yet.")
+        raise not_found("No remix for this Video yet.")
     return remix
 
 
-@router.get("/remixes", response_model=list[RemixedReel])
+@router.get("/remixes", response_model=list[RemixedVideo])
 def list_remixes(db: Session = Depends(get_db)):
     return store.list_remixes(db)
 
 
-@router.post("/remixes/{remix_id}/apply-template", response_model=RemixedReel)
+@router.post("/remixes/{remix_id}/apply-template", response_model=RemixedVideo)
 def apply_remix_template(remix_id: str, payload: RemixRequest, db: Session = Depends(get_db)):
     remix = store.get_remix(db, remix_id)
     if not remix:
         raise not_found("Remix not found.")
-    reel = store.get_reel(db, remix.reel_id)
-    if not reel:
-        raise not_found("Reel not found.")
-    return store.apply_remix_template(db, remix, reel, payload.template)
+    video = store.get_video(db, remix.video_id)
+    if not video:
+        raise not_found("Video not found.")
+    return store.apply_remix_template(db, remix, video, payload.template)
 
 
-@router.get("/remixes/{remix_id}", response_model=RemixedReel)
+@router.get("/remixes/{remix_id}", response_model=RemixedVideo)
 def get_remix(remix_id: str, db: Session = Depends(get_db)):
     remix = store.get_remix(db, remix_id)
     if not remix:
@@ -168,7 +168,7 @@ def get_remix(remix_id: str, db: Session = Depends(get_db)):
     return remix
 
 
-@router.patch("/remixes/{remix_id}", response_model=RemixedReel)
+@router.patch("/remixes/{remix_id}", response_model=RemixedVideo)
 def update_remix(remix_id: str, payload: UpdateRemixRequest, db: Session = Depends(get_db)):
     remix = store.get_remix(db, remix_id)
     if not remix:
@@ -186,17 +186,17 @@ def list_content_plan(db: Session = Depends(get_db)):
     "/content-plan",
     response_model=ContentPlanItem,
     status_code=status.HTTP_201_CREATED,
-    responses={200: {"model": ContentPlanItem, "description": "Reel already in the plan"}},
+    responses={200: {"model": ContentPlanItem, "description": "Video already in the plan"}},
 )
 def add_to_content_plan(payload: AddToPlanRequest, response: Response, db: Session = Depends(get_db)):
-    reel = store.get_reel(db, payload.reel_id)
-    if not reel:
-        raise not_found("Reel not found.")
-    existing = store.get_plan_item_for_reel(db, reel.id)
+    video = store.get_video(db, payload.video_id)
+    if not video:
+        raise not_found("Video not found.")
+    existing = store.get_plan_item_for_video(db, video.id)
     if existing:
         response.status_code = status.HTTP_200_OK
         return existing
-    item, created = store.add_plan_item(db, reel)
+    item, created = store.add_plan_item(db, video)
     if not created:
         response.status_code = status.HTTP_200_OK
     return item
