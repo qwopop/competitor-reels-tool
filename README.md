@@ -9,25 +9,25 @@ Track competitor YouTube channels, pull their latest videos into a library, gene
 
 ## Screenshots
 
-The Dashboard and Tracked competitors screenshots show the current ClipRemix app. The others still show the earlier Instagram version; the layout is the same, and video thumbnails are now 16:9.
-
-| Dashboard | Reels | Content plan (board) | Content plan (table) |
+| Dashboard | Videos | Content plan (board) | Content plan (table) |
 | --- | --- | --- | --- |
-| ![Dashboard](docs/screenshots/dashboard.webp) | ![Reels](docs/screenshots/reels.webp) | ![Content plan board](docs/screenshots/content-plan.png) | ![Content plan table](docs/screenshots/content-plan-table.png) |
+| ![Dashboard](docs/screenshots/dashboard.webp) | ![Videos](docs/screenshots/videos.webp) | ![Content plan board](docs/screenshots/content-plan.png) | ![Content plan table](docs/screenshots/content-plan-table.png) |
 
 | Competitors | Remixes | Remix editor |
 | --- | --- | --- |
-| ![Competitors](docs/screenshots/competitors.png) | ![Remixes](docs/screenshots/remixes.png) | ![Remix editor](docs/screenshots/remix-editor.png) |
+| ![Competitors](docs/screenshots/competitors-tracked.png) | ![Remixes](docs/screenshots/remixes.png) | ![Remix editor](docs/screenshots/remix-editor.png) |
 
 ### More screens
 
-| Reels list with competitor filter | Tracked competitors | Add a competitor |
-| --- | --- | --- |
-| ![Reels list](docs/screenshots/reels-list.png) | ![Tracked competitors](docs/screenshots/competitors-tracked.png) | ![Add a competitor](docs/screenshots/add-competitor.png) |
+| Videos list | Add a competitor |
+| --- | --- |
+| ![Videos list](docs/screenshots/videos-list.webp) | ![Add a competitor](docs/screenshots/add-competitor.png) |
 
 | Dashboard: top videos and channels | Dashboard: totals and progress | Dashboard: recent videos |
 | --- | --- | --- |
 | ![Dashboard top videos and channels](docs/screenshots/dashboard-videos.webp) | ![Dashboard totals and progress](docs/screenshots/dashboard-totals.png) | ![Dashboard recent videos](docs/screenshots/dashboard-recent.png) |
+
+The Remix editor and Add a competitor screenshots still show the earlier Instagram version.
 
 ## Run it locally
 
