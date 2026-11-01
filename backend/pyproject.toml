@@ -1,5 +1,5 @@
 [project]
-name = "competitor-reels-backend"
+name = "clip-remix-backend"
 version = "0.1.0"
 description = "FastAPI backend for the competitor Reels tool"
 requires-python = ">=3.11"

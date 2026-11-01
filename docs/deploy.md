@@ -13,7 +13,7 @@ The app has three parts. Each one deploys separately:
 ## One-time setup
 
 1. Sign in to [Render](https://render.com) and connect your GitHub account.
-2. Choose **New → Blueprint** and select `qwopop/competitor-reels-tool`.
+2. Choose **New → Blueprint** and select `qwopop/clip-remix`.
 3. Choose the branch `claude/eloquent-pasteur-sgl8v0` (or `main` after merging).
 4. Render shows two services and asks for the two values marked `sync: false`. Fill them in as described below.
    - The API needs a paid instance because persistent disks are not available on the free plan.
