@@ -27,8 +27,6 @@ Track competitor YouTube channels, pull their latest videos into a library, gene
 | --- | --- | --- |
 | ![Dashboard top videos and channels](docs/screenshots/dashboard-videos.webp) | ![Dashboard totals and progress](docs/screenshots/dashboard-totals.png) | ![Dashboard recent videos](docs/screenshots/dashboard-recent.png) |
 
-The Add a competitor screenshot still shows the earlier Instagram version.
-
 ## Run it locally
 
 Requirements: [uv](https://docs.astral.sh/uv/), Node.js 20+, and `make`.
