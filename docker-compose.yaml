@@ -1,0 +1,45 @@
+# The whole application with one command:
+#
+#   docker compose up --build        then open http://localhost:8100
+#
+# Two services: PostgreSQL and the app (one image: the backend serving the
+# built frontend). The app waits until Postgres accepts connections.
+#
+# Optional settings (environment or a .env file next to this file):
+#   VIDEO_SOURCE=sample   generated videos, no YouTube access (used by the tests)
+#   APP_PORT=8100         port on this machine
+
+name: clipremix
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: clipremix
+      POSTGRES_PASSWORD: clipremix
+      POSTGRES_DB: clipremix
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U clipremix -d clipremix"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  app:
+    build:
+      context: .
+      args:
+        APP_VERSION: ${APP_VERSION:-dev}
+    environment:
+      DATABASE_URL: postgresql://clipremix:clipremix@db:5432/clipremix
+      VIDEO_SOURCE: ${VIDEO_SOURCE:-youtube}
+    ports:
+      - "${APP_PORT:-8100}:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  pgdata:

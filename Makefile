@@ -1,4 +1,4 @@
-.PHONY: install run frontend dev test check docker-build docker-run db test-postgres
+.PHONY: install run frontend dev test check docker-build docker-run db test-postgres up down integration
 
 install:
 	cd backend && uv sync
@@ -41,3 +41,17 @@ db:
 # The backend tests against that PostgreSQL instead of SQLite.
 test-postgres:
 	cd backend && TEST_DATABASE_URL=postgresql://clipremix:clipremix@localhost:5432/clipremix uv run pytest
+
+# ---- The full stack (docker-compose.yaml: app + PostgreSQL) ------------------
+# Tests use VIDEO_SOURCE=sample so they never depend on YouTube.
+STACK_URL ?= http://localhost:8100
+
+up:
+	VIDEO_SOURCE=$${VIDEO_SOURCE:-sample} docker compose up -d --build --wait
+
+down:
+	docker compose down
+
+# Integration tests against the running stack.
+integration: up
+	cd backend && BASE_URL=$(STACK_URL) uv run pytest ../integration -q

@@ -58,6 +58,19 @@ make docker-run     # http://localhost:8000, data kept in the clipremix-data vol
 
 `GET /api/health` reports whether the app and its database are up.
 
+### Run the full stack with Docker Compose
+
+`docker-compose.yaml` runs the app with PostgreSQL, as in production:
+
+```bash
+docker compose up --build      # http://localhost:8100
+make up                        # the same in the background, with sample videos, waiting until healthy
+make integration               # integration tests against the running stack
+make down
+```
+
+The app waits for PostgreSQL's health check before starting, and the database lives in the `pgdata` volume, so it survives `docker compose down` (add `-v` to wipe it). Set `VIDEO_SOURCE=sample` for generated videos without YouTube access.
+
 ## Deploying
 
 The frontend, API and database deploy to Render from `render.yaml`. See [`docs/deploy.md`](docs/deploy.md).
