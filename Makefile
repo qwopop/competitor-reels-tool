@@ -1,4 +1,4 @@
-.PHONY: install run frontend dev test check docker-build docker-run
+.PHONY: install run frontend dev test check docker-build docker-run db test-postgres
 
 install:
 	cd backend && uv sync
@@ -30,3 +30,14 @@ docker-build:
 # Runs the image with a named volume, so the SQLite file survives restarts.
 docker-run:
 	docker run --rm -p 8000:8000 -v clipremix-data:/app/data --name clipremix clipremix:latest
+
+# A local PostgreSQL 16 for development, like production. Then run the backend with
+#   DATABASE_URL=postgresql://clipremix:clipremix@localhost:5432/clipremix make run
+db:
+	docker run -d --name clipremix-db \
+	  -e POSTGRES_USER=clipremix -e POSTGRES_PASSWORD=clipremix -e POSTGRES_DB=clipremix \
+	  -p 5432:5432 -v clipremix-pgdata:/var/lib/postgresql/data postgres:16-alpine
+
+# The backend tests against that PostgreSQL instead of SQLite.
+test-postgres:
+	cd backend && TEST_DATABASE_URL=postgresql://clipremix:clipremix@localhost:5432/clipremix uv run pytest

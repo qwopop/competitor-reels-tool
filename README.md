@@ -84,5 +84,5 @@ make check      # tests, typecheck and production build
 - **Remixes are written from each video's own details**, not by an AI model: its title (how-to, tutorial, list, comparison, story, question), its description (the opening promise, the chapter list, what the creator offers), the channel name, the view count, and whether it is a Short. See `backend/app/remix.py`. Videos fetched before this change have no description stored; click **Fetch videos** again to get it.
 - There is no login. Anyone who can reach the server can use it.
 - Set `DATABASE_URL=sqlite://` to run with an in-memory database. Nothing is saved, which is useful for trying the API or for tests.
-- Set `DATABASE_URL` (for example `sqlite:///./data/clipremix.db`) to change the database. The code is written so Postgres can be added later.
+- **Database:** SQLite by default (`backend/data/clipremix.db`), PostgreSQL in production. Set `DATABASE_URL` to switch; `postgres://…` and `postgresql://…` URLs from hosting providers work as given. `make db` starts a local PostgreSQL 16 in Docker, and `make test-postgres` runs the backend tests against it.
 - To point the frontend at a backend elsewhere, set `VITE_API_BASE_URL` (for example `https://api.example.com/api`).

@@ -188,9 +188,9 @@ def test_a_page_without_a_channel_id_asks_for_the_channel_link():
 # ----- through the API -------------------------------------------------------
 
 @pytest.fixture
-def live(tmp_path):
+def live(database_url):
     fake = site()
-    with TestClient(create_app(f"sqlite:///{tmp_path / 'yt.db'}", video_source=YouTubeSource(fake))) as client:
+    with TestClient(create_app(database_url, video_source=YouTubeSource(fake))) as client:
         yield client, fake
 
 

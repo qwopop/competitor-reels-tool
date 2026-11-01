@@ -132,12 +132,12 @@ def test_patch_unknown_remix_is_404(client):
     assert client.patch("/api/remixes/nope", json={"hook": "x"}).status_code == 404
 
 
-def test_data_persists_across_app_restarts(tmp_path):
+def test_data_persists_across_app_restarts(database_url):
     from fastapi.testclient import TestClient
 
     from app.main import create_app
 
-    db_url = f"sqlite:///{tmp_path / 'persist.db'}"
+    db_url = database_url
     with TestClient(create_app(db_url)) as client:
         add(client, "https://www.youtube.com/@vibecoder")
 

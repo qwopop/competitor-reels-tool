@@ -144,10 +144,10 @@ CHANNEL_ID = "UCBJycsmduvYEL83R_U4JriQ"
 PAGE = f'<link rel="canonical" href="https://www.youtube.com/channel/{CHANNEL_ID}"><meta property="og:title" content="Nick Saraev">'
 
 
-def test_remix_through_the_api_uses_the_fetched_description(tmp_path):
+def test_remix_through_the_api_uses_the_fetched_description(database_url):
     pages = {"https://www.youtube.com/@nick_saraev": PAGE,
              f"https://www.youtube.com/channel/{CHANNEL_ID}": PAGE, feed_url(CHANNEL_ID): FEED}
-    app = create_app(f"sqlite:///{tmp_path / 'r.db'}", video_source=YouTubeSource(pages.__getitem__))
+    app = create_app(database_url, video_source=YouTubeSource(pages.__getitem__))
     with TestClient(app) as client:
         comp = client.post("/api/competitors", json={"channelUrl": "@nick_saraev"}).json()
         video = client.post(f"/api/competitors/{comp['id']}/videos/fetch").json()[0]
@@ -158,21 +158,21 @@ def test_remix_through_the_api_uses_the_fetched_description(tmp_path):
         assert "Setting up Cursor" in remix["script"]
 
 
-def test_an_older_database_gets_the_description_column(tmp_path):
-    import sqlite3
+def test_an_older_database_gets_the_description_column(database_url):
+    from sqlalchemy import inspect, text
 
-    path = tmp_path / "old.db"
-    with TestClient(create_app(f"sqlite:///{path}", video_source=None)):
+    from app.models import make_engine
+
+    with TestClient(create_app(database_url, video_source=None)):
         pass
-    conn = sqlite3.connect(path)
-    conn.execute("ALTER TABLE videos DROP COLUMN description")
-    conn.commit()
-    conn.close()
+    engine = make_engine(database_url)
+    with engine.begin() as conn:
+        conn.execute(text("ALTER TABLE videos DROP COLUMN description"))
 
-    with TestClient(create_app(f"sqlite:///{path}", video_source=None)) as client:
+    with TestClient(create_app(database_url, video_source=None)) as client:
         assert client.get("/api/videos").status_code == 200
-    columns = [row[1] for row in sqlite3.connect(path).execute("PRAGMA table_info(videos)")]
-    assert "description" in columns
+    assert "description" in {c["name"] for c in inspect(engine).get_columns("videos")}
+    engine.dispose()
 
 
 # ----- each template has its own structure -----------------------------------

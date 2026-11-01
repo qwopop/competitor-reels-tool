@@ -1,11 +1,11 @@
 """Content plan: filming and publishing dates, and the production checklist."""
 
-import sqlite3
-
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy import text
 
 from app.main import create_app
+from app.models import make_engine
 
 
 def planned(client):
@@ -61,21 +61,21 @@ def test_bad_updates_are_rejected(client, body):
     assert patch(client, item, **body).status_code == 422
 
 
-def test_an_older_database_gets_the_new_plan_columns(tmp_path):
-    path = tmp_path / "old.db"
-    with TestClient(create_app(f"sqlite:///{path}", video_source=None)):
+def test_an_older_database_gets_the_new_plan_columns(database_url):
+    """Runs on SQLite and on PostgreSQL (TEST_DATABASE_URL): the upgrade must work on both."""
+    with TestClient(create_app(database_url, video_source=None)):
         pass
-    conn = sqlite3.connect(path)
-    for column in ("film_date", "publish_date", "script_done", "recording_done", "caption_done", "published_done"):
-        conn.execute(f"ALTER TABLE content_plan DROP COLUMN {column}")
-    conn.execute(
-        "INSERT INTO content_plan (id, video_id, status, competitor_username, caption, thumbnail_url, permalink,"
-        " posted_at, added_at, updated_at) VALUES ('p1', 'v1', 'ready', 'x', 'c', 't', 'p', 'a', 'a', 'a')"
-    )
-    conn.commit()
-    conn.close()
+    engine = make_engine(database_url)
+    with engine.begin() as conn:
+        for column in ("film_date", "publish_date", "script_done", "recording_done", "caption_done", "published_done"):
+            conn.execute(text(f"ALTER TABLE content_plan DROP COLUMN {column}"))
+        conn.execute(text(
+            "INSERT INTO content_plan (id, video_id, status, competitor_username, caption, thumbnail_url, permalink,"
+            " posted_at, added_at, updated_at) VALUES ('p1', 'v1', 'ready', 'x', 'c', 't', 'p', 'a', 'a', 'a')"
+        ))
+    engine.dispose()
 
-    with TestClient(create_app(f"sqlite:///{path}", video_source=None)) as client:
+    with TestClient(create_app(database_url, video_source=None)) as client:
         [item] = client.get("/api/content-plan").json()
         assert item["filmDate"] is None and item["scriptDone"] is False
         assert client.patch("/api/content-plan/p1", json={"recordingDone": True}).json()["recordingDone"] is True

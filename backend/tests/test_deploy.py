@@ -60,3 +60,18 @@ def test_a_missing_build_is_a_clear_startup_error(tmp_path, monkeypatch):
     monkeypatch.setenv("STATIC_DIR", str(tmp_path / "nowhere"))
     with pytest.raises(RuntimeError, match="no index.html"):
         create_app(f"sqlite:///{tmp_path / 'x.db'}", video_source=SampleSource())
+
+
+@pytest.mark.parametrize(
+    "given, expected",
+    [
+        ("postgres://u:p@db:5432/clipremix", "postgresql+psycopg://u:p@db:5432/clipremix"),
+        ("postgresql://u:p@db/clipremix", "postgresql+psycopg://u:p@db/clipremix"),
+        ("postgresql+psycopg://u:p@db/clipremix", "postgresql+psycopg://u:p@db/clipremix"),
+        ("sqlite:///./data/clipremix.db", "sqlite:///./data/clipremix.db"),
+    ],
+)
+def test_database_urls_from_hosting_providers_are_accepted(given, expected):
+    from app.models import normalize_database_url
+
+    assert normalize_database_url(given) == expected

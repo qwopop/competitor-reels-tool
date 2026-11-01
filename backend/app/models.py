@@ -93,9 +93,25 @@ class ContentPlanRow(Base):
 IN_MEMORY_URLS = ("sqlite://", "sqlite:///:memory:")
 
 
+def normalize_database_url(url: str) -> str:
+    """Accept Postgres URLs the way hosting providers hand them out.
+
+    Render, Heroku and others give `postgres://…` or `postgresql://…`; SQLAlchemy
+    needs the driver named, and this app uses psycopg 3.
+    """
+    for prefix in ("postgres://", "postgresql://"):
+        if url.startswith(prefix):
+            return "postgresql+psycopg://" + url[len(prefix):]
+    return url
+
+
 def make_engine(database_url: str) -> Engine:
-    """Build the engine. `DATABASE_URL=sqlite://` keeps everything in memory (nothing is saved)."""
-    kwargs: dict = {}
+    """Build the engine for SQLite (development, tests) or PostgreSQL (production).
+
+    `DATABASE_URL=sqlite://` keeps everything in memory (nothing is saved).
+    """
+    database_url = normalize_database_url(database_url)
+    kwargs: dict = {"pool_pre_ping": True} if database_url.startswith("postgresql") else {}
     if database_url.startswith("sqlite"):
         kwargs["connect_args"] = {"check_same_thread": False}
         if database_url in IN_MEMORY_URLS:
