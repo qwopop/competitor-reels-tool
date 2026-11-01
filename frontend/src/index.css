@@ -51,10 +51,76 @@ body {
     transform: translateY(calc(var(--edge) - 1px));
     box-shadow: 0 1px 0 var(--edge-color);
   }
+  /* Liquid glass: a frosted, translucent take on the orange-to-pink gradient.
+     Layers, back to front: the tinted glass surface (backdrop blur + saturation),
+     drifting colour pools (::before), a specular streak (::after), then the label.
+     The rim is an inset top highlight; depth is a soft ambient shadow. */
   .btn-primary {
-    @apply btn bg-brand text-ground hover:brightness-110;
-    --edge: 4px;
-    --edge-color: #b4455e; /* the gradient's coral, darkened */
+    @apply btn text-ground;
+    position: relative;
+    isolation: isolate;
+    overflow: hidden;
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.3) 0%, rgba(255, 255, 255, 0.06) 48%, rgba(255, 255, 255, 0) 52%),
+      linear-gradient(90deg, rgba(255, 189, 89, 0.9) 0%, rgba(255, 127, 127, 0.86) 55%, rgba(255, 111, 156, 0.9) 100%);
+    -webkit-backdrop-filter: blur(14px) saturate(180%);
+    backdrop-filter: blur(14px) saturate(180%);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.65),
+      inset 0 -1px 1px rgba(120, 30, 60, 0.18),
+      0 10px 28px -12px rgba(255, 111, 156, 0.6),
+      0 2px 8px rgba(0, 0, 0, 0.28);
+    transition-duration: 200ms, 200ms, 200ms, 200ms, 200ms, 120ms, 300ms;
+  }
+  .btn-primary::before,
+  .btn-primary::after {
+    content: '';
+    position: absolute;
+    z-index: -1;
+    pointer-events: none;
+  }
+  /* Colour pools: soft blobs of the brand colours under the glass. */
+  .btn-primary::before {
+    inset: -40%;
+    background:
+      radial-gradient(38% 55% at 28% 42%, rgba(255, 176, 72, 0.95), transparent 70%),
+      radial-gradient(42% 60% at 74% 58%, rgba(255, 86, 146, 0.85), transparent 70%),
+      radial-gradient(26% 40% at 54% 18%, rgba(255, 255, 255, 0.4), transparent 70%);
+    filter: blur(6px);
+    transition: transform 0.9s cubic-bezier(0.2, 0.7, 0.2, 1);
+  }
+  /* Specular streak: parked off the left edge; it sweeps across on hover. */
+  .btn-primary::after {
+    top: -60%;
+    bottom: -60%;
+    left: 0;
+    width: 38%;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.35) 30%, rgba(255, 255, 255, 0.9) 50%, rgba(255, 255, 255, 0.35) 70%, transparent);
+    transform: translateX(-170%) skewX(-22deg);
+  }
+  .btn-primary:hover:not(:disabled) {
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.75),
+      inset 0 -1px 1px rgba(120, 30, 60, 0.18),
+      0 14px 34px -12px rgba(255, 111, 156, 0.75),
+      0 3px 10px rgba(0, 0, 0, 0.3);
+  }
+  .btn-primary:hover:not(:disabled)::before {
+    animation: glass-pools 3.2s ease-in-out infinite alternate;
+  }
+  .btn-primary:hover:not(:disabled)::after {
+    transform: translateX(340%) skewX(-22deg);
+    transition: transform 0.9s cubic-bezier(0.45, 0, 0.25, 1);
+  }
+  /* Press: the glass gives slightly, instead of dropping onto an edge. */
+  .btn-primary:active:not(:disabled) {
+    transform: scale(0.965);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.5),
+      inset 0 2px 6px rgba(120, 30, 60, 0.22),
+      0 6px 18px -10px rgba(255, 111, 156, 0.55),
+      0 1px 4px rgba(0, 0, 0, 0.3);
   }
   .btn-outline {
     @apply btn border border-white/15 bg-surface-2 text-ink hover:border-accent/60 hover:bg-surface-3;
@@ -104,6 +170,19 @@ body {
   animation-delay: calc(var(--i, 0) * 70ms);
 }
 
+/* Liquid-glass button: the colour pools drift while hovered. */
+@keyframes glass-pools {
+  0% {
+    transform: translate(0, 0) rotate(0deg) scale(1);
+  }
+  50% {
+    transform: translate(9%, -7%) rotate(10deg) scale(1.06);
+  }
+  100% {
+    transform: translate(-7%, 6%) rotate(-8deg) scale(1.03);
+  }
+}
+
 /* Scrolling creator strip. Pauses on hover. */
 .marquee:hover {
   animation-play-state: paused;
@@ -116,6 +195,12 @@ body {
   }
   .marquee {
     animation: none;
+  }
+  .btn-primary:hover::before {
+    animation: none;
+  }
+  .btn-primary::after {
+    display: none;
   }
   *,
   *::before,
