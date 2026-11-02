@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useBlocker, useParams } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
 import { useApi } from '@/services';
 import type { ContentPlanItem, Video, RemixedVideo, RemixTemplate } from '@/types';
@@ -14,6 +14,12 @@ import { changedRemixFields, remixFields, type RemixFields } from '@/utils/remix
 
 export function RemixPage() {
   const { id } = useParams<{ id: string }>();
+  // A fresh editor per remix: moving from /remix/A to /remix/B starts B from a
+  // clean load, and a late response for A cannot reach B's editor.
+  return <RemixEditor key={id} id={id} />;
+}
+
+function RemixEditor({ id }: { id: string | undefined }) {
   const api = useApi();
 
   const [remix, setRemix] = useState<RemixedVideo | null>(null);
@@ -70,6 +76,28 @@ export function RemixPage() {
 
   const changes = baseline ? changedRemixFields({ title, hook, script, cta }, baseline) : {};
   const dirty = Object.keys(changes).length > 0;
+
+  // Warn before leaving with unsaved changes: in-app links and browser
+  // Back/Forward through the router, reload, tab close and typed URLs through
+  // the browser's own prompt.
+  const blocker = useBlocker(dirty);
+  const leaving = blocker.state === 'blocked';
+
+  useEffect(() => {
+    if (!dirty) return;
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      // Older browsers show the prompt only when returnValue is set.
+      e.returnValue = true;
+    };
+    window.addEventListener('beforeunload', onBeforeUnload);
+    return () => window.removeEventListener('beforeunload', onBeforeUnload);
+  }, [dirty]);
+
+  // One dialog at a time: leaving replaces the "Replace your edits?" question.
+  useEffect(() => {
+    if (leaving) setConfirmApply(false);
+  }, [leaving]);
 
   function markDirty(setter: (v: string) => void) {
     return (e: { target: { value: string } }) => {
@@ -144,7 +172,16 @@ export function RemixPage() {
 
   return (
     <div>
-      {confirmApply && (
+      {leaving && (
+        <ConfirmDialog
+          title="Leave without saving?"
+          message="Your changes to this remix have not been saved. If you leave now, they will be lost."
+          confirmLabel="Leave page"
+          onConfirm={() => blocker.proceed?.()}
+          onCancel={() => blocker.reset?.()}
+        />
+      )}
+      {confirmApply && !leaving && (
         <ConfirmDialog
           title="Replace your edits?"
           message="Applying a template overwrites the title, hook, script and call to action. Unsaved edits will be lost."
