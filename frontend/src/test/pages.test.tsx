@@ -650,3 +650,213 @@ describe('add-competitor modal after an error (found by e2e issue 53)', () => {
     expect(within(dialog).getByRole('link', { name: /open @vibecoder on youtube/i })).toBeInTheDocument();
   });
 });
+
+describe('Remix editor sends only changed fields (#74)', () => {
+  const loaded: RemixedVideo = {
+    id: 'remix_1',
+    videoId: 'video_1',
+    title: 'Loaded title',
+    hook: 'Loaded hook',
+    script: 'Loaded script',
+    cta: 'Loaded cta',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+
+  // updateRemix echoes the patch merged into the last saved remix, like the backend.
+  function editorStub() {
+    const stub = new StubApi();
+    let saved = { ...loaded };
+    stub.getRemix.mockResolvedValue({ data: loaded, error: null });
+    stub.getVideo.mockResolvedValue({ data: video(), error: null });
+    stub.updateRemix.mockImplementation(async (...args: unknown[]) => {
+      const patch = args[1] as Partial<RemixedVideo>;
+      saved = { ...saved, ...patch, updatedAt: new Date().toISOString() };
+      return { data: saved, error: null };
+    });
+    return stub;
+  }
+
+  async function openEditor(stub: StubApi) {
+    renderAt(stub, '/remix/remix_1', <RemixPage />, '/remix/:id');
+    await screen.findByLabelText('Hook');
+    return screen.getByRole('button', { name: /save changes/i });
+  }
+
+  function setField(label: string, value: string) {
+    fireEvent.change(screen.getByLabelText(label, { selector: 'input, textarea' }), { target: { value } });
+  }
+
+  it('starts with Save disabled and the Created status', async () => {
+    const stub = editorStub();
+    const save = await openEditor(stub);
+    expect(save).toBeDisabled();
+    expect(screen.getByText(/^Created /)).toBeInTheDocument();
+    expect(stub.updateRemix).not.toHaveBeenCalled();
+  });
+
+  it('sends only the hook when only the hook changed', async () => {
+    const user = userEvent.setup();
+    const stub = editorStub();
+    const save = await openEditor(stub);
+    setField('Hook', 'New hook');
+    await user.click(save);
+    await waitFor(() => expect(stub.updateRemix).toHaveBeenCalledTimes(1));
+    expect(stub.updateRemix.mock.calls[0]).toEqual(['remix_1', { hook: 'New hook' }]);
+    expect(await screen.findByText(/^Saved /)).toBeInTheDocument();
+    expect(save).toBeDisabled();
+    expect(screen.getByLabelText('Hook')).toHaveValue('New hook');
+  });
+
+  it('sends exactly the two changed fields', async () => {
+    const user = userEvent.setup();
+    const stub = editorStub();
+    const save = await openEditor(stub);
+    setField('Title', 'New title');
+    setField('Call to action', 'New cta');
+    await user.click(save);
+    await waitFor(() => expect(stub.updateRemix).toHaveBeenCalledTimes(1));
+    expect(stub.updateRemix.mock.calls[0]).toEqual(['remix_1', { title: 'New title', cta: 'New cta' }]);
+  });
+
+  it('sends all four fields when all four changed', async () => {
+    const user = userEvent.setup();
+    const stub = editorStub();
+    const save = await openEditor(stub);
+    setField('Title', 'T');
+    setField('Hook', 'H');
+    setField('Script', 'S');
+    setField('Call to action', 'C');
+    await user.click(save);
+    await waitFor(() => expect(stub.updateRemix).toHaveBeenCalledTimes(1));
+    expect(stub.updateRemix.mock.calls[0]).toEqual(['remix_1', { title: 'T', hook: 'H', script: 'S', cta: 'C' }]);
+  });
+
+  it('sends a field cleared to the empty string', async () => {
+    const user = userEvent.setup();
+    const stub = editorStub();
+    const save = await openEditor(stub);
+    setField('Call to action', '');
+    expect(save).toBeEnabled();
+    await user.click(save);
+    await waitFor(() => expect(stub.updateRemix).toHaveBeenCalledTimes(1));
+    expect(stub.updateRemix.mock.calls[0]).toEqual(['remix_1', { cta: '' }]);
+    expect(screen.getByLabelText('Call to action')).toHaveValue('');
+  });
+
+  it('counts a whitespace-only change and sends it as typed', async () => {
+    const user = userEvent.setup();
+    const stub = editorStub();
+    const save = await openEditor(stub);
+    setField('Hook', 'Loaded hook ');
+    await user.click(save);
+    await waitFor(() => expect(stub.updateRemix).toHaveBeenCalledTimes(1));
+    expect(stub.updateRemix.mock.calls[0]).toEqual(['remix_1', { hook: 'Loaded hook ' }]);
+  });
+
+  it('edit then revert disables Save, clears Unsaved changes and sends nothing', async () => {
+    const user = userEvent.setup();
+    const stub = editorStub();
+    const save = await openEditor(stub);
+    setField('Hook', 'Something else');
+    expect(screen.getByText('Unsaved changes')).toBeInTheDocument();
+    expect(save).toBeEnabled();
+    setField('Hook', 'Loaded hook');
+    expect(save).toBeDisabled();
+    expect(screen.queryByText('Unsaved changes')).toBeNull();
+    await user.click(save);
+    expect(stub.updateRemix).not.toHaveBeenCalled();
+  });
+
+  it('drops a reverted field from the patch', async () => {
+    const user = userEvent.setup();
+    const stub = editorStub();
+    const save = await openEditor(stub);
+    setField('Hook', 'New hook');
+    setField('Script', 'New script');
+    setField('Script', 'Loaded script');
+    await user.click(save);
+    await waitFor(() => expect(stub.updateRemix).toHaveBeenCalledTimes(1));
+    expect(stub.updateRemix.mock.calls[0]).toEqual(['remix_1', { hook: 'New hook' }]);
+  });
+
+  it('two saves in a row: the second call has only the second field', async () => {
+    const user = userEvent.setup();
+    const stub = editorStub();
+    const save = await openEditor(stub);
+    setField('Hook', 'New hook');
+    await user.click(save);
+    await waitFor(() => expect(save).toBeDisabled());
+    setField('Title', 'New title');
+    await user.click(save);
+    await waitFor(() => expect(stub.updateRemix).toHaveBeenCalledTimes(2));
+    expect(stub.updateRemix.mock.calls[1]).toEqual(['remix_1', { title: 'New title' }]);
+  });
+
+  it('compares against the last saved value, not the loaded one', async () => {
+    const user = userEvent.setup();
+    const stub = editorStub();
+    const save = await openEditor(stub);
+    setField('Hook', 'New hook');
+    await user.click(save);
+    await waitFor(() => expect(save).toBeDisabled());
+    setField('Hook', 'Loaded hook');
+    expect(save).toBeEnabled();
+    await user.click(save);
+    await waitFor(() => expect(stub.updateRemix).toHaveBeenCalledTimes(2));
+    expect(stub.updateRemix.mock.calls[1]).toEqual(['remix_1', { hook: 'Loaded hook' }]);
+  });
+
+  it('keeps text typed while a save is in flight and marks it unsaved', async () => {
+    const user = userEvent.setup();
+    const stub = editorStub();
+    let resolve: (v: ServiceResult<RemixedVideo>) => void = () => {};
+    stub.updateRemix.mockImplementationOnce(() => new Promise((r) => { resolve = r; }));
+    const save = await openEditor(stub);
+    setField('Hook', 'First');
+    await user.click(save);
+    expect(save).toBeDisabled();
+    setField('Hook', 'First and more');
+    resolve({ data: { ...loaded, hook: 'First', updatedAt: new Date().toISOString() }, error: null });
+    await waitFor(() => expect(screen.getByText('Unsaved changes')).toBeInTheDocument());
+    expect(screen.getByLabelText('Hook')).toHaveValue('First and more');
+    expect(save).toBeEnabled();
+    await user.click(save);
+    await waitFor(() => expect(stub.updateRemix).toHaveBeenCalledTimes(2));
+    expect(stub.updateRemix.mock.calls[1]).toEqual(['remix_1', { hook: 'First and more' }]);
+  });
+
+  it('makes the applied template the baseline', async () => {
+    const user = userEvent.setup();
+    const stub = editorStub();
+    stub.applyRemixTemplate.mockResolvedValue({
+      data: { ...loaded, title: 'Tpl title', hook: 'Tpl hook', script: 'Tpl script', cta: 'Tpl cta', updatedAt: new Date().toISOString() },
+      error: null,
+    });
+    const save = await openEditor(stub);
+    await user.click(screen.getByRole('button', { name: 'Apply template' }));
+    await waitFor(() => expect(screen.getByLabelText('Hook')).toHaveValue('Tpl hook'));
+    expect(save).toBeDisabled();
+    setField('Hook', 'Mine');
+    await user.click(save);
+    await waitFor(() => expect(stub.updateRemix).toHaveBeenCalledTimes(1));
+    expect(stub.updateRemix.mock.calls[0]).toEqual(['remix_1', { hook: 'Mine' }]);
+  });
+
+  it('asks before applying a template only when fields changed', async () => {
+    const user = userEvent.setup();
+    const stub = editorStub();
+    stub.applyRemixTemplate.mockResolvedValue({ data: loaded, error: null });
+    await openEditor(stub);
+    setField('Hook', 'Changed');
+    await user.click(screen.getByRole('button', { name: 'Apply template' }));
+    expect(screen.getByRole('dialog')).toHaveTextContent('Replace your edits?');
+    await user.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(stub.applyRemixTemplate).not.toHaveBeenCalled();
+
+    setField('Hook', 'Loaded hook');
+    await user.click(screen.getByRole('button', { name: 'Apply template' }));
+    expect(screen.queryByRole('dialog')).toBeNull();
+    await waitFor(() => expect(stub.applyRemixTemplate).toHaveBeenCalledTimes(1));
+  });
+});
