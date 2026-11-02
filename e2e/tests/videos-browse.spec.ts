@@ -1,6 +1,6 @@
 // Issue 58: Videos library grid and list views
 import { expect, test, type Page } from '@playwright/test';
-import { api, compact, openVideosOf, seedChannel, type Video } from './helpers';
+import { api, compact, filterVideosTo, LOAD_TIMEOUT, openVideosOf, seedChannel, type Video } from './helpers';
 
 type FullVideo = Video & { commentCount: number; competitorId: string; thumbnailUrl: string };
 
@@ -26,6 +26,7 @@ function listRows(page: Page) {
 const META = (handle: string) => new RegExp(`^@${handle} · (today|\\d+d ago|\\d+w ago|\\d+mo ago|\\d+y ago)$`);
 
 test('the library shows the channel in a grid by default, newest first, with details and actions', async ({ page, request }) => {
+  test.slow(); // /videos first renders the whole shared library
   const { handle, competitor } = await seedChannel(request, 'browse');
   const videos = await videosOf(request, competitor.id);
   expect(videos).toHaveLength(15);
@@ -57,6 +58,8 @@ test('the library shows the channel in a grid by default, newest first, with det
 });
 
 test('List shows the same videos as rows, survives a filter change, and Grid or a reload bring the grid back', async ({ page, request }) => {
+  // Switching to "All competitors" renders the whole shared library, more than once.
+  test.setTimeout(180_000);
   const { handle, competitor } = await seedChannel(request, 'browse-list');
   const videos = await videosOf(request, competitor.id);
   const captions = videos.map((v) => v.caption);
@@ -77,10 +80,11 @@ test('List shows the same videos as rows, survives a filter change, and Grid or 
 
   // Changing the filter keeps the list layout.
   const filter = page.getByLabel('Competitor');
-  await filter.selectOption({ label: 'All competitors' });
-  await expect(list).toHaveAttribute('aria-pressed', 'true');
+  await filter.selectOption({ label: 'All competitors' }, { timeout: LOAD_TIMEOUT });
+  await expect(filter.locator('option:checked')).toHaveText('All competitors', { timeout: LOAD_TIMEOUT });
+  await expect(list).toHaveAttribute('aria-pressed', 'true', { timeout: LOAD_TIMEOUT });
   await expect(page.locator('article')).toHaveCount(0);
-  await filter.selectOption({ label: `@${handle}` });
+  await filterVideosTo(page, handle);
   await expect(list).toHaveAttribute('aria-pressed', 'true');
   await expect(rows.locator('h3')).toHaveText(captions);
 
@@ -92,6 +96,7 @@ test('List shows the same videos as rows, survives a filter change, and Grid or 
   await list.click();
   await expect(list).toHaveAttribute('aria-pressed', 'true');
   await page.reload();
+  await expect(page.getByText('Loading your videos…')).toHaveCount(0, { timeout: LOAD_TIMEOUT });
   await expect(layoutButtons(page).grid).toHaveAttribute('aria-pressed', 'true');
   await expect(layoutButtons(page).list).toHaveAttribute('aria-pressed', 'false');
   await expect(page.locator('article').first()).toBeVisible();

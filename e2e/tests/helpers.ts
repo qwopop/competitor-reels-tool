@@ -54,10 +54,24 @@ export async function seedChannel(r: APIRequestContext, prefix: string) {
   return { handle, competitor, videos };
 }
 
-// The Videos page, filtered to one channel.
+// How long a page that renders the whole shared database may take (the
+// library grows with every run, and /videos renders every video).
+export const LOAD_TIMEOUT = 30_000;
+
+// The Videos page, filtered to one channel. Waits for the library to load
+// and for the filter to show only that channel before returning.
 export async function openVideosOf(page: Page, handle: string) {
   await page.goto('/videos');
-  await page.getByLabel('Competitor').selectOption({ label: `@${handle}` });
+  await expect(page.getByText('Loading your videos…')).toHaveCount(0, { timeout: LOAD_TIMEOUT });
+  await filterVideosTo(page, handle);
+}
+
+// Chooses one channel in the Videos page's Competitor filter and waits for the re-render.
+export async function filterVideosTo(page: Page, handle: string) {
+  const filter = page.getByLabel('Competitor');
+  await expect(filter.locator('option', { hasText: `@${handle}` }).first()).toBeAttached({ timeout: LOAD_TIMEOUT });
+  await filter.selectOption({ label: `@${handle}` }, { timeout: LOAD_TIMEOUT });
+  await expect(page.locator('article, ul > li').filter({ hasNotText: `@${handle} · ` }).filter({ has: page.getByRole('button', { name: 'Remix' }) })).toHaveCount(0, { timeout: LOAD_TIMEOUT });
 }
 
 // A competitor card on the Competitors page.
