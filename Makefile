@@ -58,5 +58,8 @@ integration: up
 
 # End-to-end tests (Playwright, e2e/) against the running stack.
 # First time: cd e2e && npm ci && npx playwright install chromium
-e2e: up
+# Starts from an empty database, like CI: `down -v` drops the local pgdata volume.
+e2e:
+	docker compose down -v
+	VIDEO_SOURCE=$${VIDEO_SOURCE:-sample} docker compose up -d --build --wait
 	cd e2e && BASE_URL=$(STACK_URL) npx playwright test

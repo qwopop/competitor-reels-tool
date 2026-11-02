@@ -77,8 +77,10 @@ The app waits for PostgreSQL's health check before starting, and the database li
 
 ```bash
 cd e2e && npm ci && npx playwright install chromium   # once
-make e2e                                              # starts the stack, then runs every test
+make e2e                                              # resets the stack's database, starts it, then runs every test
 ```
+
+`make e2e` runs `docker compose down -v` first, so it always starts from an empty database, like CI (this wipes the local stack's data).
 
 Each test creates its own channel with a unique handle, so the suite also runs on a database that already holds data.
 
