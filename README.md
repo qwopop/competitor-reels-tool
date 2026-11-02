@@ -1,4 +1,4 @@
-# ClipRemix
+# Clip-Remix
 
 Track competitor YouTube channels, pull their latest videos into a library, generate an editable breakdown (hook, script, CTA) for any video, and plan your shoots. Real videos come from YouTube's public channel feeds, so no API key or account is needed.
 
