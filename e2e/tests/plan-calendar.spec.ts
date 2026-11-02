@@ -22,6 +22,7 @@ const saved = (page: Page) =>
   page.waitForResponse((r) => r.request().method() === 'PATCH' && r.url().includes('/api/content-plan/') && r.ok());
 
 test('the calendar shows film and publish days, with navigation, an editor and the unscheduled list', async ({ page, request }) => {
+  test.slow(); // many steps over the shared, ever-growing plan
   const { handle, videos } = await seedChannel(request, 'pcal');
   const [A, B, C, D] = videos;
   const itemA = await api.addToPlan(request, A.id);
@@ -29,10 +30,24 @@ test('the calendar shows film and publish days, with navigation, an editor and t
   const itemC = await api.addToPlan(request, C.id);
   const itemD = await api.addToPlan(request, D.id);
 
-  // A random day a few months ahead, so other runs' entries rarely share it.
+  // A random day a few months ahead whose six target days hold no other plan
+  // item, so every entry checked below is this test's own (captions repeat).
   const now = new Date();
-  const monthsAhead = 2 + Math.floor(Math.random() * 60);
-  const base = 1 + Math.floor(Math.random() * 18);
+  const taken = new Set(
+    (await api.list<{ filmDate: string | null; publishDate: string | null }[]>(request, '/content-plan'))
+      .flatMap((p) => [p.filmDate, p.publishDate])
+      .filter((d): d is string => Boolean(d))
+  );
+  const OFFSETS = [0, 1, 3, 5, 7, 9];
+  let monthsAhead = 0;
+  let base = 0;
+  for (let tries = 0; ; tries++) {
+    monthsAhead = 2 + Math.floor(Math.random() * 60);
+    base = 1 + Math.floor(Math.random() * 18);
+    const days = OFFSETS.map((o) => isoDay(new Date(now.getFullYear(), now.getMonth() + monthsAhead, base + o)));
+    if (days.every((d) => !taken.has(d))) break;
+    expect(tries, 'no free days found').toBeLessThan(500);
+  }
   const on = (offset: number) => new Date(now.getFullYear(), now.getMonth() + monthsAhead, base + offset);
   const filmA = on(0);
   const publishA = on(3);
@@ -45,6 +60,7 @@ test('the calendar shows film and publish days, with navigation, an editor and t
   await api.updatePlan(request, itemC.id, { publishDate: isoDay(publishOnlyC) });
 
   await page.goto('/content-plan');
+  await expect(page.getByText('Loading your plan…')).toHaveCount(0, { timeout: 30_000 });
   const views = page.getByRole('group', { name: 'Plan layout' });
   await views.getByRole('button', { name: 'Calendar' }).click();
   await expect(views.getByRole('button', { name: 'Calendar' })).toHaveAttribute('aria-pressed', 'true');
@@ -124,6 +140,7 @@ test('the calendar shows film and publish days, with navigation, an editor and t
 
   // After a reload: Board again; the calendar still has the saved entries.
   await page.reload();
+  await expect(page.getByText('Loading your plan…')).toHaveCount(0, { timeout: 30_000 });
   await expect(views.getByRole('button', { name: 'Board' })).toHaveAttribute('aria-pressed', 'true');
   await openCalendarAt(page, monthsAhead);
   await expect(heading(page)).toHaveText(monthName(filmA));
@@ -132,7 +149,17 @@ test('the calendar shows film and publish days, with navigation, an editor and t
   await expect(entry(page, filmB, 'Film', B.caption)).toHaveCount(1);
   await expect(entry(page, publishOnlyC, 'Publish', C.caption)).toHaveCount(1);
 
-  // Confirm the B entry is ours.
-  await entry(page, filmB, 'Film', B.caption).click();
-  await expect(panel).toContainText(`@${handle} · `);
+  // Confirm the other entries checked are ours as well.
+  for (const [d, kind, caption] of [
+    [filmB, 'Film', B.caption],
+    [sameDayD, 'Publish', D.caption],
+    [publishOnlyC, 'Publish', C.caption],
+    [publishA, 'Publish', A.caption],
+  ] as const) {
+    await entry(page, d, kind, caption).click();
+    await expect(panel).toContainText(`@${handle} · `);
+    await expect(panel.getByRole('heading')).toHaveText(caption);
+    await panel.getByRole('button', { name: 'Close' }).click();
+    await expect(panel).toBeHidden();
+  }
 });
