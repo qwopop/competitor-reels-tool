@@ -62,7 +62,7 @@ A single user with no login. Anyone who can reach the app can use it.
 - **Plan item:** id, source video id, status, a copy of the video's details, film and
   publish dates, four checklist ticks, added and updated times.
 
-Data survives restarts (SQLite). The contract is in `openapi.yaml`.
+Data survives restarts: SQLite in local development, PostgreSQL in Docker Compose and in production on Render. The contract is in `openapi.yaml`.
 
 ## Where the data comes from
 

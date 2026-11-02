@@ -328,43 +328,51 @@ forgiving, but can create inconsistent competitor records.
 
 ### 3.9 Data persistence and relationships
 
-**Recommended decision:** Use SQLite (`clipremix.db`) and preserve data
-across restarts. Add database constraints for a unique YouTube channel ID
-per competitor, one remix per video, and one plan item per video. Use
+**Recommended decision:** Use SQLite (`clipremix.db`) for local
+development and tests, and PostgreSQL in Docker Compose and in
+production. The same SQLAlchemy code runs on both, and the backend test
+suite runs on both. Add database constraints for a unique YouTube channel
+ID per competitor, one remix per video, and one plan item per video. Use
 transactions for operations that delete or replace related records.
-Upgrade existing database files on startup by adding any missing columns
-(plain `ALTER TABLE … ADD COLUMN`, compatible with Postgres), so new
-fields never require deleting data.
+Upgrade existing databases on startup by adding any missing columns
+(plain `ALTER TABLE … ADD COLUMN`, accepted by SQLite and PostgreSQL), so
+new fields never require deleting data.
 
-**Why this option:** SQLite is sufficient for a local/single-user MVP
-and avoids running a separate database service. The channel ID, not the
-@handle, is the stable key because handles can change.
+**Why this option:** SQLite needs no setup for local work; PostgreSQL is
+the standard production database and is managed by the host. The channel
+ID, not the @handle, is the stable key because handles can change.
 
-**Alternatives considered:** - In-memory storage: simpler initially, but
-fails the persistence requirement (kept as an option for tests and demos
-with `DATABASE_URL=sqlite://`). - PostgreSQL: a good choice for a
-multi-user hosted service, but unnecessary for the current scope. - JSON
-files: easy to inspect, but relational updates and consistency are
-harder to manage.
+**Alternatives considered:** - SQLite in production on a persistent
+disk: the first deployment did this; it ties the app to one instance and
+one disk. - In-memory storage: kept for tests and demos with
+`DATABASE_URL=sqlite://`. - JSON files: relational updates and
+consistency are harder to manage.
 
-### 3.10 No login and deployment
+### 3.10 No login, deployment and delivery
 
 **Recommended decision:** Keep the app single-user and do not implement
-authentication in this version, as specified. Treat it as a local
-development or controlled demo environment. A Render blueprint
-(`render.yaml`, `docs/deploy.md`) exists for a controlled demo.
+authentication in this version, as specified. Ship it as one Docker
+image (the backend serves the built frontend) with a managed PostgreSQL
+on Render. GitHub Actions runs every test on every push and deploys a
+push to `main` only when all of them pass, then checks `/api/health` for
+the new version (`docs/deploy.md`).
 
-**Why this option:** It keeps the MVP focused on the core product
-workflows.
+**Why this option:** One container plus one database is the smallest
+production setup; Render gives HTTPS and managed PostgreSQL without
+running servers. Gating deploys on the tests keeps broken commits out of
+production.
 
-**Alternatives considered:** - Add accounts and multiple users:
-introduces authentication, ownership, permissions, and data isolation. -
-Publicly deploy without login: not recommended because anyone with
-access could modify or delete the same data.
+**Alternatives considered:** - AWS (EC2 with CloudFormation): more
+control, more to run and secure. - Railway or Fly.io: also suitable;
+Render was chosen for the least setup. - Separate frontend and backend
+services: two deploys and CORS for no benefit at this size. - Add
+accounts and multiple users: authentication, ownership and data
+isolation. - Publicly deploy without login: anyone with access can
+change or delete the data.
 
-**Important limitation:** "No login" is acceptable for a local demo, but
-a publicly accessible instance should not be deployed without an
-appropriate access-control and security plan.
+**Important limitation:** the deployed site has no login. Share its
+address only with people who may change the data, until access control
+is added.
 
 ### 3.11 Scheduling and the production checklist
 
@@ -395,7 +403,7 @@ calendar export: useful later, but not needed to plan a shoot.
 -   Instagram and other platforms
 -   AI-written breakdowns or video transcription/analysis
 -   User accounts, authentication, and multi-user support
--   Public deployment without an access-control plan
+-   User access control for the public deployment
 -   Advanced analytics or custom performance scoring
 -   Custom user-created templates
 -   Advanced filtering such as engagement thresholds and date ranges
@@ -476,6 +484,14 @@ The MVP is ready for review when:
     video, most-viewed competitor, recent videos, and plan progress.
 -   [ ] Loading, empty, success, and error states are handled for the
     main actions.
+-   [ ] One Docker image serves the frontend and the API, and the app
+    runs on PostgreSQL as well as SQLite.
+-   [ ] `docker compose up` runs the app with PostgreSQL; integration and
+    end-to-end tests pass against it.
+-   [ ] Every feature has an end-to-end test tracked by an `e2e-test`
+    issue, closed after QA.
+-   [ ] Every push runs all tests in CI, and a passing push to `main` is
+    deployed to Render and checked through `/api/health`.
 
 ## 7. Open implementation details
 

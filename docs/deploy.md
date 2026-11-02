@@ -34,6 +34,26 @@ Render creates the database first, passes its address to the app as
 Your site is at `https://clipremix.onrender.com` (or a similar name that
 Render shows on the service page).
 
+### Or set it up by hand (what the live site uses)
+
+The live site was created by hand instead of from the Blueprint. The
+result is the same two services:
+
+1. **New → Web Service**, connect the repository, branch **`main`**,
+   runtime **Docker** (Render finds the root `Dockerfile`). Name: `clip-remix`.
+2. **New → Postgres**, in the **same region** as the web service. The live
+   database is `clipremix-db` (PostgreSQL 18, Oregon). PostgreSQL 16 or
+   newer works.
+3. On the web service, **Environment → Add Environment Variable**:
+   `DATABASE_URL` = the database's **Internal Database URL**.
+4. **Settings → Health Check Path**: `/api/health`.
+5. **Settings → Build & Deploy → Auto-Deploy: Off**, so only tested commits
+   are deployed (see step 4 below).
+
+Without `DATABASE_URL` the app falls back to a SQLite file inside the
+container, which is lost on every deploy. To check, add a channel, deploy
+again, and see whether it is still there.
+
 ### Plans
 
 `render.yaml` uses the free plans so you can try it at no cost:
