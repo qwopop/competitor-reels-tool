@@ -11,7 +11,7 @@ from sqlalchemy.orm import sessionmaker
 
 from app.generator import SampleSource
 from app.youtube import YouTubeSource
-from app.models import Base, make_engine, upgrade_schema
+from app.models import Base, make_engine, repair_channel_id_usernames, upgrade_schema
 from app.frontend import mount_frontend
 from app.routers import router
 
@@ -41,6 +41,7 @@ def create_app(database_url: str | None = None, video_source=_FROM_ENV) -> FastA
             Path(sqlite_path).parent.mkdir(parents=True, exist_ok=True)
         Base.metadata.create_all(engine)
         upgrade_schema(engine)
+        repair_channel_id_usernames(engine)
         yield
         engine.dispose()
 

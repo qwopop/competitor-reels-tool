@@ -16,7 +16,8 @@ class CompetitorRow(Base):
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     # YouTube's channel ID (UC...), the stable key. Handles can change; IDs do not.
     channel_id: Mapped[str] = mapped_column(String(64), unique=True)
-    # The @handle without the @, lowercase (handles are case-insensitive), or the channel ID if it has none.
+    # The @handle without the @, lowercase (handles are case-insensitive), or the channel ID
+    # if it has none, in its original case (channel IDs are case-sensitive).
     username: Mapped[str] = mapped_column(String(64), index=True)
     channel_url: Mapped[str] = mapped_column(String(255))
     display_name: Mapped[str] = mapped_column(String(128))
@@ -149,3 +150,55 @@ def upgrade_schema(engine: Engine) -> None:
         for table, column, ddl in added:
             if column not in existing[table]:
                 conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {column} {ddl}"))
+
+
+# Competitors saved before channel IDs kept their case: no handle, so the username
+# is the channel ID, but lowercased (ucabc… for the channel UCabc…). substr, not
+# LIKE, because LIKE ignores case in SQLite.
+_LOWERCASED_CHANNEL_IDS = (
+    "SELECT id FROM competitors WHERE substr(channel_id, 1, 2) = 'UC' AND username = lower(channel_id)"
+)
+
+
+def repair_channel_id_usernames(engine: Engine) -> None:
+    """Give channel-ID competitors their channel ID back in its original case, in
+    competitors, videos and content_plan. Rows that are already right, and handle
+    competitors, are left alone, so running it again changes nothing.
+    Plain UPDATE ... WHERE with substr() and lower(), which SQLite and Postgres both accept."""
+    broken = _LOWERCASED_CHANNEL_IDS
+    with engine.begin() as conn:
+        # Plan items whose video is still there: the video says which competitor they came from.
+        conn.execute(text(f"""
+            UPDATE content_plan SET competitor_username = (
+                SELECT c.channel_id FROM competitors c JOIN videos v ON v.competitor_id = c.id
+                WHERE v.id = content_plan.video_id
+            )
+            WHERE video_id IN (SELECT v.id FROM videos v WHERE v.competitor_id IN ({broken}))
+        """))
+        # Plan items that outlived their video: match the lowercased username, but only
+        # when exactly one such competitor has it and no other competitor (a handle) does.
+        conn.execute(text(f"""
+            UPDATE content_plan SET competitor_username = (
+                SELECT c.channel_id FROM competitors c
+                WHERE c.id IN ({broken}) AND c.username = content_plan.competitor_username
+            )
+            WHERE NOT EXISTS (SELECT 1 FROM videos v WHERE v.id = content_plan.video_id)
+              AND (
+                SELECT count(*) FROM competitors c
+                WHERE c.id IN ({broken}) AND c.username = content_plan.competitor_username
+              ) = 1
+              AND NOT EXISTS (
+                SELECT 1 FROM competitors c
+                WHERE c.username = content_plan.competitor_username AND c.id NOT IN ({broken})
+              )
+        """))
+        conn.execute(text(f"""
+            UPDATE videos SET competitor_username = (
+                SELECT c.channel_id FROM competitors c WHERE c.id = videos.competitor_id
+            )
+            WHERE competitor_id IN ({broken})
+        """))
+        conn.execute(text(
+            "UPDATE competitors SET username = channel_id "
+            "WHERE substr(channel_id, 1, 2) = 'UC' AND username = lower(channel_id)"
+        ))
