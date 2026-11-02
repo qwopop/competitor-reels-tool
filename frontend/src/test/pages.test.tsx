@@ -1,7 +1,7 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach, type MockInstance } from 'vitest';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { createMemoryRouter, RouterProvider } from 'react-router-dom';
+import { createBrowserRouter, createMemoryRouter, RouterProvider } from 'react-router-dom';
 import type {
   VideosApi,
   Video,
@@ -1462,5 +1462,171 @@ describe('Remix editor warns before leaving with unsaved changes (#76)', () => {
     await user.click(screen.getByRole('button', { name: /save changes/i }));
     expect(await screen.findByText(/^Saved /)).toBeInTheDocument();
     expect(dispatchBeforeUnload()).toBe(false);
+  });
+  // A full page load straight onto the editor: the editor is the first entry of
+  // its document, so a plain browser Back would leave the document, where only
+  // the browser's own prompt is possible. These tests use the real
+  // window.history (a browser router in jsdom).
+  describe('when the editor was opened by a full page load', () => {
+    let browserRouter: ReturnType<typeof createBrowserRouter> | null = null;
+    let back: MockInstance<[], void>;
+    let forward: MockInstance<[], void>;
+
+    function setNavigation(nav: { canGoForward: boolean; entries?: { url: string }[] } | undefined) {
+      Object.defineProperty(window, 'navigation', {
+        configurable: true,
+        value: nav && { canGoForward: nav.canGoForward, currentEntry: { index: 0 }, entries: () => nav.entries ?? [] },
+      });
+    }
+
+    beforeEach(() => {
+      // A previous page, then the editor as a new document (React Router has not
+      // marked it yet, so it becomes its entry 0).
+      window.history.replaceState(null, '', '/videos');
+      window.history.pushState(null, '', '/remix/remix_1');
+      setNavigation({ canGoForward: false });
+      // The guard's own "back once more" leaves the document in a browser; here
+      // it is recorded instead.
+      back = vi.spyOn(window.history, 'back').mockImplementation(() => {});
+      forward = vi.spyOn(window.history, 'forward').mockImplementation(() => {});
+    });
+
+    afterEach(() => {
+      browserRouter?.dispose();
+      browserRouter = null;
+      back.mockRestore();
+      forward.mockRestore();
+      setNavigation(undefined);
+    });
+
+    async function openByPageLoad(stub = editorStub()) {
+      browserRouter = createBrowserRouter([{ path: '/remix/:id', element: <RemixPage /> }, ...extra]);
+      render(
+        <ApiProvider api={stub as unknown as VideosApi}>
+          <RouterProvider router={browserRouter} />
+        </ApiProvider>
+      );
+      await screen.findByLabelText('Hook');
+      return browserRouter;
+    }
+
+    // The user's Back button: a real traversal, so React Router sees a popstate.
+    async function pressBack() {
+      await act(async () => {
+        window.history.go(-1);
+        await new Promise((resolve) => setTimeout(resolve, 20));
+      });
+    }
+
+    function guardState() {
+      return (window.history.state as { usr?: { firstEntryGuard?: boolean } } | null)?.usr?.firstEntryGuard;
+    }
+
+    it('puts one entry with the same URL on top, so Back stays in the app', async () => {
+      const length = window.history.length;
+      const router = await openByPageLoad();
+      await waitFor(() => expect(guardState()).toBe(true));
+      expect(window.history.length).toBe(length + 1);
+      expect(window.location.pathname).toBe('/remix/remix_1');
+      expect(router.state.location.pathname).toBe('/remix/remix_1');
+    });
+
+    it('browser Back with unsaved changes shows the in-app dialog, and Cancel keeps the text and URL', async () => {
+      const user = userEvent.setup();
+      await openByPageLoad();
+      await waitFor(() => expect(guardState()).toBe(true));
+      editAll();
+      await pressBack();
+
+      expect(await screen.findByRole('dialog', { name: 'Leave without saving?' })).toBeInTheDocument();
+      expect(window.location.pathname).toBe('/remix/remix_1');
+      await user.click(within(leaveDialog()!).getByRole('button', { name: 'Cancel' }));
+      await waitFor(() => expect(leaveDialog()).toBeNull());
+      expectMyText();
+      expect(guardState()).toBe(true);
+      expect(back).not.toHaveBeenCalled();
+    });
+
+    it('Leave page goes on to the previous page with no browser prompt', async () => {
+      const user = userEvent.setup();
+      await openByPageLoad();
+      await waitFor(() => expect(guardState()).toBe(true));
+      editAll();
+      await pressBack();
+      await user.click(within((await screen.findByRole('dialog', { name: 'Leave without saving?' }))).getByRole('button', { name: 'Leave page' }));
+
+      await waitFor(() => expect(back).toHaveBeenCalledTimes(1));
+      expect(guardState()).toBeUndefined();
+      // The page is leaving on the user's choice: no beforeunload prompt on the way.
+      expect(screen.getByText('Unsaved changes')).toBeInTheDocument();
+      expect(dispatchBeforeUnload()).toBe(false);
+    });
+
+    it('Back with nothing unsaved leaves in one press, with no dialog', async () => {
+      await openByPageLoad();
+      await waitFor(() => expect(guardState()).toBe(true));
+      await pressBack();
+
+      await waitFor(() => expect(back).toHaveBeenCalledTimes(1));
+      expect(leaveDialog()).toBeNull();
+    });
+
+    it('Back after a successful save leaves in one press, with no dialog', async () => {
+      const user = userEvent.setup();
+      await openByPageLoad();
+      await waitFor(() => expect(guardState()).toBe(true));
+      setField('Hook', 'My hook');
+      await user.click(screen.getByRole('button', { name: /save changes/i }));
+      expect(await screen.findByText(/^Saved /)).toBeInTheDocument();
+      await pressBack();
+
+      await waitFor(() => expect(back).toHaveBeenCalledTimes(1));
+      expect(leaveDialog()).toBeNull();
+    });
+
+    it('keeps the forward history: no entry is added when Forward is possible', async () => {
+      setNavigation({ canGoForward: true, entries: [{ url: window.location.href }, { url: 'http://localhost:3000/videos' }] });
+      const length = window.history.length;
+      await openByPageLoad();
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      expect(window.history.length).toBe(length);
+      expect(guardState()).toBeUndefined();
+      expect(forward).not.toHaveBeenCalled();
+    });
+
+    it('steps back onto its own entry when the user returns with Forward', async () => {
+      setNavigation({ canGoForward: true, entries: [{ url: window.location.href }, { url: window.location.href }] });
+      const length = window.history.length;
+      await openByPageLoad();
+      await waitFor(() => expect(forward).toHaveBeenCalledTimes(1));
+      expect(window.history.length).toBe(length);
+    });
+
+    it('adds no entry when the editor was reached inside the app', async () => {
+      window.history.replaceState(null, '', '/videos');
+      browserRouter = createBrowserRouter([{ path: '/remix/:id', element: <RemixPage /> }, ...extra]);
+      render(
+        <ApiProvider api={editorStub() as unknown as VideosApi}>
+          <RouterProvider router={browserRouter} />
+        </ApiProvider>
+      );
+      const length = window.history.length;
+      await act(() => browserRouter!.navigate('/remix/remix_1'));
+      await screen.findByLabelText('Hook');
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      expect(window.history.length).toBe(length + 1);
+      expect(guardState()).toBeUndefined();
+    });
+
+    it('adds no entry when there is no page to go back to', async () => {
+      const length = vi.spyOn(window.history, 'length', 'get').mockReturnValue(1);
+      try {
+        await openByPageLoad();
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        expect(guardState()).toBeUndefined();
+      } finally {
+        length.mockRestore();
+      }
+    });
   });
 });
