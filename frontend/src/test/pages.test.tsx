@@ -860,3 +860,221 @@ describe('Remix editor sends only changed fields (#74)', () => {
     await waitFor(() => expect(stub.applyRemixTemplate).toHaveBeenCalledTimes(1));
   });
 });
+
+describe('Remix editor keeps the editor when an action fails (#75)', () => {
+  const loaded: RemixedVideo = {
+    id: 'remix_1',
+    videoId: 'video_1',
+    title: 'Loaded title',
+    hook: 'Loaded hook',
+    script: 'Loaded script',
+    cta: 'Loaded cta',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+  const unreachable = 'Could not reach the server. Check that the backend is running.';
+
+  function editorStub() {
+    const stub = new StubApi();
+    stub.getRemix.mockResolvedValue({ data: loaded, error: null });
+    stub.getVideo.mockResolvedValue({ data: video(), error: null });
+    stub.updateRemix.mockResolvedValue({ data: null, error: unreachable });
+    stub.applyRemixTemplate.mockResolvedValue({ data: null, error: unreachable });
+    stub.addToContentPlan.mockResolvedValue({ data: null, error: unreachable });
+    return stub;
+  }
+
+  async function openEditor(stub: StubApi) {
+    renderAt(stub, '/remix/remix_1', <RemixPage />, '/remix/:id');
+    await screen.findByLabelText('Hook');
+    return screen.getByRole('button', { name: /save changes/i });
+  }
+
+  function field(label: string) {
+    return screen.getByLabelText(label, { selector: 'input, textarea' });
+  }
+
+  function setField(label: string, value: string) {
+    fireEvent.change(field(label), { target: { value } });
+  }
+
+  function editAll() {
+    setField('Title', 'My title');
+    setField('Hook', 'My hook');
+    setField('Script', 'My script');
+    setField('Call to action', 'My cta');
+  }
+
+  function expectMyText() {
+    expect(field('Title')).toHaveValue('My title');
+    expect(field('Hook')).toHaveValue('My hook');
+    expect(field('Script')).toHaveValue('My script');
+    expect(field('Call to action')).toHaveValue('My cta');
+  }
+
+  it('a failed save keeps the four fields, their text and the source video, and shows the error in an alert', async () => {
+    const user = userEvent.setup();
+    const stub = editorStub();
+    const save = await openEditor(stub);
+    editAll();
+    await user.click(save);
+
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent(unreachable);
+    expect(within(alert).getByText(unreachable)).toHaveClass('rounded-xl', 'text-danger');
+    expectMyText();
+    expect(screen.getByLabelText('Remix template')).toBeInTheDocument();
+    expect(screen.getByText('I let AI build my SaaS in 48 hours')).toBeInTheDocument();
+    expect(screen.getByText('Unsaved changes')).toBeInTheDocument();
+    expect(screen.queryByText(/^Saved /)).toBeNull();
+    expect(save).toBeEnabled();
+    expect(save.querySelector('.animate-spin')).toBeNull();
+  });
+
+  it('shows "Remix not found." when the remix was deleted and keeps the editor', async () => {
+    const user = userEvent.setup();
+    const stub = editorStub();
+    stub.updateRemix.mockResolvedValue({ data: null, error: 'Remix not found.' });
+    const save = await openEditor(stub);
+    editAll();
+    await user.click(save);
+    expect(await screen.findByRole('alert')).toHaveTextContent('Remix not found.');
+    expectMyText();
+    expect(screen.getByRole('link', { name: /back to videos/i })).toBeInTheDocument();
+  });
+
+  it('a retry sends the same changed fields, then shows Saved and clears the error', async () => {
+    const user = userEvent.setup();
+    const stub = editorStub();
+    const save = await openEditor(stub);
+    setField('Hook', 'My hook');
+    setField('Call to action', 'My cta');
+    await user.click(save);
+    await screen.findByRole('alert');
+
+    stub.updateRemix.mockResolvedValueOnce({
+      data: { ...loaded, hook: 'My hook', cta: 'My cta', updatedAt: new Date().toISOString() },
+      error: null,
+    });
+    await user.click(save);
+    await waitFor(() => expect(stub.updateRemix).toHaveBeenCalledTimes(2));
+    expect(stub.updateRemix.mock.calls[0]).toEqual(['remix_1', { hook: 'My hook', cta: 'My cta' }]);
+    expect(stub.updateRemix.mock.calls[1]).toEqual(stub.updateRemix.mock.calls[0]);
+    expect(await screen.findByText(/^Saved /)).toBeInTheDocument();
+    expect(save).toBeDisabled();
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  it('keeps text typed while the failing save was in flight and sends it next time', async () => {
+    const user = userEvent.setup();
+    const stub = editorStub();
+    let resolve: (v: ServiceResult<RemixedVideo>) => void = () => {};
+    stub.updateRemix.mockImplementationOnce(() => new Promise((r) => { resolve = r; }));
+    const save = await openEditor(stub);
+    setField('Hook', 'First');
+    await user.click(save);
+    setField('Hook', 'First and more');
+    resolve({ data: null, error: unreachable });
+    expect(await screen.findByRole('alert')).toHaveTextContent(unreachable);
+    expect(field('Hook')).toHaveValue('First and more');
+    await user.click(save);
+    await waitFor(() => expect(stub.updateRemix).toHaveBeenCalledTimes(2));
+    expect(stub.updateRemix.mock.calls[1]).toEqual(['remix_1', { hook: 'First and more' }]);
+  });
+
+  it('a failed apply with no edits keeps the editor and the status line', async () => {
+    const user = userEvent.setup();
+    const stub = editorStub();
+    const save = await openEditor(stub);
+    expect(screen.getByText(/^Created /)).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Apply template' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent(unreachable);
+    expect(field('Hook')).toHaveValue('Loaded hook');
+    expect(screen.getByText(/^Created /)).toBeInTheDocument();
+    expect(save).toBeDisabled();
+  });
+
+  it('a failed apply after "Replace your edits?" keeps the user\'s text and asks again next time', async () => {
+    const user = userEvent.setup();
+    const stub = editorStub();
+    const save = await openEditor(stub);
+    editAll();
+    await user.click(screen.getByRole('button', { name: 'Apply template' }));
+    const dialog = screen.getByRole('dialog');
+    expect(dialog).toHaveTextContent('Replace your edits?');
+    await user.click(within(dialog).getByRole('button', { name: 'Apply template' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(unreachable);
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expectMyText();
+    expect(screen.getByText('Unsaved changes')).toBeInTheDocument();
+    expect(save).toBeEnabled();
+
+    await user.click(screen.getByRole('button', { name: 'Apply template' }));
+    expect(screen.getByRole('dialog')).toHaveTextContent('Replace your edits?');
+  });
+
+  it('a failed add to plan keeps the editor and the Add to plan button', async () => {
+    const user = userEvent.setup();
+    const stub = editorStub();
+    await openEditor(stub);
+    setField('Hook', 'My hook');
+    await user.click(screen.getByRole('button', { name: 'Add to plan' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent(unreachable);
+    expect(field('Hook')).toHaveValue('My hook');
+    expect(screen.getByRole('button', { name: 'Add to plan' })).toBeInTheDocument();
+    expect(screen.queryByText('In content plan')).toBeNull();
+  });
+
+  it('clears the error on the next edit', async () => {
+    const user = userEvent.setup();
+    const stub = editorStub();
+    const save = await openEditor(stub);
+    setField('Hook', 'My hook');
+    await user.click(save);
+    await screen.findByRole('alert');
+    setField('Script', 'My script');
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  it('clears the error when a later apply or add to plan succeeds', async () => {
+    const user = userEvent.setup();
+    const stub = editorStub();
+    await openEditor(stub);
+    await user.click(screen.getByRole('button', { name: 'Add to plan' }));
+    await screen.findByRole('alert');
+    stub.applyRemixTemplate.mockResolvedValueOnce({ data: { ...loaded, hook: 'Tpl hook' }, error: null });
+    await user.click(screen.getByRole('button', { name: 'Apply template' }));
+    await waitFor(() => expect(field('Hook')).toHaveValue('Tpl hook'));
+    expect(screen.queryByRole('alert')).toBeNull();
+
+    await user.click(screen.getByRole('button', { name: 'Apply template' }));
+    await screen.findByRole('alert');
+    stub.addToContentPlan.mockResolvedValueOnce({ data: planItem(), error: null });
+    await user.click(screen.getByRole('button', { name: 'Add to plan' }));
+    expect(await screen.findByText('In content plan')).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  it('shows only one error at a time, the latest', async () => {
+    const user = userEvent.setup();
+    const stub = editorStub();
+    await openEditor(stub);
+    await user.click(screen.getByRole('button', { name: 'Apply template' }));
+    await screen.findByRole('alert');
+    stub.addToContentPlan.mockResolvedValueOnce({ data: null, error: 'Request failed (418).' });
+    await user.click(screen.getByRole('button', { name: 'Add to plan' }));
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Request failed (418).'));
+    expect(screen.getAllByRole('alert')).toHaveLength(1);
+  });
+
+  it('a failed load still shows only the back link and the full-page error', async () => {
+    const stub = new StubApi();
+    stub.getRemix.mockResolvedValue({ data: null, error: 'Remix not found.' });
+    renderAt(stub, '/remix/does-not-exist', <RemixPage />, '/remix/:id');
+    expect(await screen.findByText('Remix not found.')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /back to videos/i })).toBeInTheDocument();
+    expect(screen.queryByLabelText('Hook')).toBeNull();
+    expect(screen.queryByRole('button', { name: /save changes/i })).toBeNull();
+  });
+});
