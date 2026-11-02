@@ -1,6 +1,6 @@
 // Issue 61: Generate a remix
 import { expect, test, type Page } from '@playwright/test';
-import { openVideosOf, seedChannel } from './helpers';
+import { filterVideosTo, LOAD_TIMEOUT, openVideosOf, seedChannel } from './helpers';
 
 const FIELDS = ['Title', 'Hook', 'Script', 'Call to action'] as const;
 const field = (page: Page, label: (typeof FIELDS)[number]) => page.getByLabel(label, { exact: true });
@@ -9,6 +9,7 @@ const field = (page: Page, label: (typeof FIELDS)[number]) => page.getByLabel(la
 const cardOf = (page: Page, caption: string) => page.locator('article').filter({ has: page.getByRole('heading', { name: caption, exact: true }) });
 
 test('Remix opens the editor with a full draft of that video', async ({ page, request }) => {
+  test.slow(); // /videos renders the whole shared library
   const { handle, videos } = await seedChannel(request, 'remix');
   const video = videos[0];
   await openVideosOf(page, handle);
@@ -32,6 +33,8 @@ test('Remix opens the editor with a full draft of that video', async ({ page, re
 });
 
 test('remixing the same video reopens its remix; another video gets its own', async ({ page, request }) => {
+  // The library is loaded three times, and each load renders the whole shared database.
+  test.setTimeout(300_000);
   const { handle, videos } = await seedChannel(request, 'remix-again');
   const [one, two] = videos;
 
@@ -51,9 +54,10 @@ test('remixing the same video reopens its remix; another video gets its own', as
   await expect(page.locator('li').filter({ hasText: `@${handle} · updated` })).toHaveCount(1);
 
   // After a reload, only the remixed video has Preview.
-  await openVideosOf(page, handle);
+  await page.goto('/videos');
   await page.reload();
-  await page.getByLabel('Competitor').selectOption({ label: `@${handle}` });
+  await expect(page.getByText('Loading your videos…')).toHaveCount(0, { timeout: LOAD_TIMEOUT });
+  await filterVideosTo(page, handle);
   await expect(page.locator('article')).toHaveCount(15);
   await expect(cardOf(page, one.caption).getByRole('button', { name: 'Preview' })).toBeVisible();
   await expect(page.locator('article').getByRole('button', { name: 'Preview' })).toHaveCount(1);
