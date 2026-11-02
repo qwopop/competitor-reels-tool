@@ -6,7 +6,8 @@ import { defineConfig, devices } from '@playwright/test';
 // that already holds data.
 export default defineConfig({
   testDir: './tests',
-  timeout: 30_000,
+  // The suite must pass on a large, already-populated database, where /videos renders every stored video.
+  timeout: 120_000,
   expect: { timeout: 8_000 },
   // One worker: the dashboard test compares totals across the whole database.
   workers: 1,
