@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter, Routes, Route } from 'react-router-dom';
+import { createMemoryRouter, RouterProvider } from 'react-router-dom';
 import type {
   VideosApi,
   Video,
@@ -80,17 +80,32 @@ function planItem(overrides: Partial<ContentPlanItem> = {}): ContentPlanItem {
   };
 }
 
-function renderAt(stub: StubApi, path: string, element: React.ReactElement, route: string) {
-  return render(
+// A data router (createMemoryRouter), as in the app, so pages can use useBlocker.
+// `extra` adds stand-in pages to navigate to. Returns the router too, so tests
+// can go back and forward or read the current location.
+function renderAt(
+  stub: StubApi,
+  path: string,
+  element: React.ReactElement,
+  route: string,
+  { entries, extra = [] }: { entries?: string[]; extra?: { path: string; element: React.ReactElement }[] } = {}
+) {
+  const routes = [
+    { path: route, element },
+    { path: '/remix/:id', element: <p>Remix editor</p> },
+    ...extra,
+  ];
+  const initialEntries = entries ?? [path];
+  const router = createMemoryRouter(routes, {
+    initialEntries,
+    initialIndex: initialEntries.indexOf(path),
+  });
+  const result = render(
     <ApiProvider api={stub as unknown as VideosApi}>
-      <MemoryRouter initialEntries={[path]}>
-        <Routes>
-          <Route path={route} element={element} />
-          <Route path="/remix/:id" element={<p>Remix editor</p>} />
-        </Routes>
-      </MemoryRouter>
+      <RouterProvider router={router} />
     </ApiProvider>
   );
+  return { ...result, router };
 }
 
 beforeEach(() => {
