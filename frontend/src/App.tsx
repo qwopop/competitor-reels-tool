@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { createBrowserRouter, Navigate, RouterProvider } from 'react-router-dom';
 import { ApiProvider } from '@/services';
 import { Layout } from '@/components/Layout';
 import { DashboardPage } from '@/pages/DashboardPage';
@@ -9,23 +9,28 @@ import { RemixPage } from '@/pages/RemixPage';
 import { ContentPlanPage } from '@/pages/ContentPlanPage';
 import { VideosLinkPage } from '@/pages/VideosLinkPage';
 
+// A data router, so pages can use useBlocker (the remix editor warns before
+// leaving with unsaved changes).
+const router = createBrowserRouter([
+  {
+    element: <Layout />,
+    children: [
+      { index: true, element: <DashboardPage /> },
+      { path: '/videos', element: <VideosPage /> },
+      { path: '/competitors', element: <CompetitorsPage /> },
+      { path: '/remixes', element: <RemixesPage /> },
+      { path: '/remix/:id', element: <RemixPage /> },
+      { path: '/content-plan', element: <ContentPlanPage /> },
+      { path: '/go-to-videos', element: <VideosLinkPage /> },
+      { path: '*', element: <Navigate to="/" replace /> },
+    ],
+  },
+]);
+
 export default function App() {
   return (
     <ApiProvider>
-      <BrowserRouter>
-        <Routes>
-          <Route element={<Layout />}>
-            <Route index element={<DashboardPage />} />
-            <Route path="/videos" element={<VideosPage />} />
-            <Route path="/competitors" element={<CompetitorsPage />} />
-            <Route path="/remixes" element={<RemixesPage />} />
-            <Route path="/remix/:id" element={<RemixPage />} />
-            <Route path="/content-plan" element={<ContentPlanPage />} />
-            <Route path="/go-to-videos" element={<VideosLinkPage />} />
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </Route>
-        </Routes>
-      </BrowserRouter>
+      <RouterProvider router={router} />
     </ApiProvider>
   );
 }
