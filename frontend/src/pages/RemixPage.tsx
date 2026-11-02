@@ -19,7 +19,10 @@ export function RemixPage() {
   const [remix, setRemix] = useState<RemixedVideo | null>(null);
   const [video, setVideo] = useState<Video | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  // A failed load replaces the page; a failed action (save, apply template,
+  // add to plan) shows inside the editor and keeps the user's text.
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   const [title, setTitle] = useState('');
   const [hook, setHook] = useState('');
@@ -41,7 +44,7 @@ export function RemixPage() {
       const remixRes = await api.getRemix(id);
       if (!active) return;
       if (remixRes.error || !remixRes.data) {
-        setError(remixRes.error ?? 'Remix not found.');
+        setLoadError(remixRes.error ?? 'Remix not found.');
         setLoading(false);
         return;
       }
@@ -69,7 +72,10 @@ export function RemixPage() {
   const dirty = Object.keys(changes).length > 0;
 
   function markDirty(setter: (v: string) => void) {
-    return (e: { target: { value: string } }) => setter(e.target.value);
+    return (e: { target: { value: string } }) => {
+      setter(e.target.value);
+      setActionError(null);
+    };
   }
 
   async function handleSave() {
@@ -78,9 +84,10 @@ export function RemixPage() {
     const res = await api.updateRemix(remix.id, changes);
     setSaving(false);
     if (res.error || !res.data) {
-      setError(res.error ?? 'Could not save.');
+      setActionError(res.error ?? 'Could not save.');
       return;
     }
+    setActionError(null);
     // Fields keep what is on screen (including anything typed while saving);
     // only the baseline moves to the saved values.
     setRemix(res.data);
@@ -92,9 +99,10 @@ export function RemixPage() {
     if (!video) return;
     const res = await api.addToContentPlan(video.id);
     if (res.error || !res.data) {
-      setError(res.error ?? 'Could not add to the content plan.');
+      setActionError(res.error ?? 'Could not add to the content plan.');
       return;
     }
+    setActionError(null);
     setPlanItem(res.data);
   }
 
@@ -103,9 +111,10 @@ export function RemixPage() {
     setConfirmApply(false);
     const res = await api.applyRemixTemplate(remix.id, template);
     if (res.error || !res.data) {
-      setError(res.error ?? 'Could not apply the template.');
+      setActionError(res.error ?? 'Could not apply the template.');
       return;
     }
+    setActionError(null);
     const updated = res.data;
     setRemix(updated);
     setTitle(updated.title);
@@ -122,12 +131,12 @@ export function RemixPage() {
   }
 
   if (loading) return <FullPageLoader label="Loading remix…" />;
-  if (error)
+  if (loadError)
     return (
       <div>
         <BackLink />
         <div className="mt-10 max-w-xl">
-          <ErrorBanner message={error} />
+          <ErrorBanner message={loadError} />
         </div>
       </div>
     );
@@ -266,7 +275,15 @@ export function RemixPage() {
             </Field>
           </div>
 
-          <div className="mt-10 flex flex-wrap items-center justify-between gap-4">
+          {actionError && (
+            <div role="alert" className="mt-10">
+              <ErrorBanner message={actionError} />
+            </div>
+          )}
+
+          <div
+            className={`${actionError ? 'mt-4' : 'mt-10'} flex flex-wrap items-center justify-between gap-4`}
+          >
             <p className="text-sm text-ink/50">
               {dirty
                 ? 'Unsaved changes'
