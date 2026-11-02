@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createMemoryRouter, RouterProvider } from 'react-router-dom';
 import type {
@@ -1091,5 +1091,376 @@ describe('Remix editor keeps the editor when an action fails (#75)', () => {
     expect(screen.getByRole('link', { name: /back to videos/i })).toBeInTheDocument();
     expect(screen.queryByLabelText('Hook')).toBeNull();
     expect(screen.queryByRole('button', { name: /save changes/i })).toBeNull();
+  });
+});
+
+describe('Remix editor warns before leaving with unsaved changes (#76)', () => {
+  const loaded: RemixedVideo = {
+    id: 'remix_1',
+    videoId: 'video_1',
+    title: 'Loaded title',
+    hook: 'Loaded hook',
+    script: 'Loaded script',
+    cta: 'Loaded cta',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+  const other: RemixedVideo = { ...loaded, id: 'remix_2', title: 'Other title', hook: 'Other hook' };
+  const unreachable = 'Could not reach the server. Check that the backend is running.';
+  const extra = [
+    { path: '/videos', element: <p>Videos page</p> },
+    { path: '/content-plan', element: <p>Content plan page</p> },
+  ];
+
+  function editorStub() {
+    const stub = new StubApi();
+    let saved = { ...loaded };
+    stub.getRemix.mockImplementation(async (...args: unknown[]) => ({
+      data: args[0] === 'remix_2' ? other : loaded,
+      error: null,
+    }));
+    stub.getVideo.mockResolvedValue({ data: video(), error: null });
+    stub.updateRemix.mockImplementation(async (...args: unknown[]) => {
+      saved = { ...saved, ...(args[1] as Partial<RemixedVideo>), updatedAt: new Date().toISOString() };
+      return { data: saved, error: null };
+    });
+    return stub;
+  }
+
+  async function openEditor(stub: StubApi, entries?: string[]) {
+    const { router } = renderAt(stub, '/remix/remix_1', <RemixPage />, '/remix/:id', { entries, extra });
+    await screen.findByLabelText('Hook');
+    return router;
+  }
+
+  function field(label: string) {
+    return screen.getByLabelText(label, { selector: 'input, textarea' });
+  }
+
+  function setField(label: string, value: string) {
+    fireEvent.change(field(label), { target: { value } });
+  }
+
+  function editAll() {
+    setField('Title', 'My title');
+    setField('Hook', 'My hook');
+    setField('Script', 'My script');
+    setField('Call to action', 'My cta');
+  }
+
+  function expectMyText() {
+    expect(field('Title')).toHaveValue('My title');
+    expect(field('Hook')).toHaveValue('My hook');
+    expect(field('Script')).toHaveValue('My script');
+    expect(field('Call to action')).toHaveValue('My cta');
+    expect(screen.getByText('Unsaved changes')).toBeInTheDocument();
+  }
+
+  function backToVideos() {
+    return screen.getByRole('link', { name: /back to videos/i });
+  }
+
+  function leaveDialog() {
+    return screen.queryByRole('dialog', { name: 'Leave without saving?' });
+  }
+
+  function dispatchBeforeUnload() {
+    const event = new Event('beforeunload', { cancelable: true });
+    window.dispatchEvent(event);
+    return event.defaultPrevented;
+  }
+
+  it('asks "Leave without saving?" when Back to videos is clicked with unsaved changes', async () => {
+    const user = userEvent.setup();
+    const router = await openEditor(editorStub());
+    setField('Hook', 'My hook');
+    await user.click(backToVideos());
+
+    const dialog = leaveDialog();
+    expect(dialog).not.toBeNull();
+    expect(dialog).toHaveTextContent(
+      'Your changes to this remix have not been saved. If you leave now, they will be lost.'
+    );
+    const buttons = within(dialog!).getAllByRole('button');
+    expect(buttons.map((b) => b.textContent)).toEqual(['Cancel', 'Leave page']);
+    expect(buttons[0]).toHaveClass('btn-ghost');
+    expect(buttons[1]).toHaveClass('btn-primary');
+    expect(dialog!.contains(document.activeElement)).toBe(true);
+    expect(router.state.location.pathname).toBe('/remix/remix_1');
+    expect(screen.getAllByRole('dialog')).toHaveLength(1);
+  });
+
+  it('Cancel keeps the URL, the four fields and the status, and gives focus back to the page', async () => {
+    const user = userEvent.setup();
+    const router = await openEditor(editorStub());
+    editAll();
+    await user.click(backToVideos());
+    await user.click(within(leaveDialog()!).getByRole('button', { name: 'Cancel' }));
+
+    expect(leaveDialog()).toBeNull();
+    expect(router.state.location.pathname).toBe('/remix/remix_1');
+    expectMyText();
+    expect(document.activeElement).toBe(backToVideos());
+  });
+
+  it('Escape and a click on the backdrop also stay on the page', async () => {
+    const user = userEvent.setup();
+    const router = await openEditor(editorStub());
+    editAll();
+    await user.click(backToVideos());
+    await user.keyboard('{Escape}');
+    expect(leaveDialog()).toBeNull();
+    expect(router.state.location.pathname).toBe('/remix/remix_1');
+    expectMyText();
+
+    await user.click(backToVideos());
+    fireEvent.mouseDown(leaveDialog()!.parentElement!);
+    expect(leaveDialog()).toBeNull();
+    expect(router.state.location.pathname).toBe('/remix/remix_1');
+    expectMyText();
+  });
+
+  it('Leave page goes where the user was going, with no second prompt', async () => {
+    const user = userEvent.setup();
+    const router = await openEditor(editorStub());
+    setField('Hook', 'My hook');
+    await user.click(backToVideos());
+    await user.click(within(leaveDialog()!).getByRole('button', { name: 'Leave page' }));
+
+    expect(await screen.findByText('Videos page')).toBeInTheDocument();
+    expect(router.state.location.pathname).toBe('/videos');
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it('asks on browser Back and Forward, keeping the address until the user leaves', async () => {
+    const user = userEvent.setup();
+    const stub = editorStub();
+    const { router } = renderAt(stub, '/remix/remix_1', <RemixPage />, '/remix/:id', {
+      entries: ['/content-plan', '/remix/remix_1', '/videos'],
+      extra,
+    });
+    await screen.findByLabelText('Hook');
+    editAll();
+
+    await act(() => router.navigate(-1));
+    expect(leaveDialog()).not.toBeNull();
+    expect(router.state.location.pathname).toBe('/remix/remix_1');
+    await user.click(screen.getByRole('button', { name: 'Cancel' }));
+    expectMyText();
+
+    await act(() => router.navigate(1));
+    expect(leaveDialog()).not.toBeNull();
+    expect(router.state.location.pathname).toBe('/remix/remix_1');
+    await user.click(screen.getByRole('button', { name: 'Cancel' }));
+    expectMyText();
+
+    await act(() => router.navigate(-1));
+    await user.click(screen.getByRole('button', { name: 'Leave page' }));
+    expect(await screen.findByText('Content plan page')).toBeInTheDocument();
+    expect(router.state.location.pathname).toBe('/content-plan');
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it('asks when moving from one remix to another, and Cancel keeps the first remix\'s text', async () => {
+    const user = userEvent.setup();
+    const router = await openEditor(editorStub(), ['/remix/remix_1', '/remix/remix_2']);
+    editAll();
+    await act(() => router.navigate(1));
+    expect(leaveDialog()).not.toBeNull();
+    await user.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(router.state.location.pathname).toBe('/remix/remix_1');
+    expectMyText();
+
+    await act(() => router.navigate(1));
+    await user.click(screen.getByRole('button', { name: 'Leave page' }));
+    await waitFor(() => expect(field('Hook')).toHaveValue('Other hook'));
+    expect(router.state.location.pathname).toBe('/remix/remix_2');
+    expect(field('Title')).toHaveValue('Other title');
+    expect(screen.getByText(/^Created /)).toBeInTheDocument();
+  });
+
+  it('shows a single dialog when browser Back is pressed with "Replace your edits?" open', async () => {
+    const user = userEvent.setup();
+    const router = await openEditor(editorStub(), ['/videos', '/remix/remix_1']);
+    setField('Hook', 'My hook');
+    await user.click(screen.getByRole('button', { name: 'Apply template' }));
+    expect(screen.getByRole('dialog')).toHaveTextContent('Replace your edits?');
+
+    await act(() => router.navigate(-1));
+    expect(screen.getAllByRole('dialog')).toHaveLength(1);
+    expect(leaveDialog()).not.toBeNull();
+    await user.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(field('Hook')).toHaveValue('My hook');
+  });
+
+  it('leaves straight away from a clean editor', async () => {
+    const user = userEvent.setup();
+    const router = await openEditor(editorStub());
+    expect(screen.getByText(/^Created /)).toBeInTheDocument();
+    await user.click(backToVideos());
+    expect(await screen.findByText('Videos page')).toBeInTheDocument();
+    expect(router.state.location.pathname).toBe('/videos');
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it('leaves straight away after editing a field and typing it back', async () => {
+    const user = userEvent.setup();
+    const router = await openEditor(editorStub());
+    setField('Hook', 'Something else');
+    setField('Hook', 'Loaded hook');
+    expect(screen.getByText(/^Created /)).toBeInTheDocument();
+    await user.click(backToVideos());
+    expect(await screen.findByText('Videos page')).toBeInTheDocument();
+    expect(router.state.location.pathname).toBe('/videos');
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it('leaves straight away after a successful save', async () => {
+    const user = userEvent.setup();
+    const router = await openEditor(editorStub());
+    setField('Hook', 'My hook');
+    await user.click(screen.getByRole('button', { name: /save changes/i }));
+    expect(await screen.findByText(/^Saved /)).toBeInTheDocument();
+    await user.click(backToVideos());
+    expect(await screen.findByText('Videos page')).toBeInTheDocument();
+    expect(router.state.location.pathname).toBe('/videos');
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it('leaves straight away after a successful template apply', async () => {
+    const user = userEvent.setup();
+    const stub = editorStub();
+    stub.applyRemixTemplate.mockResolvedValue({
+      data: { ...loaded, hook: 'Tpl hook', updatedAt: new Date().toISOString() },
+      error: null,
+    });
+    const router = await openEditor(stub);
+    setField('Hook', 'My hook');
+    await user.click(screen.getByRole('button', { name: 'Apply template' }));
+    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Apply template' }));
+    expect(await screen.findByText(/^Saved /)).toBeInTheDocument();
+    await user.click(backToVideos());
+    expect(await screen.findByText('Videos page')).toBeInTheDocument();
+    expect(router.state.location.pathname).toBe('/videos');
+  });
+
+  it('leaves straight away while loading and after a load error', async () => {
+    const user = userEvent.setup();
+    const stub = new StubApi();
+    stub.getRemix.mockImplementation(() => new Promise(() => {}));
+    const { router, unmount } = renderAt(stub, '/remix/remix_1', <RemixPage />, '/remix/:id', {
+      entries: ['/videos', '/remix/remix_1'],
+      extra,
+    });
+    expect(screen.getByText('Loading remix…')).toBeInTheDocument();
+    expect(dispatchBeforeUnload()).toBe(false);
+    await act(() => router.navigate(-1));
+    expect(await screen.findByText('Videos page')).toBeInTheDocument();
+    unmount();
+
+    const missing = new StubApi();
+    missing.getRemix.mockResolvedValue({ data: null, error: 'Remix not found.' });
+    const second = renderAt(missing, '/remix/gone', <RemixPage />, '/remix/:id', { extra });
+    expect(await screen.findByText('Remix not found.')).toBeInTheDocument();
+    expect(dispatchBeforeUnload()).toBe(false);
+    await user.click(backToVideos());
+    expect(await screen.findByText('Videos page')).toBeInTheDocument();
+    expect(second.router.state.location.pathname).toBe('/videos');
+  });
+
+  it('asks after a failed save', async () => {
+    const user = userEvent.setup();
+    const stub = editorStub();
+    stub.updateRemix.mockResolvedValue({ data: null, error: unreachable });
+    const router = await openEditor(stub);
+    editAll();
+    await user.click(screen.getByRole('button', { name: /save changes/i }));
+    expect(await screen.findByRole('alert')).toHaveTextContent(unreachable);
+    await user.click(backToVideos());
+    expect(leaveDialog()).not.toBeNull();
+    expect(router.state.location.pathname).toBe('/remix/remix_1');
+    expect(dispatchBeforeUnload()).toBe(true);
+  });
+
+  it('asks after a failed template apply that kept the typed edits', async () => {
+    const user = userEvent.setup();
+    const stub = editorStub();
+    stub.applyRemixTemplate.mockResolvedValue({ data: null, error: unreachable });
+    await openEditor(stub);
+    editAll();
+    await user.click(screen.getByRole('button', { name: 'Apply template' }));
+    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Apply template' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent(unreachable);
+    await user.click(backToVideos());
+    expect(leaveDialog()).not.toBeNull();
+  });
+
+  it('asks while a save is in flight, and a late response after leaving does nothing', async () => {
+    const user = userEvent.setup();
+    const stub = editorStub();
+    let resolve: (v: ServiceResult<RemixedVideo>) => void = () => {};
+    stub.updateRemix.mockImplementationOnce(() => new Promise((r) => { resolve = r; }));
+    const errors = vi.spyOn(console, 'error');
+    const router = await openEditor(stub);
+    setField('Hook', 'My hook');
+    await user.click(screen.getByRole('button', { name: /save changes/i }));
+    expect(screen.getByText('Unsaved changes')).toBeInTheDocument();
+    await user.click(backToVideos());
+    expect(leaveDialog()).not.toBeNull();
+    await user.click(screen.getByRole('button', { name: 'Leave page' }));
+    expect(await screen.findByText('Videos page')).toBeInTheDocument();
+
+    await act(async () => resolve({ data: null, error: unreachable }));
+    expect(router.state.location.pathname).toBe('/videos');
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(screen.queryByText(unreachable)).toBeNull();
+    expect(errors).not.toHaveBeenCalled();
+    errors.mockRestore();
+  });
+
+  it('still asks when text typed during a save is left over after it succeeds', async () => {
+    const user = userEvent.setup();
+    const stub = editorStub();
+    let resolve: (v: ServiceResult<RemixedVideo>) => void = () => {};
+    stub.updateRemix.mockImplementationOnce(() => new Promise((r) => { resolve = r; }));
+    await openEditor(stub);
+    setField('Hook', 'First');
+    await user.click(screen.getByRole('button', { name: /save changes/i }));
+    setField('Hook', 'First and more');
+    await act(async () => resolve({ data: { ...loaded, hook: 'First', updatedAt: new Date().toISOString() }, error: null }));
+    expect(screen.getByText('Unsaved changes')).toBeInTheDocument();
+    await user.click(backToVideos());
+    expect(leaveDialog()).not.toBeNull();
+    expect(dispatchBeforeUnload()).toBe(true);
+  });
+
+  it('cancels beforeunload only while "Unsaved changes" shows', async () => {
+    const { unmount } = renderAt(editorStub(), '/remix/remix_1', <RemixPage />, '/remix/:id', { extra });
+    await screen.findByLabelText('Hook');
+    expect(dispatchBeforeUnload()).toBe(false);
+
+    setField('Hook', 'My hook');
+    expect(screen.getByText('Unsaved changes')).toBeInTheDocument();
+    expect(dispatchBeforeUnload()).toBe(true);
+
+    setField('Hook', 'Loaded hook');
+    expect(screen.queryByText('Unsaved changes')).toBeNull();
+    expect(dispatchBeforeUnload()).toBe(false);
+
+    setField('Hook', 'My hook again');
+    expect(dispatchBeforeUnload()).toBe(true);
+    unmount();
+    expect(dispatchBeforeUnload()).toBe(false);
+  });
+
+  it('cancels beforeunload no more once a save succeeds', async () => {
+    const user = userEvent.setup();
+    await openEditor(editorStub());
+    setField('Hook', 'My hook');
+    expect(dispatchBeforeUnload()).toBe(true);
+    await user.click(screen.getByRole('button', { name: /save changes/i }));
+    expect(await screen.findByText(/^Saved /)).toBeInTheDocument();
+    expect(dispatchBeforeUnload()).toBe(false);
   });
 });
