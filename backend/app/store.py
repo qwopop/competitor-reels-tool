@@ -36,8 +36,14 @@ def get_competitor(db: Session, competitor_id: str) -> CompetitorRow | None:
 
 
 def find_competitor_by_username(db: Session, username: str) -> CompetitorRow | None:
+    """The competitor with this @handle (case-insensitive).
+
+    Competitors without a handle use their channel ID as the username. They are
+    skipped: the handle @ucabc… is not the channel UCabc….
+    """
     stmt = select(CompetitorRow).where(
-        func.lower(CompetitorRow.username) == username.lower()
+        func.lower(CompetitorRow.username) == username.lower(),
+        CompetitorRow.username != CompetitorRow.channel_id,
     )
     return db.scalars(stmt).first()
 

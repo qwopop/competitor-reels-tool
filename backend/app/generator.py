@@ -58,11 +58,14 @@ def new_id(prefix: str) -> str:
 
 
 def build_competitor(info: ChannelInfo) -> CompetitorRow:
+    handle = info.handle.lower() if info.handle else None
     return CompetitorRow(
         id=new_id("comp"),
         channel_id=info.channel_id,
-        username=(info.handle or info.channel_id).lower(),
-        channel_url=channel_url(info.channel_id, info.handle),
+        # Handles are case-insensitive, so they are kept lowercase. Channel IDs are
+        # case-sensitive (UCabc… and UCABC… are different channels), so they keep their case.
+        username=handle or info.channel_id,
+        channel_url=channel_url(info.channel_id, handle),
         display_name=info.title[:128],
         avatar_url=info.avatar_url or f"https://picsum.photos/seed/{info.channel_id}-avatar/96/96",
         added_at=now_iso(),

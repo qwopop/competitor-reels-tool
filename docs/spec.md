@@ -55,7 +55,7 @@ A single user with no login. Anyone who can reach the app can use it.
 ## Data
 
 - **Competitor:** id, YouTube channel ID, username (handle, or the channel ID
-  when there is none), channel URL, display name, avatar URL, added time.
+  when there is none; handles are stored lowercase, channel IDs keep their case), channel URL, display name, avatar URL, added time.
 - **Video:** id, competitor, YouTube video ID, permalink, caption (the video
   title), description, thumbnail URL, view, like and comment counts, posted time, fetched time.
 - **Remix:** id, video, title, hook, script, CTA, created and updated times.
