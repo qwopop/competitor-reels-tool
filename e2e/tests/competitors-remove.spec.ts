@@ -2,6 +2,9 @@
 import { expect, test } from '@playwright/test';
 import { api, competitorCard, planCard, seedChannel } from './helpers';
 
+// How long a page over the whole shared database may take to load.
+const LOAD = 30_000;
+
 test('Cancel and Escape close the remove dialog and keep the competitor', async ({ page, request }) => {
   const { handle } = await seedChannel(request, 'rm-keep');
   await page.goto('/competitors');
@@ -23,6 +26,8 @@ test('Cancel and Escape close the remove dialog and keep the competitor', async 
 });
 
 test('removing a competitor deletes its videos and remixes but keeps its plan items', async ({ page, request }) => {
+  // /videos renders the whole shared library, which is slow on a large database.
+  test.slow();
   const { handle, videos } = await seedChannel(request, 'rm');
   const { handle: other } = await seedChannel(request, 'rm-other');
   const remix = await api.remix(request, videos[0].id);
@@ -46,8 +51,9 @@ test('removing a competitor deletes its videos and remixes but keeps its plan it
 
   // No longer a library filter option.
   await page.goto('/videos');
+  await expect(page.getByText('Loading your videos…')).toHaveCount(0, { timeout: LOAD });
   const filter = page.getByLabel('Competitor');
-  await expect(filter.locator('option', { hasText: `@${other}` })).toHaveCount(1);
+  await expect(filter.locator('option', { hasText: `@${other}` })).toHaveCount(1, { timeout: LOAD });
   await expect(filter.locator('option', { hasText: `@${handle}` })).toHaveCount(0);
 
   // Its remix is gone.
@@ -57,12 +63,13 @@ test('removing a competitor deletes its videos and remixes but keeps its plan it
 
   // The plan item is kept, but a breakdown can't be made for it any more.
   await page.goto('/content-plan');
+  await expect(page.getByText('Loading your plan…')).toHaveCount(0, { timeout: LOAD });
   const item = planCard(page, handle);
-  await expect(item).toHaveCount(1);
+  await expect(item).toHaveCount(1, { timeout: LOAD });
   await expect(item).toContainText(planned.caption);
   await item.getByRole('button', { name: 'Create breakdown' }).click();
   await expect(
     page.getByText("This video is no longer in your library, so a breakdown can't be created.")
-  ).toBeVisible();
+  ).toBeVisible({ timeout: LOAD });
   await expect(page).toHaveURL(/\/content-plan$/);
 });
