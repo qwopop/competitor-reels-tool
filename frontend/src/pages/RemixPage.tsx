@@ -6,6 +6,7 @@ import type { ContentPlanItem, Video, RemixedVideo, RemixTemplate } from '@/type
 import { relativeTime, videoStats } from '@/utils/format';
 import { ErrorBanner, FullPageLoader, Spinner } from '@/components/ui';
 import { ConfirmDialog } from '@/components/Modal';
+import { isFirstEntryGuard, useFirstEntryGuard } from '@/components/useFirstEntryGuard';
 import { REMIX_TEMPLATES } from '@/utils/templates';
 import { planStatusMeta } from '@/utils/plan';
 import { WatchOnYouTubeLink } from '@/components/YouTubeLinks';
@@ -79,13 +80,19 @@ function RemixEditor({ id }: { id: string | undefined }) {
 
   // Warn before leaving with unsaved changes: in-app links and browser
   // Back/Forward through the router, reload, tab close and typed URLs through
-  // the browser's own prompt.
-  const blocker = useBlocker(dirty);
+  // the browser's own prompt. When the editor was opened by a full page load,
+  // the guard entry keeps the first Back inside the app, so it gets the in-app
+  // dialog too. Moving onto the guard entry keeps the editor, so it is never
+  // blocked.
+  const firstEntryGuard = useFirstEntryGuard();
+  const blocker = useBlocker(({ nextLocation }) => dirty && !isFirstEntryGuard(nextLocation));
   const leaving = blocker.state === 'blocked';
 
   useEffect(() => {
     if (!dirty) return;
     const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      // The user chose Leave page and the guard is taking them back.
+      if (firstEntryGuard.leaving.current) return;
       e.preventDefault();
       // Older browsers show the prompt only when returnValue is set.
       e.returnValue = true;
