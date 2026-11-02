@@ -1,6 +1,12 @@
 // Issue 65: Add a video to the Content Plan
 import { expect, test, type Page } from '@playwright/test';
-import { api, openVideosOf, planCard, seedChannel } from './helpers';
+import { api, filterVideosTo, LOAD_TIMEOUT, openVideosOf, planCard, seedChannel } from './helpers';
+
+// Opens the Content Plan and waits until the whole (shared, large) plan has loaded.
+async function openPlan(page: Page) {
+  await page.goto('/content-plan');
+  await expect(page.getByText('Loading your plan…')).toHaveCount(0, { timeout: LOAD_TIMEOUT });
+}
 
 const cardOf = (page: Page, caption: string) =>
   page.locator('article').filter({ has: page.getByRole('heading', { name: caption, exact: true }) });
@@ -8,6 +14,8 @@ const planCardOf = (page: Page, handle: string, caption: string) => planCard(pag
 const column = (page: Page, label: string) => page.getByRole('region', { name: new RegExp(label) });
 
 test('Add to plan from the library and from the editor, never twice, and kept after a refetch', async ({ page, request }) => {
+  // The library is opened four times, and each open renders the whole shared database.
+  test.setTimeout(300_000);
   const { handle, competitor, videos } = await seedChannel(request, 'padd');
   const [A, B, C] = videos;
 
@@ -21,16 +29,18 @@ test('Add to plan from the library and from the editor, never twice, and kept af
   // C: planned behind the open page's back, then clicked in the page.
   await api.addToPlan(request, C.id);
   await cardOf(page, C.caption).getByRole('button', { name: 'Add to plan' }).click();
+  await expect(cardOf(page, C.caption)).toContainText('In content plan');
 
   // After a reload: A planned, others (except C) still offer Add to plan.
   await page.reload();
-  await page.getByLabel('Competitor').selectOption({ label: `@${handle}` });
+  await expect(page.getByText('Loading your videos…')).toHaveCount(0, { timeout: LOAD_TIMEOUT });
+  await filterVideosTo(page, handle);
   await expect(cardOf(page, A.caption)).toContainText('In content plan');
   for (const v of videos.filter((x) => x.id !== A.id && x.id !== C.id)) {
     await expect(cardOf(page, v.caption).getByRole('button', { name: 'Add to plan' })).toBeVisible();
   }
 
-  await page.goto('/content-plan');
+  await openPlan(page);
   const cardA = column(page, 'Not started').locator('li').filter({ hasText: `@${handle} · added` }).filter({ hasText: A.caption });
   await expect(cardA).toHaveCount(1);
   await expect(cardA).toContainText('No breakdown yet.');
@@ -43,7 +53,7 @@ test('Add to plan from the library and from the editor, never twice, and kept af
   await page.getByRole('button', { name: 'Add to plan' }).click();
   await expect(page.getByText('❌ In content plan')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Add to plan' })).toHaveCount(0);
-  await page.goto('/content-plan');
+  await openPlan(page);
   await expect(column(page, 'Not started').locator('li').filter({ hasText: `@${handle} · added` }).filter({ hasText: B.caption })).toHaveCount(1);
 
   // An editor for an already planned video.
@@ -61,7 +71,7 @@ test('Add to plan from the library and from the editor, never twice, and kept af
 
   // Refetch keeps the plan.
   await api.fetchVideos(request, competitor.id);
-  await page.goto('/content-plan');
+  await openPlan(page);
   for (const v of [A, B, C]) await expect(planCardOf(page, handle, v.caption), v.caption).toHaveCount(1);
   await openVideosOf(page, handle);
   await expect(cardOf(page, A.caption).filter({ hasText: 'In content plan' })).toHaveCount(1);
