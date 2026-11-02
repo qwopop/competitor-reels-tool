@@ -10,6 +10,7 @@ import { REMIX_TEMPLATES } from '@/utils/templates';
 import { planStatusMeta } from '@/utils/plan';
 import { WatchOnYouTubeLink } from '@/components/YouTubeLinks';
 import { channelLabel } from '@/utils/youtube';
+import { changedRemixFields, remixFields, type RemixFields } from '@/utils/remix';
 
 export function RemixPage() {
   const { id } = useParams<{ id: string }>();
@@ -24,7 +25,9 @@ export function RemixPage() {
   const [hook, setHook] = useState('');
   const [script, setScript] = useState('');
   const [cta, setCta] = useState('');
-  const [dirty, setDirty] = useState(false);
+  // What the editor compares against: the remix as loaded, then as returned by
+  // each successful save or template apply.
+  const [baseline, setBaseline] = useState<RemixFields | null>(null);
   const [saving, setSaving] = useState(false);
   const [savedAt, setSavedAt] = useState<string | null>(null);
   const [planItem, setPlanItem] = useState<ContentPlanItem | null>(null);
@@ -48,6 +51,7 @@ export function RemixPage() {
       setHook(r.hook);
       setScript(r.script);
       setCta(r.cta);
+      setBaseline(remixFields(r));
       const videoRes = await api.getVideo(r.videoId);
       if (!active) return;
       if (videoRes.data) setVideo(videoRes.data);
@@ -61,25 +65,27 @@ export function RemixPage() {
     };
   }, [api, id]);
 
+  const changes = baseline ? changedRemixFields({ title, hook, script, cta }, baseline) : {};
+  const dirty = Object.keys(changes).length > 0;
+
   function markDirty(setter: (v: string) => void) {
-    return (e: { target: { value: string } }) => {
-      setter(e.target.value);
-      setDirty(true);
-    };
+    return (e: { target: { value: string } }) => setter(e.target.value);
   }
 
   async function handleSave() {
-    if (!remix) return;
+    if (!remix || !dirty) return;
     setSaving(true);
-    const res = await api.updateRemix(remix.id, { title, hook, script, cta });
+    const res = await api.updateRemix(remix.id, changes);
     setSaving(false);
     if (res.error || !res.data) {
       setError(res.error ?? 'Could not save.');
       return;
     }
+    // Fields keep what is on screen (including anything typed while saving);
+    // only the baseline moves to the saved values.
     setRemix(res.data);
+    setBaseline(remixFields(res.data));
     setSavedAt(res.data.updatedAt);
-    setDirty(false);
   }
 
   async function handleAddToPlan() {
@@ -106,8 +112,8 @@ export function RemixPage() {
     setHook(updated.hook);
     setScript(updated.script);
     setCta(updated.cta);
+    setBaseline(remixFields(updated));
     setSavedAt(updated.updatedAt);
-    setDirty(false);
   }
 
   function handleApplyClick() {
