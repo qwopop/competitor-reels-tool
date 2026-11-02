@@ -1,6 +1,10 @@
 // Issue 59: Videos filter, search and sort
 import { expect, test, type APIRequestContext, type Page } from '@playwright/test';
-import { api, openVideosOf, seedChannel, type Video } from './helpers';
+import { api, filterVideosTo, LOAD_TIMEOUT, openVideosOf, seedChannel, type Video } from './helpers';
+
+// Showing "All competitors" renders the whole shared library, which takes
+// seconds per step on a large database.
+test.describe.configure({ timeout: 180_000 });
 
 type FullVideo = Video & { competitorId: string; postedAt: string };
 
@@ -17,7 +21,8 @@ test('the Competitor filter lists each channel once and shows only its videos', 
   const b = await seedChannel(request, 'filter-b');
   await page.goto('/videos');
   const filter = page.getByLabel('Competitor');
-  await expect(page.locator('article').first()).toBeVisible();
+  await expect(page.getByText('Loading your videos…')).toHaveCount(0, { timeout: LOAD_TIMEOUT });
+  await expect(page.locator('article').first()).toBeVisible({ timeout: LOAD_TIMEOUT });
 
   await expect(filter.locator('option', { hasText: /^All competitors$/ })).toHaveCount(1);
   await expect(filter.locator('option', { hasText: new RegExp(`^@${a.handle}$`) })).toHaveCount(1);
@@ -25,14 +30,14 @@ test('the Competitor filter lists each channel once and shows only its videos', 
 
   const cards = page.locator('article');
   for (const handle of [a.handle, b.handle]) {
-    await filter.selectOption({ label: `@${handle}` });
+    await filterVideosTo(page, handle);
     await expect(cards).toHaveCount(15);
     await expect(cards.filter({ hasNotText: `@${handle} · ` })).toHaveCount(0);
   }
 
-  await filter.selectOption({ label: 'All competitors' });
-  await expect(cards.filter({ hasText: `@${a.handle} · ` }).first()).toBeVisible();
-  await expect(cards.filter({ hasText: `@${b.handle} · ` }).first()).toBeVisible();
+  await filter.selectOption({ label: 'All competitors' }, { timeout: LOAD_TIMEOUT });
+  await expect(cards.filter({ hasText: `@${a.handle} · ` }).first()).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(cards.filter({ hasText: `@${b.handle} · ` }).first()).toBeVisible({ timeout: LOAD_TIMEOUT });
 });
 
 test('search matches captions, ignoring case and spaces, within the chosen competitor', async ({ page, request }) => {
@@ -55,8 +60,8 @@ test('search matches captions, ignoring case and spaces, within the chosen compe
 
   // All competitors: both channels' matching video.
   await search.fill('schema');
-  await page.getByLabel('Competitor').selectOption({ label: 'All competitors' });
-  await expect(cards.filter({ hasText: `@${a.handle} · ` })).toHaveCount(expected.length);
+  await page.getByLabel('Competitor').selectOption({ label: 'All competitors' }, { timeout: LOAD_TIMEOUT });
+  await expect(cards.filter({ hasText: `@${a.handle} · ` })).toHaveCount(expected.length, { timeout: LOAD_TIMEOUT });
   await expect(cards.filter({ hasText: `@${b.handle} · ` })).toHaveCount(expected.length);
   await expect(cards.filter({ hasText: `@${b.handle} · ` }).first()).toContainText('AI wrote my database schema in 90 seconds');
 });
@@ -67,14 +72,15 @@ test('a search with no match shows an empty state, and Clear filters resets ever
   await page.getByLabel('Sort by').selectOption({ label: 'Most views' });
   await page.getByLabel('Search captions').fill('zzz-no-such-caption');
 
-  await expect(page.getByText('No videos match these filters.')).toBeVisible();
+  await expect(page.getByText('No videos match these filters.')).toBeVisible({ timeout: LOAD_TIMEOUT });
   await expect(page.locator('article')).toHaveCount(0);
-  await page.getByRole('button', { name: 'Clear filters' }).click();
+  await page.getByRole('button', { name: 'Clear filters' }).click({ timeout: LOAD_TIMEOUT });
 
-  await expect(page.getByLabel('Search captions')).toHaveValue('');
+  // Clearing shows the whole library again, which is slow to render.
+  await expect(page.getByLabel('Search captions')).toHaveValue('', { timeout: LOAD_TIMEOUT });
   await expect(page.getByLabel('Competitor').locator('option:checked')).toHaveText('All competitors');
   await expect(page.getByLabel('Sort by').locator('option:checked')).toHaveText('Newest');
-  await expect(page.locator('article').first()).toBeVisible();
+  await expect(page.locator('article').first()).toBeVisible({ timeout: LOAD_TIMEOUT });
   await expect(page.getByText('No videos match these filters.')).toHaveCount(0);
 });
 
