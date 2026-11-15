@@ -84,7 +84,7 @@ fresh process starts its counters at zero (a rate needs two samples, and the lat
 workflow (hourly, at minute 41) that calls `GET <url>/api/health` for the dev and prod service and passes only on
 HTTP 200 with `{"status": "ok", "database": "ok"}`. It is patient on purpose: each attempt waits up to 100 s, a failed
 attempt is retried after 30 s, at most 6 attempts, so a service needing a minute or two to wake is reported as
-`WOKE` (a `::notice::`, not a failure) and a service is `DOWN` only after about 10 minutes without a healthy answer.
+`WOKE` (a `::notice::`, not a failure) and a service is `DOWN` only after at most about 12 minutes (6 x 100 s + 5 x 30 s; much less when attempts fail fast) without a healthy answer.
 A failed run is the alert: GitHub emails the person who last edited the workflow's schedule (and shows the run
 under Actions). No Grafana contact point or token is needed, and `/api/health` also checks the database, so a dead
 Neon connection counts as down.
@@ -101,7 +101,7 @@ repository activity.
 - Keeping warm needs a ping every 14 minutes or less. Render gives 750 free instance hours per month per workspace; one service awake all month is about 720 h, so two services (dev and prod) would use up the allowance around day 15 and Render would then suspend them until the month ends. A GitHub schedule also is not exact (runs are delayed or skipped under load), so it would not even reliably keep the service awake.
 - Waking is the normal behaviour of the free plan and users of a small tool accept a one minute first load; paging on it would be noise.
 - The cost of tolerating: the first visitor after a pause waits about a minute, and the hourly check itself wakes the service, so it is awake for about 15 of every 60 minutes (about 25 percent of the hours, 180 h a month per service, inside the allowance).
-- The limit, said plainly: the check proves that the service answered at the time of the check, at most once an hour. An outage between two checks that ends before the next one is not seen, a failure of one feature (remixes, fetch) is covered by the Grafana alerts only while there is traffic, and a cold start longer than about 10 minutes is indistinguishable from an outage (and is reported as one). The check runs from GitHub's network, so it also sees DNS or Render edge problems, but it says nothing about the user's own connection.
+- The limit, said plainly: the check proves that the service answered at the time of the check, at most once an hour. An outage between two checks that ends before the next one is not seen, a failure of one feature (remixes, fetch) is covered by the Grafana alerts only while there is traffic, and a cold start longer than about 12 minutes is indistinguishable from an outage (and is reported as one). The check runs from GitHub's network, so it also sees DNS or Render edge problems, but it says nothing about the user's own connection.
 - If the owner wants faster detection, lower `cron` in `uptime.yml` (every 30 minutes keeps it awake half the time), or move to a paid instance and set the thresholds down; no other change is needed.
 
 **First checks when the uptime run fails.** Open the run log: `attempt n/6` lines show HTTP status or the error.

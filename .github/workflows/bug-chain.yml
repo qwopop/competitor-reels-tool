@@ -11,6 +11,10 @@ on:
       - scripts/bugs/**
       - scripts/remix-all-videos.sh
       - observability/grafana/bug_chain.py
+      - observability/grafana/verify.py
+      - observability/grafana/apply.py
+      - observability/grafana/alerting/**
+      - observability/grafana/dashboards/**
       - .github/workflows/bug-chain.yml
 
 permissions:
