@@ -12,13 +12,13 @@ instance hours) and keep data you may not want kept.
 
 | What | How to delete |
 | --- | --- |
-| Scheduled workflows `on-call.yml` (every 5 minutes) and `grafana.yml` | Delete the files from the repository (`git rm .github/workflows/on-call.yml .github/workflows/grafana.yml`, commit, push), or disable them: Actions, pick the workflow, **...**, **Disable workflow**. Other workflows from the set: `deploy-dev.yml`, `deploy-dev-branch.yml`, `promote.yml`, `build-image.yml`, `observability.yml`, `grafana-local.yml`. |
+| Scheduled workflows `on-call.yml` (every 5 minutes) and `grafana.yml` | Delete the files from the repository (`git rm .github/workflows/on-call.yml .github/workflows/grafana.yml`, commit, push), or disable them: Actions, pick the workflow, **...**, **Disable workflow**. Other workflows from the set: `deploy-dev.yml`, `deploy-dev-branch.yml`, `bug-patch.yml`, `bug-chain.yml`, `promote.yml`, `build-image.yml`, `observability.yml`, `grafana-local.yml`. |
 | Repository secrets `GRAFANA_API_TOKEN`, `GRAFANA_ALERT_TOKEN`, `GEMINI_API_KEY` | Settings, Secrets and variables, Actions, Secrets: delete each. Or `gh secret delete <NAME>`. |
-| Repository variable `GRAFANA_URL` | Settings, Secrets and variables, Actions, Variables. Or `gh variable delete GRAFANA_URL`. |
+| Repository variables `GRAFANA_URL` and the optional `GEMINI_MODEL` (pins the Gemini model of the on-call agent) | Settings, Secrets and variables, Actions, Variables. Or `gh variable delete GRAFANA_URL` and `gh variable delete GEMINI_MODEL`. |
 | Environment secret `RENDER_DEPLOY_HOOK_URL` and variable `RENDER_APP_URL`, in both `dev` and `prod` | Deleted with the environments below. Older setups also had them at repository level (#78 removed that); `gh secret delete RENDER_DEPLOY_HOOK_URL` and `gh variable delete RENDER_APP_URL` remove any leftover. |
 | GitHub Environments `dev` and `prod` (with the `prod` required reviewer) | Settings, Environments, each one, **Delete environment**. Or `gh api -X DELETE repos/<owner>/<repo>/environments/dev` and the same for `prod`. |
 | Setting "Allow GitHub Actions to create and approve pull requests" (turned on for #82) | Settings, Actions, General, Workflow permissions: untick it. |
-| The exercise branch and pull requests (#88) | Close the "do not merge" pull request, then `git push origin --delete bug/remix-intermittent-failure`. Close the `on-call/...` pull requests and delete their branches: `gh pr list --state all --search "head:on-call/"`, then `git push origin --delete <branch>` for each. |
+| The exercise branches and pull requests (#88) | The bug itself is only a patch file (`scripts/bugs/`), no branch. If an earlier attempt left the draft pull request #90 or the branch `bug/remix-intermittent-failure`, close the pull request, then `git push origin --delete bug/remix-intermittent-failure`. Close the `on-call/...` pull requests and delete their branches: `gh pr list --state all --search "head:on-call/"`, then `git push origin --delete <branch>` for each. |
 
 ## 2. Render (dev and prod)
 
@@ -40,7 +40,7 @@ and drop only the exercise data, delete the branch `dev` (**Branches**) instead.
 
 ## 5. GitHub Container Registry
 
-The image `ghcr.io/<owner>/clipremix` and all its versions: github.com, your profile, **Packages**, `clipremix`, **Package settings**, **Delete this package**.
+The image `ghcr.io/<owner>/clipremix` and all its versions (including the `bugtest-...` tags of the bug build): github.com, your profile, **Packages**, `clipremix`, **Package settings**, **Delete this package**.
 Or delete versions only: the package page, **Versions**, each tag, **Delete**.
 With the API: `gh api -X DELETE /user/packages/container/clipremix` (needs the `delete:packages` scope: `gh auth refresh -s delete:packages`).
 
@@ -67,10 +67,10 @@ Run each line; the expected result is in the second column. `<owner>/<repo>` is 
 | Check | Gone when |
 | --- | --- |
 | `gh secret list` | none of `GRAFANA_API_TOKEN`, `GRAFANA_ALERT_TOKEN`, `GEMINI_API_KEY`, `RENDER_DEPLOY_HOOK_URL` |
-| `gh variable list` | none of `GRAFANA_URL`, `RENDER_APP_URL` |
+| `gh variable list` | none of `GRAFANA_URL`, `GEMINI_MODEL`, `RENDER_APP_URL` |
 | `gh api repos/<owner>/<repo>/environments --jq '.environments[].name'` | no `dev`, no `prod` |
 | `gh secret list --env dev` and `gh secret list --env prod` | an error that the environment does not exist |
-| `gh workflow list` | no "On-call engineer" or "Grafana" (or they show as disabled, if you only disabled them) |
+| `gh workflow list` | no "On-call engineer", "Grafana", "Deploy the bug build to dev", "Bug patch proof" or "Bug chain" (or they show as disabled, if you only disabled them) |
 | `gh api /user/packages/container/clipremix` | HTTP 404 |
 | `gh pr list --state open` and `git ls-remote --heads origin 'bug/*' 'on-call/*'` | no exercise pull request and no `bug/` or `on-call/` branch |
 | `gh api repos/<owner>/<repo>/actions/permissions/workflow --jq .can_approve_pull_request_reviews` | `false` |

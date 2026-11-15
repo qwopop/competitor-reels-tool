@@ -37,6 +37,8 @@ reasons unrelated to the feature under test.
 
 ## CI/CD (GitHub Actions)
 
+The deliberate bug is only a patch (`scripts/bugs/`, never committed to the app): `bug-patch.yml` runs `scripts/bugs/apply-and-test.sh` (existing suite passes with it, remix fails for a subset), `bug-chain.yml` shows the real patched app firing the alert on the local stack, and `backend/tests/test_bug_patch.py` keeps it out of the code and checks that promotion refuses the `bugtest-` image tag.
+
 The end-to-end exercise with a deliberate bug (alert, on-call run, fix pull request) is in [on-call-exercise.md](on-call-exercise.md); deleting everything the DevOps set created is in [cleanup.md](cleanup.md).
 
 The on-call engineer (poller, patch guard, fake agent) has its own tests in `on-call-engineer/tests/`, run by the backend job; see [on-call.md](on-call.md).

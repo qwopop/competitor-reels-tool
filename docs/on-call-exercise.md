@@ -10,10 +10,11 @@ Read this first. The task is **not** marked done by pretending the live run happ
 
 | Part | State |
 | --- | --- |
-| The bug on a throwaway branch, its pull request, CI green on it | **Done** (below) |
+| The bug as a patch file (`scripts/bugs/`), never on a branch | **Done**; the existing suite passes with it and the remix endpoint fails for a subset, proved by `bug-patch.yml` (below) |
 | `scripts/remix-all-videos.sh`, partial failures on sample videos | **Done**, run locally (below) |
-| `deploy-dev-branch.yml` (build and deploy a branch to dev only) | **Written**, built on the shared workflows. **Not run on GitHub**: it needs the owner's Render dev service |
-| Promotion of the bug build is refused | **Checked locally** with the real `resolve` step of `promote.yml` and a mocked dev. **No link to a failed GitHub run exists** (needs a live dev service running the bug build) |
+| `deploy-dev-branch.yml` (manual: apply the patch in CI, build a `bugtest-` image, deploy to dev only) | **Written**, built on the shared workflows. The deploy step skips with `::notice::` until the dev secrets exist, so it cannot be a full run yet |
+| Real app with the patch makes `clipremix_remix_failures_total` rise and the alert fire (local stack in CI, no synthetic data) | `bug-chain.yml`; see the run in section 7 |
+| Promotion of the bug build is refused | The `bugtest-` tag fails the tag-format check of `promote.yml`; a backend test (`test_bug_patch.py`) reads that regex from `promote.yml` and checks it. **No link to a failed GitHub run exists** (needs a live dev service running the bug build) |
 | Dashboard shows the failures, alert fires in Grafana Cloud, on-call run, `on-call/...` pull request | **Not done live.** Needs the owner's Render, Neon, Grafana Cloud and Gemini accounts, which do not exist yet. Missing links are marked **(missing)** below |
 | The local run (stack on this machine, no accounts) | **Written as steps.** What has been run on this machine is marked in each step |
 
@@ -22,8 +23,13 @@ screenshot (`docs/screenshots/`), the firing alert, the on-call workflow run, th
 
 ## 1. The bug
 
-Branch `bug/remix-intermittent-failure`, pull request **do not merge** (draft; its base is `claude/gallant-pascal-355cez`
-so that the diff shows only the bug). The change looks like a small nicety: *keep acronyms in remix titles in their
+**Deviation from the issue text:** #88 asked for a throwaway branch `bug/remix-intermittent-failure` and a "do not merge"
+pull request. Work here may only be pushed to `claude/gallant-pascal-355cez`, so the bug is a patch file instead,
+`scripts/bugs/remix-intermittent-failure.patch` ([README](../scripts/bugs/README.md)), which is never applied to committed code.
+CI applies it to its own workspace only. (An earlier attempt did push a branch and a draft pull request, #90; that branch is
+superseded, close it and delete it as `docs/cleanup.md` says.)
+
+The change looks like a small nicety: *keep acronyms in remix titles in their
 standard spelling* (`SAAS` becomes `SaaS`). In `backend/app/remix.py` the pattern that finds acronyms lists
 `AI|SAAS|API|UI|SEO|CRUD|LLM|CSS|RAG|SQL|MVP`, but the lookup table has only `ai`, `saas`, `api`, `ui` and `seo`. Any title that
 shouts `CRUD`, `LLM`, `CSS`, `RAG`, `SQL` or `MVP` raises `KeyError`, and `POST /api/videos/{id}/remix` returns **HTTP 500**.
@@ -42,22 +48,27 @@ shouts `CRUD`, `LLM`, `CSS`, `RAG`, `SQL` or `MVP` raises `KeyError`, and `POST 
 | I stopped writing **CSS**. Here is what replaced it | 500 |
 | the other 12 | 201 |
 
-Run on this machine against the bug build with `scripts/remix-all-videos.sh` (section 2): `HTTP 201: 12`, `HTTP 500: 3`, and
-the app log showed three `KeyError` tracebacks. On `main` the same script gives `HTTP 201: 15`.
+Run against the patched app with `scripts/remix-all-videos.sh` (section 2): `HTTP 201: 12`, `HTTP 500: 3`, three `KeyError` tracebacks
+in the app log. Without the patch the same script gives `HTTP 201: 15`.
 
 Reproduce with `curl` (sample source):
 
 ```bash
+# an app started with the patch applied (git apply scripts/bugs/remix-intermittent-failure.patch in a throwaway checkout)
 base=http://localhost:8092
 comp=$(curl -s -X POST $base/api/competitors -H 'Content-Type: application/json' \
   -d '{"channelUrl":"https://www.youtube.com/@reprocheck"}' | jq -r .id)
 curl -s -X POST $base/api/competitors/$comp/videos/fetch > /dev/null
 vid=$(curl -s $base/api/videos | jq -r '[.[] | select(.caption | test("CRUD"))][0].id')
-curl -i -X POST $base/api/videos/$vid/remix        # HTTP/1.1 500 Internal Server Error on the bug build, 201 on main
+curl -i -X POST $base/api/videos/$vid/remix        # HTTP/1.1 500 Internal Server Error with the patch, 201 without
 ```
 
-CI on the branch is green with the bug in place: backend tests on SQLite and PostgreSQL, frontend tests, integration and end-to-end
-tests. Run: [run 43738295297](https://github.com/qwopop/competitor-reels-tool/actions/runs/43738295297) (commit `f38f339`). The bug is never merged and never promoted.
+**Proof that the existing tests still pass with the bug:** `scripts/bugs/apply-and-test.sh` (CI: `bug-patch.yml`) copies the
+tracked files to a temp directory, applies the patch there, runs the full existing backend suite (it passes), then
+`scripts/bugs/test_patched_remix.py`, which sees a mix of 201 and 500 for the sample videos, the same videos failing again on a
+second pass, and `clipremix.remix.failures` equal to the number of 500s. The same test fails on clean code, so it detects the patch.
+`backend/tests/test_bug_patch.py` keeps `backend/app/remix.py` free of the bug. The bug is never merged and never promoted.
+Run: see section 7.
 
 ## 2. `scripts/remix-all-videos.sh`
 
@@ -69,31 +80,33 @@ is there to show. Run again, the failing videos fail again (a failed remix is ne
 
 ## 3. Deploying the bug to dev, and only dev
 
-**Actions, "Deploy a branch to dev", Run workflow, branch `bug/remix-intermittent-failure`.** The workflow
+**Actions, "Deploy the bug build to dev", Run workflow, "Use workflow from" the ref you want (this branch).** The workflow
 (`.github/workflows/deploy-dev-branch.yml`) calls the same reusable workflows as `ci.yml` does for `main`:
-`build-image.yml` (tag `YYYYMMDD-HHMMSS-shortsha`, pushed to GHCR) and `deploy-dev.yml` (the dev deploy hook with `imgURL`, then
-waits for `/api/health` to report that tag). Nothing is copied, and no step touches the `prod` environment: `deploy-dev.yml` is
-hard-wired to the `dev` environment. To return dev to `main`, push to `main` (or re-run the last CI/CD run on `main`).
-Run: **(missing)**, needs the dev Render service.
+`build-image.yml` and `deploy-dev.yml`. Differences, all by inputs of `build-image.yml`: the patch
+`scripts/bugs/remix-intermittent-failure.patch` is applied to the CI workspace after checkout (nothing is committed), and the tag
+gets the prefix `bugtest-` (`bugtest-YYYYMMDD-HHMMSS-shortsha`, pushed to GHCR). `deploy-dev.yml` is hard-wired to the `dev`
+environment and skips with `::notice::` until `RENDER_DEPLOY_HOOK_URL` and `RENDER_APP_URL` exist there; no step touches `prod`.
+To return dev to `main`, push to `main`. Run: **(missing)**, needs the dev Render service.
 
 ## 4. Promoting the bug build fails
 
-Run **Actions, "Promote dev to prod"** on `main` while dev runs the bug image. Its `resolve` job reads the tag from dev's `/api/health`,
-finds the image, and then stops: the tag's commit is not an ancestor of `origin/main`.
+Run **Actions, "Promote dev to prod"** on `main` while dev runs the bug image. Its `resolve` job reads the version from dev's
+`/api/health` and checks it against `^[0-9]{8}-[0-9]{6}-[0-9a-f]{7}$`. The bug build's tag is `bugtest-2026...`, so it stops with
 
 ```
-::error::Commit 843edd2 of image tag 20261115-170000-843edd2 is not on main (for example an image deployed to dev by hand). Deploy an image built from main to dev first.
+::error::Dev reports version "bugtest-20261115-170000-843edd2", which is not an image tag (YYYYMMDD-HHMMSS-shortsha). Deploy an image to dev first (push to main).
 ```
 
-That output is from the real `resolve` step of `promote.yml`, run on this machine in a scratch git repository with `curl` mocked to
-answer a dev health reply for a commit that is on a side branch (so it shows the check, not a live run). The failed GitHub run:
-**(missing)**, link it here after the live run.
+Checked in `backend/tests/test_bug_patch.py::test_promote_refuses_the_bug_build_tag`, which reads the regex from `promote.yml`
+(a normal tag matches, the `bugtest-` tag does not). Even a hand-made untagged variant is caught by the second line of
+defence: the commit of a tag must be an ancestor of `origin/main`. The failed GitHub run: **(missing)**, link it here after the
+live run.
 
 ## 5. The chain, live (needs the owner's accounts)
 
 Do this once the owner has done the steps in `docs/deploy.md` (Render, Neon, Grafana Cloud, `docs/on-call.md` settings).
 
-1. Run "Deploy a branch to dev" on the bug branch. Check `https://<dev>/api/health` reports the bug build's tag.
+1. Run "Deploy the bug build to dev" on this branch. Check `https://<dev>/api/health` reports the bug build's tag.
 2. `scripts/remix-all-videos.sh https://<dev>` every 30 seconds for about 15 minutes (`while true; do scripts/remix-all-videos.sh https://<dev> | tail -4; sleep 30; done`). The first pass is a mix of 201 and 500; the 500s repeat.
 3. Open the dashboard (`<grafana>/d/clipremix-app/clipremix-application`, Environment `dev`, Version = the bug build's tag): **Remix failures** rises while **Remixes created** stays flat after the first pass. Save a screenshot as `docs/screenshots/on-call-dashboard.png`. **(missing)**
 4. After about 10 minutes (`increase(...[5m]) > 4.5`, `for: 5m`) the alert **ClipRemix: repeated remix failures** goes to firing with `service`, `environment`, `version`, `owner` and `dashboard_url`. Link: **(missing)**
@@ -104,7 +117,7 @@ Do this once the owner has done the steps in `docs/deploy.md` (Render, Neon, Gra
 
 ## 6. The chain, locally (no accounts)
 
-Everything runs on one machine: the app on the bug branch, the local observability stack (#80), the dashboard and alert
+Everything runs on one machine: the app with the bug patch applied, the local observability stack (#80), the dashboard and alert
 (#81) in the local Grafana, and the on-call engineer (#82) against it. You need Docker, `uv`, `gh` (logged in), the Gemini CLI
 and a `GEMINI_API_KEY` for the last step.
 
@@ -113,13 +126,14 @@ and a `GEMINI_API_KEY` for the last step.
 label `dev` puts its data where the rule looks; it is still your machine. `make on-call` then watches `dev` (`ENVS=dev`).
 (#88 says `--environments local`; that would see no alert, because of the rule above. This document uses `dev`.)
 
-1. Check out the bug and start the stack:
+1. Apply the bug to a **throwaway checkout** (never commit it) and start the stack:
    ```bash
-   git fetch origin bug/remix-intermittent-failure && git checkout bug/remix-intermittent-failure
+   git worktree add ../clipremix-bug HEAD && cd ../clipremix-bug
+   git apply scripts/bugs/remix-intermittent-failure.patch
    make observability-up
    ```
    Shows: `make` returns when Grafana, Prometheus, Loki, Tempo and the Collector are healthy; http://localhost:3000 opens.
-2. Start the app on the bug branch with telemetry going to the Collector:
+2. Start the app with the bug patch applied with telemetry going to the Collector:
    ```bash
    cd backend && VIDEO_SOURCE=sample APP_ENV=dev APP_VERSION=bug-1 OTEL_METRIC_EXPORT_INTERVAL=5000 \
      OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 uv run uvicorn app.main:app --port 8092
@@ -147,10 +161,29 @@ label `dev` puts its data where the rule looks; it is still your machine. `make 
    Shows, in this order: the poll finding the firing alert, the agent starting (`gemini` headless), the agent's explanation, and
    `open-pr` pushing a branch `on-call/<alert name>-dev-<id>` and printing the pull request URL.
 8. Review that pull request (do not let automation merge it): the fix (look the acronym up with a default) and a regression test that
-   fails on the bug branch and passes on the fix; CI on it passes on SQLite and PostgreSQL.
-9. Stop everything (`Ctrl-C` the loops and the app, `make observability-down`) and delete the exercise branches (`docs/cleanup.md`).
+   fails on the patched code and passes on the fix; CI on it passes on SQLite and PostgreSQL.
+9. Stop everything (`Ctrl-C` the loops and the app, `make observability-down`) and remove the worktree (`git worktree remove ../clipremix-bug --force`) and the exercise branches (`docs/cleanup.md`).
 
-**Run on this machine:** steps 2 and 4's script, with the app on the bug branch (section 1, 12 × 201 and 3 × 500), and the
-promotion check of section 4. **Not run on this machine:** steps 1, 3, 5 to 9 and the 10-minute wait: there is no Docker daemon
-here. The Docker parts of the stack and the dashboard and alert were exercised by CI instead (`observability.yml`,
-`grafana-local.yml`, see `docs/observability.md` and `docs/runbook.md`); that is not this exercise, so do not read it as one.
+**Run on this machine:** the patch proof (`scripts/bugs/apply-and-test.sh`) and the app with `scripts/remix-all-videos.sh`
+(12 x 201 and 3 x 500). **Not run on this machine:** steps 1, 3, 5 to 9: there is no Docker daemon here. They are run by CI
+instead, with the real app and the patch (`bug-chain.yml`, section 7).
+
+## 7. CI evidence
+
+- `bug-patch.yml`: existing backend suite passes on the patched copy; the bug test sees 500s and the counter. Run: RUN_BUG_PATCH
+- `bug-chain.yml`: the real patched app sends telemetry to the local stack, `scripts/remix-all-videos.sh` drives the traffic,
+  `clipremix_remix_failures_total` rises and the alert **ClipRemix: repeated remix failures** fires for `environment=dev` and
+  the build's version (no synthetic metrics; `grafana-local.yml` is the synthetic one). Run: RUN_BUG_CHAIN
+
+## 8. Owner steps for the live chain
+
+Nothing below can run until the owner has the accounts. In order:
+
+1. Do `docs/deploy.md` (Render dev and prod, Neon, GHCR package public, GitHub Environments `dev` and `prod` with
+   `RENDER_DEPLOY_HOOK_URL` and `RENDER_APP_URL`).
+2. Create the Grafana Cloud stack and set `GRAFANA_URL`, `GRAFANA_API_TOKEN` and `GRAFANA_ALERT_TOKEN` (`docs/observability.md`,
+   `docs/on-call.md`); the Render services need the OTLP settings.
+3. Create the Gemini key in Google AI Studio and set the secret `GEMINI_API_KEY` (optional variable `GEMINI_MODEL`); tick
+   "Allow GitHub Actions to create and approve pull requests" (`docs/on-call.md`).
+4. Run "Deploy the bug build to dev", then section 5 steps 2 to 8. Fill in the **(missing)** links above.
+5. Put a good build back on dev (push to `main`) and clean up with `docs/cleanup.md`.
