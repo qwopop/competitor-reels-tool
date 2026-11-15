@@ -14,7 +14,7 @@ instead of AWS).
 | 3. Docker Compose | `docker compose up --build` runs the app with PostgreSQL 16 and waits for the database to be healthy. Data lives in the `pgdata` volume. | `docker-compose.yaml` |
 | 4. Integration tests | 13 tests against the running stack: the frontend is served, and the backend works with PostgreSQL. | `integration/` |
 | 5. End-to-end tests | One Playwright spec per feature, each tracked by a GitHub issue labelled `e2e-test` (#53–#72). | `e2e/` |
-| 6. Deployment | Two copies, dev and prod: each a Render web service built from the Docker image, with its own Neon PostgreSQL branch. | `render.yaml`, `docs/deploy.md` |
+| 6. Deployment | Two copies, dev and prod: each a Render web service that pulls the Docker image CI pushed to GHCR, with its own Neon PostgreSQL branch. | `render.yaml`, `docs/deploy.md` |
 | 7. CI/CD | Every push runs all tests; a push to `main` that passes is deployed to dev and checked through `/api/health`. | `.github/workflows/ci.yml` |
 | 8. Labels | The `e2e-test` label (orange) is defined as code. | `.github/workflows/labels.yml` |
 
@@ -39,26 +39,35 @@ reasons unrelated to the feature under test.
 
 ```
 backend tests (SQLite + PostgreSQL) ─┐
-                                     ├─> compose stack: integration + end-to-end ─> deploy-dev (main only)
-frontend typecheck, tests, build ────┘
+                                     ├─> compose stack: integration + end-to-end ─> image ─> deploy-dev
+frontend typecheck, tests, build ────┘                                      (main only: build once, push to GHCR, deploy)
+
+manual "Promote dev to prod":  resolve (read dev's tag, check image + commit on main) ─> promote (prod reviewer, same image)
 ```
+
+The `image` job (main only, `permissions: packages: write`, no new secret) calls
+the reusable workflow `.github/workflows/build-image.yml`. It builds the image
+once with the `APP_VERSION` build argument and pushes
+`ghcr.io/<owner>/clipremix:YYYYMMDD-HHMMSS-shortsha`. Pull requests and other
+branches never push an image.
 
 The `deploy-dev` job runs in the GitHub Environment `dev`. It calls the dev
 service's Render deploy hook (`RENDER_DEPLOY_HOOK_URL` secret) with
-`ref=<commit>` and then waits until `RENDER_APP_URL/api/health` reports that
-commit, `environment` `dev` and a working database. Prod is never deployed by
-a push. Render's own auto-deploy is off. Setup: `docs/deploy.md`.
+`imgURL=<image:tag>` and then waits until `RENDER_APP_URL/api/health` reports
+that tag as `version`, `environment` `dev` and a working database. Prod is never
+deployed by a push. Render's own auto-deploy is off. Setup: `docs/deploy.md`.
 
 Prod is deployed only by the manual workflow `.github/workflows/promote.yml`
 ("Promote dev to prod", `workflow_dispatch`, branch `main` only). Job `resolve`
 (environment `dev`) reads the version from dev's `/api/health` and fails unless
-it is a 40-character sha of a commit on `main`. Job `promote` (environment
-`prod`, so it waits for the required reviewer) skips if prod already runs that
-version, otherwise calls prod's deploy hook with `ref=<sha>` and polls prod's
-`/api/health` for 20 minutes. Missing settings skip with a notice. The shell
-logic is checked locally by running the workflow's `run` blocks with a mocked
-`curl` (see the commit message of the workflow); the full flow runs only on
-GitHub. See "Promote to production" in `docs/deploy.md`.
+it is an image tag, `ghcr.io/<owner>/clipremix:<tag>` exists and the tag's short
+sha is a commit on `main`. Job `promote` (environment `prod`, so it waits for the
+required reviewer) skips if prod already runs that tag, otherwise calls prod's
+deploy hook with `imgURL=<image:tag>` and polls prod's `/api/health` for 20
+minutes. It builds nothing: prod runs the exact image dev runs. Missing settings
+skip with a notice. The shell logic is checked locally by running the workflows'
+`run` blocks with mocked `curl`, `docker` and `jq` inputs; the full flow runs only
+on GitHub. See "Container registry" and "Promote to production" in `docs/deploy.md`.
 
 ## How the end-to-end backlog was worked
 

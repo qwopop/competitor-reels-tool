@@ -1,8 +1,8 @@
 # Deploying ClipRemix: dev and prod on Render and Neon
 
 ClipRemix runs as **two independent copies** of the same stack, `dev` and `prod`.
-Each is a Render free Docker web service built from this repository, with its
-own branch of one Neon free PostgreSQL project.
+Each is a Render free web service that runs a Docker image built once by CI
+and pulled from GitHub Container Registry, with its own branch of one Neon free PostgreSQL project.
 
 | | `dev` | `prod` |
 | --- | --- | --- |
@@ -10,11 +10,12 @@ own branch of one Neon free PostgreSQL project.
 | Neon branch | `dev` | `prod` |
 | `APP_ENV` | `dev` | `prod` |
 | `VIDEO_SOURCE` | `sample` | `youtube` |
-| Deployed by | every push to `main` that passes all tests | the manual "Promote dev to prod" workflow, after approval (section 6) |
+| Deployed by | every push to `main` that passes all tests | the manual "Promote dev to prod" workflow, after approval (section 7) |
+| Image | `ghcr.io/<owner>/clipremix:<tag>`, built once by CI | the same tag dev runs |
 
 Render doesn't read compose files, so `render.yaml` (a Render *Blueprint*)
 describes the two services. Render gives each site HTTPS and a public address.
-`/api/health` reports `environment` (`APP_ENV`), `version` (the deployed commit)
+`/api/health` reports `environment` (`APP_ENV`), `version` (the image tag)
 and `database`, so you can always tell which copy you are looking at.
 
 A push to `main` deploys to **dev only**. No CI job uses the `prod` environment.
@@ -38,25 +39,18 @@ You now have two connection strings: one for `dev`, one for `prod`.
 
 ## 3. Set up Render (once)
 
-The service that runs today becomes `dev`:
+Render **cannot convert a git-backed service into an image-backed one**, so the
+owner recreates both services. Do this in order:
 
-1. In Render open the existing web service, **Settings → Name**, and rename it to `clipremix-dev`.
-2. **Environment**: set `DATABASE_URL` to the Neon `dev` connection string, `APP_ENV` to `dev`, `VIDEO_SOURCE` to `sample`. Remove any other database setting.
-3. **Settings**: Health Check Path `/api/health`, **Auto-Deploy: Off**.
-4. Delete the old Render database (`clipremix-db`) once dev works with Neon. Deleting it deletes its data.
+1. **Make the GHCR package Public** so Render can pull without credentials. The package `clipremix` exists after the first push to `main` with the `image` job (section 5): open GitHub → your profile or organization → **Packages → clipremix → Package settings → Change visibility → Public**. Check from a machine that is not logged in: `docker pull ghcr.io/<owner>/clipremix:<tag>`.
+2. **Create the two image-backed services**, either from `render.yaml` (**New → Blueprint**) or by hand (**New → Web Service → Existing Image**, image `ghcr.io/<owner>/clipremix:<a tag from the Packages page>`, plan **Free**, region Frankfurt, names `clipremix-dev` and `clipremix-prod`). Set Health Check Path `/api/health` and **Auto-Deploy: Off**. The initial image is replaced by the first deploy; Render needs a tag that exists to start, so use the newest one (section 6).
+3. **Copy the environment** from the old services: `DATABASE_URL` (Neon `dev` for dev, `prod` for prod), `APP_ENV` (`dev`, `prod`) and `VIDEO_SOURCE` (`sample`, `youtube`). Remove any other database setting.
+4. For each new service open **Settings → Deploy Hook** and copy the URL.
+5. **Update each GitHub Environment**: set the secret `RENDER_DEPLOY_HOOK_URL` and the variable `RENDER_APP_URL` of `dev` and `prod` to the new services (section 4). No new secret or variable names are needed.
+6. **Run a deploy** (push to `main`, or re-run the latest CI run) and check that `/api/health` of dev shows the new tag as `version` (section 8).
+7. **Delete the old git-backed services** in Render, and the old Render database (`clipremix-db`) if it still exists. Deleting a database deletes its data.
 
-Then create `prod`:
-
-1. **New → Web Service**, connect the repository `qwopop/competitor-reels-tool`, branch **`main`**, runtime **Docker**, plan **Free**, name `clipremix-prod`, same region as dev.
-2. **Environment**: `DATABASE_URL` = the Neon `prod` connection string, `APP_ENV` = `prod`, `VIDEO_SOURCE` = `youtube`.
-3. **Settings**: Health Check Path `/api/health`, **Auto-Deploy: Off**.
-
-Or create both from `render.yaml` with **New → Blueprint**; Render then asks for
-the two `DATABASE_URL` values (they are `sync: false`, so they are never stored
-in the repository).
-
-For each service, open **Settings → Deploy Hook** and copy the URL. You need
-both in the next step.
+Until step 5 is done, `deploy-dev` skips with a notice (or, if still set to the old services, calls a hook that ignores `imgURL`: finish step 5 first).
 
 ### Plans and limits
 
@@ -85,7 +79,7 @@ Steps:
 
 1. In GitHub open the repository → **Settings → Environments → New environment**, name it `dev`.
 2. In `dev`, add the secret `RENDER_DEPLOY_HOOK_URL` and the variable `RENDER_APP_URL` from the table.
-3. Create a second environment named `prod` and add its secret and variable the same way. Its required reviewer is set up in section 6.
+3. Create a second environment named `prod` and add its secret and variable the same way. Its required reviewer is set up in section 7.
 4. **Delete the old repository-level** secret `RENDER_DEPLOY_HOOK_URL` and variable `RENDER_APP_URL` (Settings → Secrets and variables → Actions). They are not used any more.
 
 Until the `dev` secret and variable exist, the `deploy-dev` job is skipped with a
@@ -100,22 +94,42 @@ deploy hook is the only credential GitHub holds: it can start a deploy, nothing 
    tests** (typecheck, unit tests, production build), in parallel.
 2. The **Docker Compose stack** is built and started, then the **integration
    tests** and the **Playwright end-to-end tests** run against it.
-3. On a push to **`main`**, once everything passes, `deploy-dev` calls the dev
-   Deploy Hook with `ref=<commit SHA>`, so Render builds exactly the pushed
-   commit. The hook URL is never printed to the log. The job then polls
-   `<RENDER_APP_URL>/api/health` for up to 20 minutes until `version` is that
-   commit, `environment` is `dev` and `database` is `ok`; otherwise it fails
-   with an error.
+3. On a push to **`main`**, once everything passes, job `image` builds the image
+   once and pushes it to GHCR (section 6). Pull requests and other branches
+   never push an image.
+4. `deploy-dev` calls the dev Deploy Hook with `imgURL=<URL-encoded image:tag>`,
+   so Render pulls exactly that image. The hook URL is never printed to the log.
+   The job then polls `<RENDER_APP_URL>/api/health` for up to 20 minutes until
+   `version` is the tag, `environment` is `dev` and `database` is `ok`;
+   otherwise it fails with an error.
 
 `render.yaml` sets `autoDeploy: false` on both services, so Render never deploys
-a commit that hasn't passed the tests. Runs of `deploy-dev` queue (they never
+an image that hasn't passed the tests. Runs of `deploy-dev` queue (they never
 cancel one another halfway).
 
-## 6. Promote to production
+## 6. Container registry
+
+CI builds the image **once** and Render only **pulls** it. Building in each
+environment (as before: Render built from the repository for dev, and again for
+prod) means prod could run something dev never ran. With separate stages, the
+bytes that passed the tests and ran on dev are the bytes promoted to prod, and a
+deploy is a quick pull instead of a build.
+
+- **Image:** `ghcr.io/<owner lowercase>/clipremix` (public package, free).
+- **Tag:** `YYYYMMDD-HHMMSS-shortsha`, for example `20261115-153000-a1b2c3d`: UTC build time and the first 7 characters of the commit. It is computed once per run and fails the job if the format is wrong. Only this tag is pushed, never `latest`.
+- **Labels:** `org.opencontainers.image.source` (the repository) and `org.opencontainers.image.revision` (the full commit sha).
+- **Version in the app:** the tag is passed as the `APP_VERSION` build argument, so `/api/health` reports it as `version`.
+- **Permissions:** the `image` job has `packages: write` and logs in with the `GITHUB_TOKEN`. No new secret.
+- **Reuse:** the build lives in the reusable workflow `.github/workflows/build-image.yml` (`workflow_call`, outputs `tag` and `image`), so other workflows can call it.
+- **Newest tag:** open the latest successful CI run on `main` (its summary prints the full image reference), or the repository's **Packages → clipremix** page, or ask dev: `curl <dev url>/api/health`.
+- **Re-running a failed `image` job** computes a new timestamp, so it pushes a new tag and never fails because a tag exists. The earlier tag, if it was pushed, stays until it is cleaned up (#85). Then re-run `deploy-dev` too, since it needs the new tag.
+- The job warns (not fails) if the image cannot be pulled without login: the package is still private (section 3, step 1).
+
+## 7. Promote to production
 
 Prod is only deployed by the manual workflow `.github/workflows/promote.yml`
-("Promote dev to prod"). It deploys **the commit that dev is running**, so what
-you tested on dev is what reaches prod.
+("Promote dev to prod"). It deploys **the image that dev is running**, so what
+you tested on dev is exactly what reaches prod. Nothing is rebuilt.
 
 **Set up the `prod` environment (once, owner):**
 
@@ -127,20 +141,17 @@ you tested on dev is what reaches prod.
 **Run it:**
 
 1. **Actions → Promote dev to prod → Run workflow**, branch **`main`** (any other branch is refused).
-2. Job `resolve` reads `<dev RENDER_APP_URL>/api/health` and writes the version to the run summary. It fails with an error if dev is unreachable, if dev's `environment` is not `dev`, if the version is not a 40-character commit sha (for example `dev`, when no commit is known), or if that commit is not on `main` (for example a branch build deployed to dev by hand).
+2. Job `resolve` reads `<dev RENDER_APP_URL>/api/health` and writes the version to the run summary. It fails with an error if dev is unreachable, if dev's `environment` is not `dev`, if the version is not an image tag (for example `dev`, when no tag is known), if `ghcr.io/<owner>/clipremix:<tag>` does not exist (checked with `docker buildx imagetools inspect`), or if the tag's short sha is not a commit on `main` (for example an image deployed to dev by hand).
 3. Job `promote` then waits for the reviewer. The reviewer opens the run, reads the version in the summary and clicks **Review deployments → Approve**.
-4. If prod already reports that version, the job ends with a notice and does not deploy. Otherwise it writes prod's current version to the summary (needed to roll back later, #83), calls prod's deploy hook with `ref=<sha>` and polls `<prod RENDER_APP_URL>/api/health` for up to 20 minutes until `version` is the sha, `environment` is `prod` and `database` is `ok`.
+4. If prod already reports that version, the job ends with a notice and does not deploy. Otherwise it writes prod's current version to the summary (needed to roll back later, #83), calls prod's deploy hook with `imgURL=<image:tag>` and polls `<prod RENDER_APP_URL>/api/health` for up to 20 minutes until `version` is the tag, `environment` is `prod` and `database` is `ok`.
 
 If the settings are missing, the jobs end with a notice that names them instead of failing.
 Runs queue in the concurrency group `deploy-prod` and never cancel one another.
 
-**Note:** this step builds the commit again on Render for prod. It does not move
-the image that ran on dev; that is #77.
-
-## 7. Check it works
+## 8. Check it works
 
 1. Open `https://<dev-service>.onrender.com/api/health`. It should return
-   `{"status":"ok","database":"ok","version":"<git commit>","environment":"dev"}`.
+   `{"status":"ok","database":"ok","version":"<image tag>","environment":"dev"}`.
    The first request after a sleep takes about a minute.
 2. Open the site, add a YouTube channel (or a sample one on dev), fetch its videos, and reload. The data is still there, so the Neon branch is connected.
 3. Do the same on prod; it must show `"environment":"prod"` and its own data.
@@ -155,8 +166,7 @@ container, which is lost on every deploy.
   authentication before sharing the link widely.
 - **Videos come from YouTube's public channel feeds.** No API key is needed.
   `VIDEO_SOURCE=sample` gives generated videos instead (used on dev).
-- **Version.** `/api/health` reports `APP_VERSION`, then `RENDER_GIT_COMMIT`
-  (set by Render), then `dev`.
+- **Version.** `/api/health` reports `APP_VERSION` (the image tag, baked in at build), then `RENDER_GIT_COMMIT`, then `dev`.
 - **Old services.** If you created the earlier Blueprint (`reels-api`,
   `reels-web`), delete those services in Render.
 
