@@ -170,10 +170,10 @@ instead, with the real app and the patch (`bug-chain.yml`, section 7).
 
 ## 7. CI evidence
 
-- `bug-patch.yml`: existing backend suite passes on the patched copy; the bug test sees 500s and the counter. Run: RUN_BUG_PATCH
+- `bug-patch.yml`: existing backend suite passes on the patched copy; the bug test sees 500s and the counter. Run: [run 43739431978](https://github.com/qwopop/competitor-reels-tool/actions/runs/43739431978) (passed)
 - `bug-chain.yml`: the real patched app sends telemetry to the local stack, `scripts/remix-all-videos.sh` drives the traffic,
   `clipremix_remix_failures_total` rises and the alert **ClipRemix: repeated remix failures** fires for `environment=dev` and
-  the build's version (no synthetic metrics; `grafana-local.yml` is the synthetic one). Run: RUN_BUG_CHAIN
+  the build's version (no synthetic metrics; `grafana-local.yml` is the synthetic one). Run: [run 43739431938](https://github.com/qwopop/competitor-reels-tool/actions/runs/43739431938) (passed in about 7 minutes: the script exits 1 unless the counter is above zero and the alert fires with the expected labels and annotations)
 
 ## 8. Owner steps for the live chain
 
