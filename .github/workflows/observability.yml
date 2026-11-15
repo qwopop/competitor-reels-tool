@@ -2,6 +2,8 @@
 #   backend (OTLP) -> Collector -> Prometheus / Loki / Tempo -> Grafana
 # observability/smoke.py drives the API, queries all four, asserts the metrics, labels,
 # logs and a trace, and writes the observed names to the job summary and an artifact.
+# observability/explore.cjs then opens Grafana Explore in a browser (Playwright) and checks the
+# trace, the log lines and every metric there, filtered by environment and version.
 name: Observability smoke test
 
 on:
@@ -54,6 +56,21 @@ jobs:
 
       - name: Smoke test
         run: python3 -I observability/smoke.py --out observability-results --version "$APP_VERSION"
+
+      # The manual check, done by a browser: open Grafana Explore and look at the trace, the
+      # log lines and each metric, filtered by environment and version.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: e2e/package-lock.json
+      - name: Install Playwright
+        working-directory: e2e
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+      - name: Look at the signals in Grafana Explore (real browser)
+        run: NODE_PATH="$PWD/e2e/node_modules" node observability/explore.cjs --env "$APP_ENV" --version "$APP_VERSION" --out observability-results/explore
 
       - name: Logs of the app and the stack
         if: failure()
