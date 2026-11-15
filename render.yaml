@@ -1,36 +1,49 @@
-# Render Blueprint: the same two services as docker-compose.yaml.
+# Render Blueprint: two independent copies of the app, dev and prod.
 #
 #   docker-compose.yaml        Render
-#   app  (Dockerfile)    ->    clipremix     web service, built from the root Dockerfile
-#   db   (postgres:16)   ->    clipremix-db  managed PostgreSQL 16
+#   app  (Dockerfile)    ->    clipremix-dev   web service, built from the root Dockerfile
+#                              clipremix-prod  web service, same Dockerfile
+#   db   (postgres:16)   ->    Neon (not Render): one project, branches `dev` and `prod`
 #
-# Render doesn't run compose files; this blueprint describes the same setup.
-# Create it once in Render (New → Blueprint). See docs/deploy.md.
+# Each service gets its own Neon branch through DATABASE_URL, which the owner
+# sets in Render (sync: false, so it is never stored in this file).
+# See docs/deploy.md.
 
 services:
   - type: web
-    name: clipremix
+    name: clipremix-dev
     runtime: docker
     dockerfilePath: ./Dockerfile
     dockerContext: .
+    branch: main
     region: frankfurt
-    plan: free                    # sleeps when idle; use starter for an always-on site
+    plan: free                    # sleeps when idle
     healthCheckPath: /api/health
     # Deploys are started by GitHub Actions only after every test passes
     # (.github/workflows/ci.yml calls this service's Deploy Hook).
     autoDeploy: false
     envVars:
-      - key: DATABASE_URL
-        fromDatabase:
-          name: clipremix-db
-          property: connectionString
+      - key: APP_ENV
+        value: dev
+      - key: DATABASE_URL         # Neon branch `dev`, with sslmode=require
+        sync: false
+      - key: VIDEO_SOURCE
+        value: sample
+
+  - type: web
+    name: clipremix-prod
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    branch: main
+    region: frankfurt
+    plan: free                    # sleeps when idle
+    healthCheckPath: /api/health
+    autoDeploy: false
+    envVars:
+      - key: APP_ENV
+        value: prod
+      - key: DATABASE_URL         # Neon branch `prod`, with sslmode=require
+        sync: false
       - key: VIDEO_SOURCE
         value: youtube
-
-databases:
-  - name: clipremix-db
-    databaseName: clipremix
-    user: clipremix
-    region: frankfurt
-    plan: free                    # expires after 30 days; use basic-256mb to keep it
-    postgresMajorVersion: "16"

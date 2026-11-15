@@ -43,6 +43,6 @@ npm run typecheck
 
 - From the repository root: `make install`, `make dev`, `make test`, `make check`.
 - Full stack: `make up` / `make down`, `make integration`, and `make e2e` (starts from an empty database, like CI).
-- Run the tests before committing. Every push runs all of them in GitHub Actions; a push to `main` that passes is deployed to Render.
+- Run the tests before committing. Every push runs all of them in GitHub Actions; a push to `main` that passes is deployed to the dev environment on Render (never to prod).
 - Work on tasks follows `_docs/process.md`: PM grooms, engineer implements, QA posts `## QA: PASS` or `## QA: FAIL`; issues are closed only after a pass.
 - Commit regularly, in small commits with clear messages.

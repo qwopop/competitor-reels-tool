@@ -1,13 +1,14 @@
-# CI/CD: test everything on every push and pull request; deploy main to Render.
+# CI/CD: test everything on every push and pull request; deploy main to dev.
 #
 #   backend ─┐
-#            ├─> stack (compose: integration + end-to-end) ─> deploy (main only)
+#            ├─> stack (compose: integration + end-to-end) ─> deploy-dev (main only)
 #   frontend ┘
 #
-# Deploying needs two settings in the repository (Settings → Secrets and variables → Actions):
-#   secret   RENDER_DEPLOY_HOOK_URL   the clipremix service's Deploy Hook (Render → Settings)
-#   variable RENDER_APP_URL           the site's address, e.g. https://clipremix.onrender.com
-# Without them the deploy job is skipped with a notice. See docs/deploy.md.
+# deploy-dev uses the GitHub Environment `dev`, which needs (Settings → Environments → dev):
+#   secret   RENDER_DEPLOY_HOOK_URL   the clipremix-dev service's Deploy Hook (Render → Settings)
+#   variable RENDER_APP_URL           the dev site's address, e.g. https://clipremix-dev.onrender.com
+# Without them the job is skipped with a notice. No job here uses the `prod`
+# environment: a push to main never touches prod. See docs/deploy.md.
 name: CI/CD
 
 on:
@@ -127,13 +128,14 @@ jobs:
         if: always()
         run: docker compose down -v
 
-  deploy:
-    name: Deploy to Render
+  deploy-dev:
+    name: Deploy to dev (Render)
     needs: stack
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    environment: dev
     concurrency:
-      group: deploy-production
+      group: deploy-dev
       cancel-in-progress: false
     env:
       DEPLOY_HOOK: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
@@ -142,30 +144,46 @@ jobs:
       - name: Check the deploy settings
         id: settings
         run: |
-          if [ -z "$DEPLOY_HOOK" ] || [ -z "$APP_URL" ]; then
-            echo "::notice::Deploy skipped: set the RENDER_DEPLOY_HOOK_URL secret and the RENDER_APP_URL variable (docs/deploy.md)."
+          missing=""
+          [ -z "$DEPLOY_HOOK" ] && missing="the RENDER_DEPLOY_HOOK_URL secret"
+          if [ -z "$APP_URL" ]; then
+            [ -n "$missing" ] && missing="$missing and "
+            missing="${missing}the RENDER_APP_URL variable"
+          fi
+          if [ -n "$missing" ]; then
+            echo "::notice::Deploy to dev skipped: set $missing in the dev environment (docs/deploy.md)."
             echo "ready=false" >> "$GITHUB_OUTPUT"
           else
             echo "ready=true" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Trigger the deploy
+      - name: Trigger the deploy of this commit
         if: steps.settings.outputs.ready == 'true'
-        run: curl -fsS -X POST "$DEPLOY_HOOK" > /dev/null
+        run: |
+          # ref=<sha> makes Render build exactly the pushed commit. The URL is never printed.
+          case "$DEPLOY_HOOK" in
+            *\?*) url="${DEPLOY_HOOK}&ref=${GITHUB_SHA}" ;;
+            *)    url="${DEPLOY_HOOK}?ref=${GITHUB_SHA}" ;;
+          esac
+          # curl's own error output is discarded because it can contain the URL.
+          curl -fsS -o /dev/null -X POST "$url" 2>/dev/null \
+            || { echo "::error::The deploy hook call failed (check the RENDER_DEPLOY_HOOK_URL secret)."; exit 1; }
 
       - name: Wait until the new version is live and healthy
         if: steps.settings.outputs.ready == 'true'
         run: |
-          # /api/health reports the deployed commit (Render sets RENDER_GIT_COMMIT).
+          # /api/health must report this commit, environment dev and a working database.
           # Render builds the image first, so allow up to 20 minutes.
           for attempt in $(seq 1 80); do
             body=$(curl -fsS --max-time 10 "${APP_URL%/}/api/health" || true)
             echo "[$attempt] $body"
-            if echo "$body" | grep -q "\"version\":\"$GITHUB_SHA\"" && echo "$body" | grep -q '"database":"ok"'; then
-              echo "Deployed $GITHUB_SHA and healthy."
+            if echo "$body" | grep -q "\"version\":\"$GITHUB_SHA\"" \
+              && echo "$body" | grep -q '"environment":"dev"' \
+              && echo "$body" | grep -q '"database":"ok"'; then
+              echo "Deployed $GITHUB_SHA to dev and healthy."
               exit 0
             fi
             sleep 15
           done
-          echo "::error::The new version did not become healthy within 20 minutes. Check the deploy log in Render."
+          echo "::error::The new version did not become healthy on dev within 20 minutes. Check the deploy log in Render."
           exit 1

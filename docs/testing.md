@@ -9,13 +9,13 @@ instead of AWS).
 
 | Step | What changed | Where |
 | --- | --- | --- |
-| 1. One container | The frontend is built once into static files and FastAPI serves them next to the API. One image instead of two services. `GET /api/health` checks the database and reports the deployed commit. | `Dockerfile`, `backend/app/frontend.py` |
+| 1. One container | The frontend is built once into static files and FastAPI serves them next to the API. One image instead of two services. `GET /api/health` checks the database and reports the deployed commit and environment. | `Dockerfile`, `backend/app/frontend.py` |
 | 2. PostgreSQL | The backend runs on PostgreSQL (psycopg 3) as well as SQLite; hosting URLs like `postgres://…` work as given; existing databases gain new columns on startup. | `backend/app/models.py` |
 | 3. Docker Compose | `docker compose up --build` runs the app with PostgreSQL 16 and waits for the database to be healthy. Data lives in the `pgdata` volume. | `docker-compose.yaml` |
 | 4. Integration tests | 13 tests against the running stack: the frontend is served, and the backend works with PostgreSQL. | `integration/` |
 | 5. End-to-end tests | One Playwright spec per feature, each tracked by a GitHub issue labelled `e2e-test` (#53–#72). | `e2e/` |
-| 6. Deployment | The same two services on Render: the Docker image as a web service, plus managed PostgreSQL. | `render.yaml`, `docs/deploy.md` |
-| 7. CI/CD | Every push runs all tests; a push to `main` that passes is deployed and checked through `/api/health`. | `.github/workflows/ci.yml` |
+| 6. Deployment | Two copies, dev and prod: each a Render web service built from the Docker image, with its own Neon PostgreSQL branch. | `render.yaml`, `docs/deploy.md` |
+| 7. CI/CD | Every push runs all tests; a push to `main` that passes is deployed to dev and checked through `/api/health`. | `.github/workflows/ci.yml` |
 | 8. Labels | The `e2e-test` label (orange) is defined as code. | `.github/workflows/labels.yml` |
 
 ## The test layers
@@ -39,13 +39,15 @@ reasons unrelated to the feature under test.
 
 ```
 backend tests (SQLite + PostgreSQL) ─┐
-                                     ├─> compose stack: integration + end-to-end ─> deploy (main only)
+                                     ├─> compose stack: integration + end-to-end ─> deploy-dev (main only)
 frontend typecheck, tests, build ────┘
 ```
 
-The deploy job calls Render's deploy hook (`RENDER_DEPLOY_HOOK_URL` secret)
-and then waits until `RENDER_APP_URL/api/health` reports the new commit with
-a working database. Render's own auto-deploy is off. Setup: `docs/deploy.md`.
+The `deploy-dev` job runs in the GitHub Environment `dev`. It calls the dev
+service's Render deploy hook (`RENDER_DEPLOY_HOOK_URL` secret) with
+`ref=<commit>` and then waits until `RENDER_APP_URL/api/health` reports that
+commit, `environment` `dev` and a working database. Prod is never deployed by
+a push. Render's own auto-deploy is off. Setup: `docs/deploy.md`.
 
 ## How the end-to-end backlog was worked
 
