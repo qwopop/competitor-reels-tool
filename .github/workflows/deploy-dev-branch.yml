@@ -1,0 +1,53 @@
+# Deploy a branch to DEV by hand (never to prod). Used by docs/on-call-exercise.md to put the
+# throwaway branch bug/remix-intermittent-failure on dev.
+#
+#   Actions -> "Deploy a branch to dev" -> Run workflow -> choose the branch
+#
+#   image (build-image.yml)  ->  deploy (deploy-dev.yml)
+#
+# Both stages are the same reusable workflows that ci.yml calls for main (#77): the image gets
+# the same tag format (YYYYMMDD-HHMMSS-shortsha) and is pushed to GHCR, then dev's Deploy
+# Hook is called with imgURL. There is no step here for the `prod` environment, and the
+# image is not promotable: promote.yml refuses a version whose commit is not on main.
+# To go back to main's version on dev, push to main (or re-run the last CI/CD run on main).
+name: Deploy a branch to dev
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  image:
+    name: Build and push the image (GHCR)
+    permissions:
+      contents: read
+      packages: write
+    uses: ./.github/workflows/build-image.yml
+
+  deploy:
+    name: Deploy to dev (Render)
+    needs: image
+    permissions:
+      contents: read
+    uses: ./.github/workflows/deploy-dev.yml
+    with:
+      image: ${{ needs.image.outputs.image }}
+      tag: ${{ needs.image.outputs.tag }}
+
+  summary:
+    name: Say what is on dev
+    needs: [image, deploy]
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          {
+            echo "## Branch deployed to dev"
+            echo
+            echo "Branch \`$GITHUB_REF_NAME\`, image \`${{ needs.image.outputs.image }}:${{ needs.image.outputs.tag }}\`."
+            echo
+            if [ "$GITHUB_REF_NAME" != "main" ]; then
+              echo "This is not main. Promoting it to prod fails on purpose (its commit is not on main). Return dev to main by pushing to main."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -1,0 +1,90 @@
+# Deploy stage, reusable: deploy one image from GHCR to the dev service on Render.
+#
+#   ci.yml (job `deploy-dev`, push to main)            ->  this workflow
+#   deploy-dev-branch.yml (started by hand, any branch) ->  this workflow
+#
+# Always runs in the GitHub Environment `dev`; nothing here can reach `prod`
+# (promotion is promote.yml). The caller passes the image and tag that build-image.yml
+# produced. The Environment `dev` needs (Settings -> Environments -> dev):
+#   secret   RENDER_DEPLOY_HOOK_URL   the clipremix-dev service's Deploy Hook
+#   variable RENDER_APP_URL           the dev site's address
+# Without them the job is skipped with a notice (docs/deploy.md).
+name: Deploy image to dev
+
+on:
+  workflow_call:
+    inputs:
+      image:
+        description: Image name without tag, ghcr.io/<owner>/clipremix
+        type: string
+        required: true
+      tag:
+        description: Image tag, YYYYMMDD-HHMMSS-shortsha
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: Deploy to dev (Render)
+    runs-on: ubuntu-latest
+    environment: dev
+    concurrency:
+      group: deploy-dev
+      cancel-in-progress: false
+    env:
+      DEPLOY_HOOK: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
+      APP_URL: ${{ vars.RENDER_APP_URL }}
+      IMAGE: ${{ inputs.image }}
+      TAG: ${{ inputs.tag }}
+    steps:
+      - name: Check the deploy settings
+        id: settings
+        run: |
+          missing=""
+          [ -z "$DEPLOY_HOOK" ] && missing="the RENDER_DEPLOY_HOOK_URL secret"
+          if [ -z "$APP_URL" ]; then
+            [ -n "$missing" ] && missing="$missing and "
+            missing="${missing}the RENDER_APP_URL variable"
+          fi
+          if [ -n "$missing" ]; then
+            echo "::notice::Deploy to dev skipped: set $missing in the dev environment (docs/deploy.md)."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Trigger the deploy of this image
+        if: steps.settings.outputs.ready == 'true'
+        run: |
+          # imgURL makes Render pull exactly this image. The URL is never printed.
+          img=$(printf '%s' "$IMAGE:$TAG" | jq -sRr @uri)
+          case "$DEPLOY_HOOK" in
+            *\?*) url="${DEPLOY_HOOK}&imgURL=${img}" ;;
+            *)    url="${DEPLOY_HOOK}?imgURL=${img}" ;;
+          esac
+          # curl's own error output is discarded because it can contain the URL.
+          curl -fsS -o /dev/null -X POST "$url" 2>/dev/null \
+            || { echo "::error::The deploy hook call failed (check the RENDER_DEPLOY_HOOK_URL secret)."; exit 1; }
+
+      - name: Wait until the new version is live and healthy
+        if: steps.settings.outputs.ready == 'true'
+        run: |
+          # /api/health must report this image tag, environment dev and a working database.
+          # Render pulls the image and may wake from sleep, so allow up to 20 minutes.
+          for attempt in $(seq 1 80); do
+            body=$(curl -fsS --max-time 10 "${APP_URL%/}/api/health" || true)
+            echo "[$attempt] $body"
+            if echo "$body" | grep -q "\"version\":\"$TAG\"" \
+              && echo "$body" | grep -q '"environment":"dev"' \
+              && echo "$body" | grep -q '"database":"ok"'; then
+              echo "Deployed $IMAGE:$TAG to dev and healthy."
+              echo "Deployed \`$IMAGE:$TAG\` to dev; it reports that version and a working database." >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+            sleep 15
+          done
+          echo "::error::The new version did not become healthy on dev within 20 minutes. Check the deploy log in Render."
+          exit 1
