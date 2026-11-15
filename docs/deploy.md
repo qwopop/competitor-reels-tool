@@ -207,6 +207,17 @@ Rules and the dashboard are created with `X-Disable-Provenance`, so they stay ed
 Locally: `make observability-up`, then `make grafana-apply-local` (no token needed). `make grafana-dry-run` only validates.
 Free tier: one dashboard, one rule group with one rule, a few series per environment and version.
 
+### Secrets and variables for the on-call engineer (#82)
+
+Repository level (Settings, Secrets and variables, Actions), used by `.github/workflows/on-call.yml`; it skips with a notice until they exist.
+Details in `docs/on-call.md`.
+
+| Kind | Name | Value |
+| --- | --- | --- |
+| Variable | `GRAFANA_URL` | `https://<stack>.grafana.net` (shared with the Grafana Cloud workflow) |
+| Secret | `GRAFANA_ALERT_TOKEN` | read-only (Viewer) Grafana service account token |
+| Secret | `GEMINI_API_KEY` | free key from Google AI Studio |
+
 ## Things to know
 
 - **No login.** Anyone with the address can read and change the data. Add
