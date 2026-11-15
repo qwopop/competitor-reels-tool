@@ -237,4 +237,4 @@ and artifact `grafana-results` hold the full output). On a runner it started thi
 - **synthetic firing:** `verify.py` sent fake `clipremix.remix.failures` counters over OTLP to the Collector (same metric name and labels, version `synthetic-ci`, resource attribute `synthetic=true`; not produced by the app) for `dev` and `local`. The `dev` rule instance was Pending after 60 s and firing after 360 s with the labels and annotations above; nothing fired for `local`.
 
 Not verified: how the dashboard looks in a browser (only its queries were run), real application failures (#88), that an alert resolves or that the
-default contact point delivers an email, anything in Grafana Cloud (no stack yet), and the Cloud workflow `grafana.yml` (it only ran the skip path in no run so far).
+default contact point delivers an email, anything in Grafana Cloud (no stack yet), and the Cloud workflow `grafana.yml` (it has not run yet, not even its skip path).
