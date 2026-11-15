@@ -13,6 +13,11 @@ name: On-call engineer
 on:
   schedule:
     - cron: "*/5 * * * *"
+  # A push of this file to a branch other than main runs the fixture path (a recorded alert, dry-run pull
+  # request), so a change to the workflow is exercised before it reaches main.
+  push:
+    branches-ignore: [main]
+    paths: [.github/workflows/on-call.yml]
   workflow_dispatch:
     inputs:
       fixture:
@@ -40,7 +45,7 @@ jobs:
       count: ${{ steps.poll.outputs.count }}
       matrix: ${{ steps.poll.outputs.matrix }}
     env:
-      FIXTURE: ${{ inputs.fixture && 'true' || 'false' }}
+      FIXTURE: ${{ (inputs.fixture || github.event_name == 'push') && 'true' || 'false' }}
       ENVIRONMENTS: ${{ inputs.environments || 'dev,prod' }}
       GRAFANA_URL: ${{ vars.GRAFANA_URL }}
       GH_TOKEN: ${{ github.token }}
@@ -177,7 +182,7 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
       GH_REPO: ${{ github.repository }}
-      DRY_RUN: ${{ inputs.fixture && 'true' || 'false' }}
+      DRY_RUN: ${{ (inputs.fixture || github.event_name == 'push') && 'true' || 'false' }}
       ALERT_IDX: ${{ matrix.alert.idx }}
     steps:
       - uses: actions/checkout@v4
