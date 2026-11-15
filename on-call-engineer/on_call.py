@@ -185,7 +185,8 @@ def agent_command() -> list[str]:
             "-p", "Follow the instructions you were given on stdin."]
 
 
-def investigate(alert: dict, repo: Path, out: Path, timeout: int = 1500) -> dict:
+def investigate(alert: dict, repo: Path, out: Path, timeout: int | None = None) -> dict:
+    timeout = timeout or int(os.environ.get("ON_CALL_AGENT_TIMEOUT", "900"))
     out.mkdir(parents=True, exist_ok=True)
     prompt_file = out / "prompt.txt"
     prompt_file.write_text(build_prompt(alert))
@@ -194,12 +195,17 @@ def investigate(alert: dict, repo: Path, out: Path, timeout: int = 1500) -> dict
     (out / "alert.json").write_text(json.dumps(alert, indent=2))
     try:
         with prompt_file.open() as stdin:
-            res = subprocess.run(agent_command(), cwd=repo, stdin=stdin, capture_output=True, text=True, env=env, timeout=timeout)
+            # stderr goes to a file and is echoed afterwards, so the job log shows what the agent said even on a timeout.
+            with (out / "agent-stderr.txt").open("w") as err:
+                res = subprocess.run(agent_command(), cwd=repo, stdin=stdin, stdout=subprocess.PIPE, stderr=err, text=True, env=env, timeout=timeout)
+            res.stderr = (out / "agent-stderr.txt").read_text()
     except FileNotFoundError as exc:
         raise OnCallError(f"The agent command was not found ({exc}). Install it: npm install -g @google/gemini-cli.") from exc
     except subprocess.TimeoutExpired as exc:
-        raise OnCallError(f"The agent did not finish within {timeout} seconds.") from exc
-    (out / "agent-stderr.txt").write_text(res.stderr)
+        tail = (out / "agent-stderr.txt").read_text()[-1500:]
+        raise OnCallError(f"The agent did not finish within {timeout} seconds. Last stderr: {tail}") from exc
+    if res.stderr.strip():
+        print("--- agent stderr (tail) ---\n" + res.stderr[-3000:], flush=True)
     if res.returncode != 0:
         text = (res.stderr + res.stdout).lower()
         quota = any(w in text for w in ("quota", "429", "resource_exhausted", "rate limit"))

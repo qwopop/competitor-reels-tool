@@ -135,11 +135,23 @@ jobs:
           npm install -g "@google/gemini-cli@${GEMINI_CLI_VERSION}"
           gemini --version
           (cd backend && uv sync --frozen)
+      - name: Check that the Gemini CLI answers (fails fast on a bad key or exhausted quota)
+        if: steps.key.outputs.ready == 'true'
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GEMINI_CLI_TRUST_WORKSPACE: "true"
+        run: |
+          if ! timeout 120 gemini --approval-mode yolo --output-format text -p "Reply with the single word OK." < /dev/null > "$RUNNER_TEMP/gemini-check.txt" 2> "$RUNNER_TEMP/gemini-check.err"; then
+            echo "::error::The Gemini CLI did not answer within 120 seconds or failed (bad GEMINI_API_KEY, exhausted free quota, or a CLI problem). Last stderr: $(tail -c 800 "$RUNNER_TEMP/gemini-check.err" | tr '\n' ' ')"
+            exit 1
+          fi
+          echo "Gemini answered: $(head -c 200 "$RUNNER_TEMP/gemini-check.txt")"
       - name: Run the agent
         if: steps.key.outputs.ready == 'true'
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           ALERT_IDX: ${{ matrix.alert.idx }}
+          ON_CALL_AGENT_TIMEOUT: "900"
         run: python3 -I on-call-engineer/on_call.py investigate --alert "$RUNNER_TEMP/alerts/alert-${ALERT_IDX}.json" --out "$RUNNER_TEMP/out"
       - name: Job summary
         if: steps.key.outputs.ready == 'true'
