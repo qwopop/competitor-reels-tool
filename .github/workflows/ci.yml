@@ -58,6 +58,8 @@ jobs:
       - run: uv sync --frozen
       - name: Tests on SQLite
         run: uv run pytest -q
+      - name: On-call engineer tests (fake agent, no network)
+        run: uv run pytest ../on-call-engineer/tests -q
       - name: Tests on PostgreSQL
         env:
           TEST_DATABASE_URL: postgresql://clipremix:clipremix@localhost:5432/clipremix

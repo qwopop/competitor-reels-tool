@@ -1,4 +1,4 @@
-.PHONY: install run frontend dev test check docker-build docker-run db test-postgres up down integration e2e observability-up observability-down grafana-apply-local grafana-dry-run
+.PHONY: on-call install run frontend dev test check docker-build docker-run db test-postgres up down integration e2e observability-up observability-down grafana-apply-local grafana-dry-run
 
 install:
 	cd backend && uv sync
@@ -81,3 +81,10 @@ grafana-apply-local:
 
 grafana-dry-run:
 	python3 -I observability/grafana/apply.py --dry-run
+
+# ---- On-call engineer (on-call-engineer/, docs/on-call.md) ----------------------------------
+# Polls Grafana every 60 s and wakes the headless Gemini agent. Needs GRAFANA_URL, GRAFANA_ALERT_TOKEN,
+# GEMINI_API_KEY and an authenticated `gh`. ENVS=local for the local stack.
+ENVS ?= dev,prod
+on-call:
+	python3 -I on-call-engineer/on_call.py watch --environments $(ENVS)
