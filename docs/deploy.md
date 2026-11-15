@@ -122,7 +122,7 @@ After `deploy-dev` the job `smoke` (in `.github/workflows/deploy-dev.yml`, envir
 
 If the smoke run fails for a flaky reason, re-run the `smoke` job from the CI run on `main` (Re-run failed jobs); it records a new status. To promote without it there is no switch, by design: push a fix to main.
 
-What is proven where: the gate and recorder logic runs in CI against a mock `gh` (`scripts/smoke/tests`, pass, fail, pending, missing, stale, API error); the smoke spec runs in CI on the compose stack. The real Render dev and the status call on a real commit need the owner's `dev` environment and are not exercised before it exists.
+What is proven where: the gate and recorder logic runs in CI against a mock `gh` (`scripts/smoke/tests`, pass, fail, pending, missing, stale, API error); the smoke spec runs in CI on the compose stack (`ci.yml`, and `smoke-proof.yml`, which has one concurrency group per commit and runs it twice to show it leaves the database empty; run 43758392510 passed, 4/4 tests twice, 0 channels left). The real Render dev and the status call on a real commit need the owner's `dev` environment and are not exercised before it exists.
 
 ## 6. Container registry
 
