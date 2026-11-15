@@ -10,7 +10,7 @@ Read this first. The task is **not** marked done by pretending the live run happ
 
 | Part | State |
 | --- | --- |
-| The bug as a patch file (`scripts/bugs/`), never on a branch | **Done**; the existing suite passes with it and the remix endpoint fails for a subset, proved by `bug-patch.yml` (below) |
+| The bug as a patch file (`scripts/bugs/`), never on a branch | **Done**; in `bug-patch.yml` (section 7) the existing suite, minus the tree-inspection tests, passes on a patched scratch copy and the remix endpoint fails for a subset |
 | `scripts/remix-all-videos.sh`, partial failures on sample videos | **Done**, run locally (below) |
 | `deploy-dev-branch.yml` (manual: apply the patch in CI, build a `bugtest-` image, deploy to dev only) | **Written**, built on the shared workflows. The deploy step skips with `::notice::` until the dev secrets exist, so it cannot be a full run yet |
 | Real app with the patch makes `clipremix_remix_failures_total` rise and the alert fire (local stack in CI, no synthetic data) | `bug-chain.yml`; see the run in section 7 |
@@ -64,11 +64,11 @@ curl -i -X POST $base/api/videos/$vid/remix        # HTTP/1.1 500 Internal Serve
 ```
 
 **Proof that the existing tests still pass with the bug:** `scripts/bugs/apply-and-test.sh` (CI: `bug-patch.yml`) copies the
-tracked files to a temp directory, applies the patch there, runs the full existing backend suite (it passes), then
+tracked files to a temp directory, applies the patch there, runs the existing backend suite (223 passed, 1 skipped; `backend/tests/test_bug_patch.py` is left out of this run because it asserts that the tree is unpatched), then
 `scripts/bugs/test_patched_remix.py`, which sees a mix of 201 and 500 for the sample videos, the same videos failing again on a
 second pass, and `clipremix.remix.failures` equal to the number of 500s. The same test fails on clean code, so it detects the patch.
-`backend/tests/test_bug_patch.py` keeps `backend/app/remix.py` free of the bug. The bug is never merged and never promoted.
-Run: see section 7.
+`backend/tests/test_bug_patch.py` (part of the normal suite, on the unpatched tree) keeps `backend/app/remix.py` free of the bug. The bug is never merged and never promoted.
+The CI evidence is in section 7. The "same test fails on clean code" claim is the script's own check (it exits 1 if the test passes there); the log shows the script's final `OK` line, not the failing run itself.
 
 ## 2. `scripts/remix-all-videos.sh`
 
@@ -170,10 +170,10 @@ instead, with the real app and the patch (`bug-chain.yml`, section 7).
 
 ## 7. CI evidence
 
-- `bug-patch.yml`: existing backend suite passes on the patched copy; the bug test sees 500s and the counter. Run: [run 43739431978](https://github.com/qwopop/competitor-reels-tool/actions/runs/43739431978) (passed)
+- `bug-patch.yml`: [run 43740516480](https://github.com/qwopop/competitor-reels-tool/actions/runs/43740516480), commit `e8a49df`. The job log shows step 1 `223 passed, 1 skipped` (existing suite on the patched copy), step 2 `1 passed` (the bug test: mixed 201/500, counter rises), step 3 and the final `OK: the existing tests pass with the bug, the bug test fails without it.` Earlier runs 43739431978 and 43739698682 were false greens (the step piped the script through `tee | grep` without `pipefail`, and `test_bug_patch.py` failed on the patched copy); ignore them.
 - `bug-chain.yml`: the real patched app sends telemetry to the local stack, `scripts/remix-all-videos.sh` drives the traffic,
   `clipremix_remix_failures_total` rises and the alert **ClipRemix: repeated remix failures** fires for `environment=dev` and
-  the build's version (no synthetic metrics; `grafana-local.yml` is the synthetic one). Run: [run 43739431938](https://github.com/qwopop/competitor-reels-tool/actions/runs/43739431938) (passed in about 7 minutes: the script exits 1 unless the counter is above zero and the alert fires with the expected labels and annotations)
+  the build's version (no synthetic metrics; `grafana-local.yml` is the synthetic one). Run: [run 43739431938](https://github.com/qwopop/competitor-reels-tool/actions/runs/43739431938) (passed in about 7 minutes; its log shows the failures counter rising from 63 to 75 from the real patched app, the alert firing and all checks passed)
 
 ## 8. Owner steps for the live chain
 

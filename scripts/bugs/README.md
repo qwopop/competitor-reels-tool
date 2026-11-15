@@ -22,7 +22,9 @@ git apply scripts/bugs/remix-intermittent-failure.patch   # only on a throwaway 
 scripts/remix-all-videos.sh http://localhost:8091         # prints 201 and 500 counts
 ```
 
-`apply-and-test.sh` shows that the full existing backend suite passes with the patch, that
-`test_patched_remix.py` sees the 500s and the failure counter, and that the same test fails on
-clean code. `backend/tests/test_bug_patch.py` keeps the committed code free of the bug and
-checks that the patch applies and that promotion refuses the `bugtest-` image tag.
+`apply-and-test.sh` runs the existing backend suite on the patched scratch copy (without
+`test_bug_patch.py`, which asserts the tree is unpatched) and it passes; then
+`test_patched_remix.py` must see 500s for some videos, 201 for others and the failure counter rise;
+then the same test is run on clean code and the script fails if it passes there. CI: `bug-patch.yml`.
+`backend/tests/test_bug_patch.py` (normal suite, unpatched tree) keeps the committed code free of the
+bug and checks that the patch applies and that promotion refuses the `bugtest-` image tag.
