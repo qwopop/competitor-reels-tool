@@ -105,27 +105,37 @@ CI checks the file with `docker compose -f observability/docker-compose.yaml con
    - `clipremix_remix_failures_total` is absent or 0.
 7. `make observability-down`.
 
-**Status.** Nobody has opened the Grafana UI or run the steps above by hand.
-What has been done is an automated version of the same check on a GitHub
-Actions runner, which has Docker: workflow `.github/workflows/observability.yml`
-runs `observability/smoke.py`, which starts this stack, runs the backend with
-`VIDEO_SOURCE=sample APP_ENV=dev APP_VERSION=<sha>` and OTLP to the Collector,
-adds a competitor, fetches videos, creates a remix and adds a plan item (each
-with a repeat call and a 404), then queries Prometheus, Loki, Tempo and
-Grafana's datasource proxy and fails if anything is missing. It passed in
-[run 43735262200](https://github.com/qwopop/competitor-reels-tool/actions/runs/43735262200)
-(commit `605419f`); the run's job summary lists the observed names and the raw
-query results are in its artifact `observability-results`.
+**Status.** The manual check has been carried out in Grafana Explore by a
+real browser on a GitHub Actions runner (which has Docker), not by hand.
+Workflow `.github/workflows/observability.yml` starts this stack, runs the backend with
+`VIDEO_SOURCE=sample APP_ENV=dev APP_VERSION=<sha>` and OTLP to the Collector, and
+`observability/smoke.py` adds a competitor, fetches videos, creates a remix and adds a
+plan item (each with a repeat call and a 404) and queries Prometheus, Loki, Tempo and
+Grafana's datasource proxy. Then `observability/explore.cjs` (Playwright, Chromium) opens
+**Grafana Explore** with the filter `deployment_environment="dev"`, `service_version=<sha>` and checks
+what Explore shows:
 
-Verified automatically in that run:
+- Prometheus: competitors added, videos fetched by outcome, remixes created, plan items added, fetch latency (sum and count) and total competitors each show a value;
+- Loki: the app's log lines ("Competitor added", "Remix created", ...) with `trace_id`;
+- Tempo: a TraceQL search lists the traces, and opening the `POST /api/competitors` trace shows the request span with its database child spans (at least 2 spans).
+
+It passed in [run 43737396614](https://github.com/qwopop/competitor-reels-tool/actions/runs/43737396614)
+(commit `5a86a55`). The job summary lists each check, and the artifact
+`observability-results` holds a screenshot of every Explore page (`explore/*.png`) and the
+raw query results. The first runs of the Explore step failed on mistakes in the checker
+itself (a latency sum below 1, the wrong Loki frame, the wrong Tempo selector), not on the
+stack; the screenshots of those runs showed the data in Explore.
+
+Also verified by `smoke.py` in the same run, against the backends directly:
 
 - every metric above except `clipremix_remix_failures_total` is exposed by Prometheus, each series with `deployment_environment=dev` and `service_version=<sha>`; the counters read 1 after the repeat calls and 404s (so those are not counted); `clipremix_remix_failures_total` is absent;
 - Loki holds the app's log lines under `service_name="clipremix"` and `deployment_environment`, with `service_version`, `trace_id` and `span_id` (every line had both ids);
 - Tempo finds a trace by `resource.service.name = "clipremix"` with the three resource attributes and the request span plus database child spans;
 - Grafana provisioned the three datasources and answered a query for each through its proxy (`/api/datasources/proxy/uid/<uid>/...`; Grafana's Tempo plugin has no `/health` route, so `/api/echo` is used).
 
-Not verified by anyone: what the Explore screens look like, the Loki-to-Tempo and
-Tempo-to-Loki links, and an outgoing YouTube span (the sample source makes no HTTP call).
+Not verified by anyone: the Loki-to-Tempo and Tempo-to-Loki links, and an outgoing
+YouTube span (the sample source makes no HTTP call). A person has not clicked through
+Explore by hand; the numbered steps above remain for that.
 
 ## Label names for service, environment and version
 
