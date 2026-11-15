@@ -219,6 +219,48 @@ Details in `docs/on-call.md`.
 | Secret | `GEMINI_API_KEY` | free key from Google AI Studio |
 | Variable (optional) | `GEMINI_MODEL` | Gemini model, default `gemini-3.5-flash`; the CLI's default model is retired for new keys |
 
+## Backups and restore (#84)
+
+`.github/workflows/backup-db.yml` runs `pg_dump` against the prod Neon branch every day at 03:17 UTC (and on `workflow_dispatch`). Free tooling only: a GitHub-hosted runner and a workflow artifact.
+
+### Secrets (repository level)
+
+| Secret | Value |
+| --- | --- |
+| `NEON_PROD_DATABASE_URL` | connection string of the Neon `prod` branch. A read-only role is enough for `pg_dump`. |
+| `BACKUP_PASSPHRASE` | long random passphrase the dump is encrypted with. Keep a copy in your password manager: without it a backup is useless. |
+| `NEON_SCRATCH_DATABASE_URL` | optional. A scratch Neon branch (see below). If set, every backup is restored there and the row counts are compared with prod. |
+
+Until the first two exist, the `backup` job skips with a `::notice::` and the run stays green. The workflow's `rehearsal` job needs no secret.
+
+### Where the dump goes and why it is encrypted
+
+This repository is public, so anyone can download workflow artifacts. The dump is therefore encrypted before it is written to disk: `pg_dump | openssl enc -aes-256-cbc -pbkdf2` (`scripts/backup/backup.sh`). The plain dump is never a file and is never printed; the scripts do not echo any secret. The artifact `clipremix-prod-backup` is kept **30 days** (`retention-days` in the workflow; GitHub allows up to 90 on a public repo). Chosen alternative rejected: private storage, because every free option needs another account and secret.
+
+### Restore
+
+Download the artifact (Actions run, Artifacts, or `gh run download <run-id> -n clipremix-prod-backup`), then restore into an **empty** database or Neon branch. PostgreSQL client 16 or newer is needed (`pg_restore` and `openssl`).
+
+```
+export BACKUP_PASSPHRASE='...'
+export TARGET_DATABASE_URL='postgresql://user:pass@host/db?sslmode=require'
+scripts/backup/restore.sh clipremix-prod-YYYYMMDD-HHMMSS.dump.enc
+scripts/backup/counts.sh "$TARGET_DATABASE_URL"        # rows per app table
+```
+
+For a target that already has tables (a scratch branch), add `RESTORE_CLEAN=1` before `scripts/backup/restore.sh`. Without the script: `openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -pass env:BACKUP_PASSPHRASE -in FILE | pg_restore --no-owner --no-privileges --dbname "$TARGET_DATABASE_URL"`.
+
+To bring prod back after data loss: create a new Neon branch (or database), restore into it, check the counts, then set Render's `DATABASE_URL` of the prod service to it (or restore into the prod branch after wiping it) and redeploy.
+
+### Neon point-in-time restore (free tier, as of writing: November 2026)
+
+Neon's own restore ("Restore" on the branch page, or branching from a past timestamp) only covers the **history retention window, 6 hours on the free plan** (limited to about 1 GB of changes). Anything older than that, or lost after the window, can only come from these dumps. Neon changes these limits from time to time; check its pricing page. Prefer point-in-time restore for a mistake you notice within hours, and the dump for everything else.
+
+### What was exercised
+
+- **Real PostgreSQL in CI (done):** the `rehearsal` job starts PostgreSQL 16, creates the app schema with some rows, runs `backup.sh`, checks the file is encrypted and that a wrong passphrase fails, restores into a fresh database and compares the row count of every app table (`competitors`, `videos`, `remixes`, `content_plan`). The same check runs in the backend tests (`backend/tests/test_backup.py`, with `make test-postgres`) and by hand: `scripts/backup/rehearse.sh postgresql://user:pass@localhost:5432/postgres`.
+- **Restore into a scratch Neon branch (not yet exercised):** the agent that built this has no Neon account access, so this was not run against Neon. To do it once: in Neon create a branch `scratch` from `prod`, add its connection string as `NEON_SCRATCH_DATABASE_URL`, and run the workflow by hand. The `backup` job then restores the dump there and fails if the row counts differ from prod. Write the run link and date here after the first pass: _not recorded yet_. Delete the scratch branch afterwards.
+
 ## Things to know
 
 - **No login.** Anyone with the address can read and change the data. Add
