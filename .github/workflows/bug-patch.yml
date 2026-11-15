@@ -1,0 +1,43 @@
+# #88: with the bug patch applied to a scratch copy, the existing backend tests still pass while
+# the remix endpoint returns 500 for a reproducible subset (and the failure counter rises).
+# Nothing is committed or deployed. See scripts/bugs/README.md.
+name: Bug patch proof
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - scripts/bugs/**
+      - backend/app/**
+      - backend/tests/**
+      - .github/workflows/bug-patch.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: bug-patch-${{ github.sha }}
+  cancel-in-progress: false
+
+jobs:
+  proof:
+    name: Existing tests pass, remix fails for some requests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.11.32"
+      - name: Install the backend dependencies
+        working-directory: backend
+        run: uv sync --frozen
+      - name: Apply the patch to a scratch copy and run both test sets
+        run: |
+          set -o pipefail
+          scripts/bugs/apply-and-test.sh 2>&1 | tee bug-patch.log | grep -E "^(==|OK)|passed|FAILED|failed|Error"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: bug-patch-log
+          path: bug-patch.log

@@ -1,0 +1,213 @@
+# Manual promotion: deploy the commit that dev runs to prod.
+#
+#   resolve (environment dev)  ->  promote (environment prod, needs approval)
+#
+# Start it from Actions -> "Promote dev to prod" -> Run workflow, on branch main.
+# `resolve` reads the image tag from the dev site's /api/health, checks its format,
+# that ghcr.io/<owner>/clipremix:<tag> exists, and that the tag's commit is on main.
+# `promote` then waits for the required reviewer of the `prod` GitHub Environment,
+# calls prod's Render Deploy Hook with imgURL=<image:tag> and polls prod's
+# /api/health until it reports that tag. Nothing is built here: prod pulls the
+# exact image dev runs (build stage: build-image.yml, called by ci.yml).
+#
+# Settings (Settings -> Environments), same names as ci.yml (docs/deploy.md):
+#   dev   variable RENDER_APP_URL
+#   prod  variable RENDER_APP_URL, secret RENDER_DEPLOY_HOOK_URL, required reviewer
+# Missing settings skip the job with a notice.
+# `resolve` also refuses a tag without a successful `dev-smoke` commit status (#86), recorded
+# by the smoke job of deploy-dev.yml; rollback.yml has no such gate.
+name: Promote dev to prod
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-prod
+  cancel-in-progress: false
+
+jobs:
+  resolve:
+    name: Read the version dev runs
+    runs-on: ubuntu-latest
+    environment: dev
+    permissions:
+      contents: read
+      statuses: read
+    outputs:
+      ready: ${{ steps.dev.outputs.ready }}
+      tag: ${{ steps.dev.outputs.tag }}
+      image: ${{ steps.dev.outputs.image }}
+    env:
+      DEV_URL: ${{ vars.RENDER_APP_URL }}
+    steps:
+      - name: Only run from main
+        run: |
+          if [ "$GITHUB_REF" != "refs/heads/main" ]; then
+            echo "::error::Promotion only runs from main (this run is on $GITHUB_REF). Choose branch main when starting the workflow."
+            exit 1
+          fi
+
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Read dev's version
+        id: dev
+        run: |
+          if [ -z "$DEV_URL" ]; then
+            echo "::notice::Promotion skipped: set the RENDER_APP_URL variable in the dev environment (docs/deploy.md)."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # A free service sleeps when idle, so allow a slow first answer and a few tries.
+          body=""
+          for attempt in 1 2 3 4 5; do
+            body=$(curl -fsS --max-time 90 "${DEV_URL%/}/api/health" 2>/dev/null) && break
+            body=""
+            echo "Dev did not answer (attempt $attempt)."
+            sleep 10
+          done
+          if [ -z "$body" ]; then
+            echo "::error::Dev is unreachable: ${DEV_URL%/}/api/health did not answer. Check that the dev service is running."
+            exit 1
+          fi
+          echo "Dev health: $body"
+          env_name=$(echo "$body" | jq -r '.environment // empty' 2>/dev/null || true)
+          tag=$(echo "$body" | jq -r '.version // empty' 2>/dev/null || true)
+          if [ "$env_name" != "dev" ]; then
+            echo "::error::The site at RENDER_APP_URL reports environment \"$env_name\", not \"dev\". Check the RENDER_APP_URL variable of the dev environment."
+            exit 1
+          fi
+          if ! echo "$tag" | grep -Eq '^[0-9]{8}-[0-9]{6}-[0-9a-f]{7}$'; then
+            echo "::error::Dev reports version \"$tag\", which is not an image tag (YYYYMMDD-HHMMSS-shortsha). Deploy an image to dev first (push to main)."
+            exit 1
+          fi
+          image="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/clipremix"
+          if ! docker buildx imagetools inspect "$image:$tag" >/dev/null 2>&1; then
+            echo "::error::The image $image:$tag, which dev runs, does not exist or cannot be read. Check that the package exists and is Public (docs/deploy.md)."
+            exit 1
+          fi
+          short="${tag##*-}"
+          if ! git rev-parse --verify --quiet "$short^{commit}" >/dev/null \
+            || ! git merge-base --is-ancestor "$short" origin/main; then
+            echo "::error::Commit $short of image tag $tag is not on main (for example an image deployed to dev by hand). Deploy an image built from main to dev first."
+            exit 1
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "image=$image" >> "$GITHUB_OUTPUT"
+          echo "ready=true" >> "$GITHUB_OUTPUT"
+          {
+            echo "## Promote to production"
+            echo
+            echo "Dev runs image \`$image:$tag\` (commit \`$short\`). Approving the next job deploys this exact image to prod."
+            echo
+            echo "https://github.com/$GITHUB_REPOSITORY/commit/$short"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Require a passing smoke run on dev for this version
+        if: steps.dev.outputs.ready == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          TAG: ${{ steps.dev.outputs.tag }}
+        run: |
+          SHA=$(git rev-parse "${TAG##*-}^{commit}")
+          export SHA
+          bash scripts/smoke/check_gate.sh
+
+  promote:
+    name: Deploy that version to prod (Render)
+    needs: resolve
+    if: needs.resolve.outputs.ready == 'true'
+    runs-on: ubuntu-latest
+    environment: prod
+    env:
+      DEPLOY_HOOK: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
+      PROD_URL: ${{ vars.RENDER_APP_URL }}
+      TAG: ${{ needs.resolve.outputs.tag }}
+      IMAGE: ${{ needs.resolve.outputs.image }}
+    steps:
+      - name: Only run from main
+        run: |
+          if [ "$GITHUB_REF" != "refs/heads/main" ]; then
+            echo "::error::Promotion only runs from main (this run is on $GITHUB_REF)."
+            exit 1
+          fi
+
+      - name: Check the deploy settings
+        id: settings
+        run: |
+          missing=""
+          [ -z "$DEPLOY_HOOK" ] && missing="the RENDER_DEPLOY_HOOK_URL secret"
+          if [ -z "$PROD_URL" ]; then
+            [ -n "$missing" ] && missing="$missing and "
+            missing="${missing}the RENDER_APP_URL variable"
+          fi
+          if [ -n "$missing" ]; then
+            echo "::notice::Promotion to prod skipped: set $missing in the prod environment (docs/deploy.md)."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Check what prod runs now
+        id: current
+        if: steps.settings.outputs.ready == 'true'
+        run: |
+          body=""
+          for attempt in 1 2 3; do
+            body=$(curl -fsS --max-time 90 "${PROD_URL%/}/api/health" 2>/dev/null) && break
+            body=""
+            sleep 10
+          done
+          echo "Prod health: ${body:-no answer}"
+          current=$(echo "$body" | jq -r '.version // empty' 2>/dev/null || true)
+          # Read by rollback.yml (#83) from this job's log; keep the wording.
+          echo "Previous prod version: ${current:-unknown}"
+          {
+            echo "### Prod before this promotion"
+            echo
+            echo "Prod ran version \`${current:-unknown}\` (needed for rollback, #83). Promoting \`$TAG\`."
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ "$current" = "$TAG" ]; then
+            echo "::notice::Prod already runs $TAG. Nothing to deploy."
+            echo "already=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "already=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Trigger the deploy of this image
+        if: steps.settings.outputs.ready == 'true' && steps.current.outputs.already != 'true'
+        run: |
+          # imgURL makes Render pull exactly that image. The URL is never printed.
+          img=$(printf '%s' "$IMAGE:$TAG" | jq -sRr @uri)
+          case "$DEPLOY_HOOK" in
+            *\?*) url="${DEPLOY_HOOK}&imgURL=${img}" ;;
+            *)    url="${DEPLOY_HOOK}?imgURL=${img}" ;;
+          esac
+          # curl's own error output is discarded because it can contain the URL.
+          curl -fsS -o /dev/null -X POST "$url" 2>/dev/null \
+            || { echo "::error::The deploy hook call failed (check the RENDER_DEPLOY_HOOK_URL secret of the prod environment)."; exit 1; }
+
+      - name: Wait until the new version is live and healthy
+        if: steps.settings.outputs.ready == 'true' && steps.current.outputs.already != 'true'
+        run: |
+          # /api/health must report this image tag, environment prod and a working database.
+          # Render pulls the image and may wake from sleep, so allow up to 20 minutes.
+          for attempt in $(seq 1 80); do
+            body=$(curl -fsS --max-time 10 "${PROD_URL%/}/api/health" || true)
+            echo "[$attempt] $body"
+            if echo "$body" | grep -q "\"version\":\"$TAG\"" \
+              && echo "$body" | grep -q '"environment":"prod"' \
+              && echo "$body" | grep -q '"database":"ok"'; then
+              echo "Deployed $IMAGE:$TAG to prod and healthy."
+              echo "Promoted \`$IMAGE:$TAG\` to prod; it reports the new version and a working database." >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+            sleep 15
+          done
+          echo "::error::The new version did not become healthy on prod within 20 minutes. Check the deploy log in Render."
+          exit 1

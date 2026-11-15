@@ -1,0 +1,80 @@
+# #88: the REAL application with the bug patch (applied to this workspace only) serves failing
+# remix requests; the local observability stack must show clipremix_remix_failures_total rising
+# and the Grafana alert firing. No synthetic metrics (grafana-local.yml is the synthetic one).
+# Not deployed anywhere. See docs/on-call-exercise.md.
+name: Bug chain (local stack)
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - scripts/bugs/**
+      - scripts/remix-all-videos.sh
+      - observability/grafana/bug_chain.py
+      - observability/grafana/verify.py
+      - observability/grafana/apply.py
+      - observability/grafana/alerting/**
+      - observability/grafana/dashboards/**
+      - .github/workflows/bug-chain.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: bug-chain-${{ github.sha }}
+  cancel-in-progress: false
+
+jobs:
+  chain:
+    name: Failing traffic makes the alert fire
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      APP_ENV: dev
+      APP_VERSION: bugtest-${{ github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.11.32"
+
+      - name: Apply the bug patch to this workspace only
+        run: git apply scripts/bugs/remix-intermittent-failure.patch && git status --short
+
+      - name: Start the observability stack
+        run: docker compose -f observability/docker-compose.yaml up -d --wait
+
+      - name: Start the patched backend with OTLP export
+        working-directory: backend
+        env:
+          VIDEO_SOURCE: sample
+          DATABASE_URL: sqlite:///./data/bugchain.db
+          OTEL_EXPORTER_OTLP_ENDPOINT: http://localhost:4318
+          OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
+          OTEL_METRIC_EXPORT_INTERVAL: "5000"
+          OTEL_BSP_SCHEDULE_DELAY: "1000"
+          OTEL_BLRP_SCHEDULE_DELAY: "1000"
+        run: |
+          uv sync --frozen
+          nohup uv run uvicorn app.main:app --port 8091 > ../app.log 2>&1 &
+          for i in $(seq 1 30); do curl -fsS localhost:8091/api/health && break; sleep 2; done
+
+      - name: Drive failing traffic and wait for the alert
+        run: python3 -I observability/grafana/bug_chain.py --app http://localhost:8091 --version "$APP_VERSION" --out bug-chain-results
+
+      - name: Logs of the stack
+        if: failure()
+        run: docker compose -f observability/docker-compose.yaml logs --no-color grafana prometheus otel-collector | tail -n 300
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: bug-chain-results
+          path: |
+            bug-chain-results
+            app.log
+          if-no-files-found: warn
+
+      - name: Stop the stack
+        if: always()
+        run: docker compose -f observability/docker-compose.yaml down -v

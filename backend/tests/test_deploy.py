@@ -7,13 +7,55 @@ from app.generator import SampleSource
 from app.main import create_app
 
 
-def test_health_reports_ok_and_the_version(client, monkeypatch):
+@pytest.fixture
+def clean_env(monkeypatch):
+    for name in ("APP_ENV", "APP_VERSION", "RENDER_GIT_COMMIT"):
+        monkeypatch.delenv(name, raising=False)
+    return monkeypatch
+
+
+def test_health_reports_ok_the_version_and_the_environment(client, clean_env):
     res = client.get("/api/health")
     assert res.status_code == 200
-    assert res.json() == {"status": "ok", "database": "ok", "version": "dev"}
+    assert res.json() == {"status": "ok", "database": "ok", "version": "dev", "environment": "local"}
 
-    monkeypatch.setenv("RENDER_GIT_COMMIT", "abc123")
+
+def test_health_reports_the_configured_environment(client, clean_env):
+    clean_env.setenv("APP_ENV", "dev")
+    assert client.get("/api/health").json()["environment"] == "dev"
+    clean_env.setenv("APP_ENV", "prod")
+    assert client.get("/api/health").json()["environment"] == "prod"
+
+
+@pytest.mark.parametrize("value", ["", "staging", "  "])
+def test_unknown_environments_fall_back_to_local(client, clean_env, value):
+    clean_env.setenv("APP_ENV", value)
+    assert client.get("/api/health").json()["environment"] == "local"
+
+
+def test_version_uses_render_commit_when_app_version_is_unset(client, clean_env):
+    clean_env.setenv("RENDER_GIT_COMMIT", "abc123")
     assert client.get("/api/health").json()["version"] == "abc123"
+
+
+def test_app_version_wins_over_the_render_commit(client, clean_env):
+    clean_env.setenv("RENDER_GIT_COMMIT", "abc123")
+    clean_env.setenv("APP_VERSION", "v9")
+    assert client.get("/api/health").json()["version"] == "v9"
+
+
+def test_an_empty_app_version_counts_as_unset(client, clean_env):
+    clean_env.setenv("APP_VERSION", "")
+    clean_env.setenv("RENDER_GIT_COMMIT", "abc123")
+    assert client.get("/api/health").json()["version"] == "abc123"
+
+
+def test_postgres_connections_are_pinged_before_use_so_neon_suspends_are_survived():
+    from app.models import make_engine
+
+    engine = make_engine("postgresql://u:p@localhost:5432/x")
+    assert engine.pool._pre_ping is True
+    engine.dispose()
 
 
 @pytest.fixture

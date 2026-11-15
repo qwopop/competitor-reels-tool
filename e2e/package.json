@@ -4,6 +4,7 @@
   "description": "End-to-end tests: Playwright against the Docker Compose stack (make e2e).",
   "scripts": {
     "test": "playwright test",
+    "smoke": "playwright test --grep @smoke",
     "report": "playwright show-report"
   },
   "devDependencies": {

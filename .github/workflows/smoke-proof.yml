@@ -1,0 +1,77 @@
+# Proof of the dev smoke subset and the promote gate (#86), independent of ci.yml.
+# ci.yml cancels a run when another commit is pushed to the branch; this workflow has one
+# concurrency group per commit, so its result always belongs to the commit it ran for.
+# It starts the compose stack with sample videos (as CI does), runs `npm run smoke` against it
+# (the same command deploy-dev.yml runs against dev) and the mock-gh tests of the gate.
+# Runs when the smoke files change, or by hand.
+name: Smoke proof
+
+on:
+  push:
+    paths:
+      - "e2e/tests/smoke.spec.ts"
+      - "scripts/smoke/**"
+      - ".github/workflows/smoke-proof.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: smoke-proof-${{ github.sha }}
+  cancel-in-progress: false
+
+jobs:
+  smoke:
+    name: Smoke subset on the compose stack, gate tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.11.32"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: e2e/package-lock.json
+
+      - name: Gate and recorder tests (mock gh)
+        working-directory: backend
+        run: |
+          uv sync --frozen
+          uv run pytest ../scripts/smoke/tests -v
+
+      - name: Start the stack (sample videos)
+        env:
+          VIDEO_SOURCE: sample
+          APP_VERSION: ${{ github.sha }}
+        run: docker compose up -d --build --wait
+
+      - name: Install Playwright
+        working-directory: e2e
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+
+      - name: Smoke subset, twice (the second run proves it leaves nothing behind)
+        working-directory: e2e
+        env:
+          BASE_URL: http://localhost:8100
+          EXPECT_VERSION: ${{ github.sha }}
+          EXPECT_ENVIRONMENT: local
+        run: |
+          npm run smoke
+          before=$(curl -fsS "$BASE_URL/api/competitors" | jq length)
+          npm run smoke
+          after=$(curl -fsS "$BASE_URL/api/competitors" | jq length)
+          echo "competitors before/after the second run: $before/$after"
+          [ "$before" = "$after" ] || { echo "::error::The smoke subset left a channel behind."; exit 1; }
+          [ "$after" = "0" ] || { echo "::error::Expected an empty database after the smoke runs, found $after channels."; exit 1; }
+
+      - name: App logs
+        if: failure()
+        run: docker compose logs --no-color app db
+      - name: Stop the stack
+        if: always()
+        run: docker compose down -v

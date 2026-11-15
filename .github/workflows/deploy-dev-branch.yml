@@ -1,0 +1,63 @@
+# Deploy a ref to DEV by hand, with the intermittent-failure bug applied (never to prod).
+# Used by docs/on-call-exercise.md. The bug is NOT a branch: it is the patch file
+# scripts/bugs/remix-intermittent-failure.patch, applied to the CI workspace only, so the
+# committed application code never contains it.
+#
+#   Actions -> "Deploy the bug build to dev" -> Run workflow -> choose the ref
+#             ("Use workflow from"; the default is the branch you are looking at)
+#
+#   image (build-image.yml)  ->  deploy (deploy-dev.yml)
+#
+# Both stages are the same reusable workflows that ci.yml calls for main (#77). The image tag
+# is `bugtest-YYYYMMDD-HHMMSS-shortsha`: the `bugtest-` prefix makes it fail the tag-format
+# check of promote.yml (^[0-9]{8}-[0-9]{6}-[0-9a-f]{7}$), so it can never be promoted. It is
+# pushed to GHCR and dev's Deploy Hook is called with imgURL. There is no step here for the
+# `prod` environment. Without the dev secrets/variable the deploy is skipped with ::notice::
+# (deploy-dev.yml). To go back to main's version on dev, push to main.
+name: Deploy the bug build to dev
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-bug-build-${{ github.sha }}
+  cancel-in-progress: false
+
+jobs:
+  image:
+    name: Build and push the image (GHCR)
+    permissions:
+      contents: read
+      packages: write
+    uses: ./.github/workflows/build-image.yml
+    with:
+      tag_prefix: bugtest-
+      patch: scripts/bugs/remix-intermittent-failure.patch
+
+  deploy:
+    name: Deploy to dev (Render)
+    needs: image
+    permissions:
+      contents: read
+      statuses: write
+    uses: ./.github/workflows/deploy-dev.yml
+    with:
+      image: ${{ needs.image.outputs.image }}
+      tag: ${{ needs.image.outputs.tag }}
+
+  summary:
+    name: Say what is on dev
+    needs: [image, deploy]
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          {
+            echo "## Bug build deployed to dev"
+            echo
+            echo "Ref \`$GITHUB_REF_NAME\` plus scripts/bugs/remix-intermittent-failure.patch, image \`${{ needs.image.outputs.image }}:${{ needs.image.outputs.tag }}\`."
+            echo
+            echo "The tag has the bugtest- prefix: promoting it to prod fails on purpose (not an image tag). Return dev to main by pushing to main."
+          } >> "$GITHUB_STEP_SUMMARY"

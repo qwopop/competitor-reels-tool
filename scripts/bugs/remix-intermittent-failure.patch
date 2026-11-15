@@ -1,0 +1,31 @@
+diff --git a/backend/app/remix.py b/backend/app/remix.py
+index 8eb742f..93a568c 100644
+--- a/backend/app/remix.py
++++ b/backend/app/remix.py
+@@ -33,6 +33,17 @@ _TUTORIAL_WORDS = (
+ _SMALL_WORDS = {"a", "an", "the", "and", "or", "of", "to", "in", "on", "for", "with", "vs", "at", "by"}
+ 
+ 
++# Acronyms that the remix title keeps in their standard spelling ("SAAS" -> "SaaS").
++_ACRONYMS = {"ai": "AI", "saas": "SaaS", "api": "API", "ui": "UI", "seo": "SEO"}
++# Everything a vibe-coding channel shouts in a title.
++_SHOUTED = re.compile(r"\b(?:AI|SAAS|API|UI|SEO|CRUD|LLM|CSS|RAG|SQL|MVP)\b")
++
++
++def normalise_acronyms(title: str) -> str:
++    """Rewrite known ALL-CAPS acronyms with their standard spelling: 'SAAS' -> 'SaaS'."""
++    return _SHOUTED.sub(lambda m: _ACRONYMS[m.group(0).lower()], title)
++
++
+ def clean_title(title: str) -> str:
+     text = _EMOJI.sub("", title)
+     text = _HASHTAG.sub("", text)
+@@ -497,7 +508,7 @@ def write_remix(facts: VideoFacts, template: str) -> dict[str, str]:
+     t = read_title(facts.title)
+     d = read_description(facts.description)
+     return {
+-        "title": _title(facts, t, template)[:500],
++        "title": normalise_acronyms(_title(facts, t, template))[:500],
+         "hook": _hook(facts, t, template)[:1000],
+         "script": _beats(facts, _middle(facts, t, d, template))[:2000],
+         "cta": _cta(facts, t, d, template)[:500],

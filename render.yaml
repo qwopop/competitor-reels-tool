@@ -1,36 +1,68 @@
-# Render Blueprint: the same two services as docker-compose.yaml.
+# Render Blueprint: two independent copies of the app, dev and prod.
 #
 #   docker-compose.yaml        Render
-#   app  (Dockerfile)    ->    clipremix     web service, built from the root Dockerfile
-#   db   (postgres:16)   ->    clipremix-db  managed PostgreSQL 16
+#   app  (Dockerfile)    ->    clipremix-dev   web service, pulls ghcr.io/qwopop/clipremix
+#                              clipremix-prod  web service, same image repository
+#   db   (postgres:16)   ->    Neon (not Render): one project, branches `dev` and `prod`
 #
-# Render doesn't run compose files; this blueprint describes the same setup.
-# Create it once in Render (New → Blueprint). See docs/deploy.md.
+# Render never builds: CI builds the image once and pushes it to GHCR with a
+# timestamp tag; the Deploy Hook (imgURL=<image:tag>) tells Render which tag to
+# pull. `image.url` is only the initial image; it is replaced by every deploy.
+# The GHCR package must be Public so Render can pull without credentials.
+#
+# Each service gets its own Neon branch through DATABASE_URL, which the owner
+# sets in Render (sync: false, so it is never stored in this file).
+# See docs/deploy.md.
 
 services:
   - type: web
-    name: clipremix
-    runtime: docker
-    dockerfilePath: ./Dockerfile
-    dockerContext: .
+    name: clipremix-dev
+    runtime: image
+    image:
+      url: ghcr.io/qwopop/clipremix   # initial image only; deploys pass an exact tag (docs/deploy.md)
     region: frankfurt
-    plan: free                    # sleeps when idle; use starter for an always-on site
+    plan: free                    # sleeps when idle
     healthCheckPath: /api/health
-    # Deploys are started by GitHub Actions only after every test passes
-    # (.github/workflows/ci.yml calls this service's Deploy Hook).
+    # Deploys are started by GitHub Actions only after every test passes and the
+    # image is pushed (.github/workflows/ci.yml calls this service's Deploy Hook).
     autoDeploy: false
     envVars:
-      - key: DATABASE_URL
-        fromDatabase:
-          name: clipremix-db
-          property: connectionString
+      - key: APP_ENV
+        value: dev
+      - key: DATABASE_URL         # Neon branch `dev`, with sslmode=require
+        sync: false
+      - key: VIDEO_SOURCE
+        value: sample
+      # OpenTelemetry straight to Grafana Cloud (docs/observability.md). Nothing is
+      # exported until the owner sets the endpoint and headers in Render.
+      - key: OTEL_EXPORTER_OTLP_PROTOCOL
+        value: http/protobuf
+      - key: OTEL_EXPORTER_OTLP_ENDPOINT
+        sync: false
+      - key: OTEL_EXPORTER_OTLP_HEADERS
+        sync: false
+
+  - type: web
+    name: clipremix-prod
+    runtime: image
+    image:
+      url: ghcr.io/qwopop/clipremix   # initial image only; deploys pass an exact tag (docs/deploy.md)
+    region: frankfurt
+    plan: free                    # sleeps when idle
+    healthCheckPath: /api/health
+    autoDeploy: false
+    envVars:
+      - key: APP_ENV
+        value: prod
+      - key: DATABASE_URL         # Neon branch `prod`, with sslmode=require
+        sync: false
       - key: VIDEO_SOURCE
         value: youtube
-
-databases:
-  - name: clipremix-db
-    databaseName: clipremix
-    user: clipremix
-    region: frankfurt
-    plan: free                    # expires after 30 days; use basic-256mb to keep it
-    postgresMajorVersion: "16"
+      # OpenTelemetry straight to Grafana Cloud (docs/observability.md). Nothing is
+      # exported until the owner sets the endpoint and headers in Render.
+      - key: OTEL_EXPORTER_OTLP_PROTOCOL
+        value: http/protobuf
+      - key: OTEL_EXPORTER_OTLP_ENDPOINT
+        sync: false
+      - key: OTEL_EXPORTER_OTLP_HEADERS
+        sync: false

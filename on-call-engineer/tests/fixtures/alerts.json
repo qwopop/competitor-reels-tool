@@ -1,0 +1,51 @@
+[
+  {
+    "annotations": {
+      "__value_string__": "[ var='A' labels={deployment_environment=dev, service_version=synthetic-ci} value=180 ]",
+      "__values__": "{\"A\":180,\"B\":180,\"C\":1}",
+      "dashboard_url": "http://localhost:3000/d/clipremix-app/clipremix-application?var-environment=dev&var-version=synthetic-ci",
+      "description": "Saving remixes fails with an unexpected server error (HTTP 500): about 5 or more failures in the last 5 minutes, sustained for 5 minutes. Users of the dev environment, version synthetic-ci, cannot create, update or template remixes.",
+      "runbook_url": "https://github.com/qwopop/competitor-reels-tool/blob/main/docs/runbook.md",
+      "summary": "ClipRemix dev (synthetic-ci): repeated remix failures"
+    },
+    "endsAt": "2026-11-15T16:51:00.000Z",
+    "fingerprint": "cc0b1f0e01cf1d0f",
+    "receivers": [{ "name": "grafana-default-email" }],
+    "startsAt": "2026-11-15T16:47:00.000Z",
+    "status": { "inhibitedBy": [], "silencedBy": [], "state": "active" },
+    "updatedAt": "2026-11-15T16:47:00.004Z",
+    "generatorURL": "http://localhost:3000/alerting/grafana/clipremix-remix-failures/view",
+    "labels": {
+      "__alert_rule_uid__": "clipremix-remix-failures",
+      "alertname": "ClipRemix: repeated remix failures",
+      "deployment_environment": "dev",
+      "environment": "dev",
+      "grafana_folder": "ClipRemix",
+      "owner": "qwopop",
+      "service": "clipremix",
+      "service_version": "synthetic-ci",
+      "version": "synthetic-ci"
+    }
+  },
+  {
+    "annotations": {"summary": "Other service"},
+    "fingerprint": "aaaa000000000001",
+    "startsAt": "2026-11-15T16:47:00.000Z",
+    "status": {"inhibitedBy": [], "silencedBy": [], "state": "active"},
+    "labels": {"alertname": "Other: thing", "environment": "dev", "service": "billing", "version": "1"}
+  },
+  {
+    "annotations": {"summary": "Silenced one"},
+    "fingerprint": "aaaa000000000002",
+    "startsAt": "2026-11-15T16:47:00.000Z",
+    "status": {"inhibitedBy": [], "silencedBy": ["s1"], "state": "suppressed"},
+    "labels": {"alertname": "ClipRemix: repeated remix failures", "environment": "prod", "service": "clipremix", "version": "1"}
+  },
+  {
+    "annotations": {"summary": "local one"},
+    "fingerprint": "aaaa000000000003",
+    "startsAt": "2026-11-15T16:47:00.000Z",
+    "status": {"inhibitedBy": [], "silencedBy": [], "state": "active"},
+    "labels": {"alertname": "ClipRemix: repeated remix failures", "environment": "local", "service": "clipremix", "version": "1"}
+  }
+]

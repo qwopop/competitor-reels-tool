@@ -1,0 +1,73 @@
+# #87: uptime check of the deployed dev and prod services, GET /api/health, patient about the Render free
+# cold start (observability/uptime/check.py). Skips with a notice until the variables UPTIME_URL_DEV and
+# UPTIME_URL_PROD exist. A failed run is the alert: GitHub emails the person who last edited the schedule.
+# Scheduled workflows only run from the default branch. Decision and trade-offs: docs/runbook.md, "Uptime".
+name: Uptime check
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "41 * * * *"   # hourly: sleeping services are woken at most once an hour, see the runbook
+  push:
+    paths:
+      - observability/uptime/**
+      - .github/workflows/uptime.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: uptime-${{ github.event_name == 'push' && github.sha || 'scheduled' }}
+  cancel-in-progress: false
+
+jobs:
+  check:
+    name: Ping /api/health of dev and prod
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      UPTIME_URL_DEV: ${{ vars.UPTIME_URL_DEV }}
+      UPTIME_URL_PROD: ${{ vars.UPTIME_URL_PROD }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check the deployed services
+        run: |
+          urls=""
+          [ -z "$UPTIME_URL_DEV" ] || urls="$urls $UPTIME_URL_DEV"
+          [ -z "$UPTIME_URL_PROD" ] || urls="$urls $UPTIME_URL_PROD"
+          if [ -z "$urls" ]; then
+            echo "::notice::Skipping the uptime check: set the repository variables UPTIME_URL_DEV and UPTIME_URL_PROD (for example https://clipremix-dev.onrender.com). See 'Uptime' in docs/runbook.md."
+            exit 0
+          fi
+          # shellcheck disable=SC2086
+          python3 -I observability/uptime/check.py $urls
+
+  selftest:
+    name: The check against a real local app, sleeping and awake
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    if: github.event_name != 'schedule'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.11.32"
+      - name: Start the backend after a delay (a simulated cold start) and check it
+        working-directory: backend
+        run: |
+          set -euo pipefail
+          uv sync --frozen
+          # The port is closed for 25 s, like a sleeping service waking up: the first attempts are refused.
+          (sleep 25; DATABASE_URL=sqlite:///./data/uptime.db APP_ENV=dev VIDEO_SOURCE=sample uv run uvicorn app.main:app --port 8092 > ../app.log 2>&1) &
+          python3 -I ../observability/uptime/check.py http://127.0.0.1:8092 --attempts 6 --timeout 10 --pause 10 | tee ../uptime.log
+          grep -q "RESULT http://127.0.0.1:8092: WOKE" ../uptime.log
+          grep -q "attempt 1/6: not ok" ../uptime.log
+      - name: A URL that never answers is DOWN and fails the check
+        run: |
+          set +e
+          python3 -I observability/uptime/check.py http://127.0.0.1:9 --attempts 2 --timeout 3 --pause 1 | tee down.log
+          code=${PIPESTATUS[0]}
+          [ "$code" = "1" ] && grep -q "RESULT http://127.0.0.1:9: DOWN" down.log
+      - name: Logs
+        if: failure()
+        run: cat app.log || true

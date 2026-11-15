@@ -30,9 +30,10 @@ services:
     build:
       context: .
       args:
-        APP_VERSION: ${APP_VERSION:-dev}
+        APP_VERSION: ${APP_VERSION:-}
     environment:
       DATABASE_URL: postgresql://clipremix:clipremix@db:5432/clipremix
+      APP_ENV: local
       VIDEO_SOURCE: ${VIDEO_SOURCE:-youtube}
     ports:
       - "${APP_PORT:-8100}:8000"

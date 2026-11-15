@@ -1,0 +1,86 @@
+{
+  "uid": "clipremix-fetch-latency",
+  "title": "ClipRemix: slow video fetches",
+  "folderUID": "clipremix",
+  "ruleGroup": "clipremix-latency",
+  "orgID": 1,
+  "condition": "C",
+  "data": [
+    {
+      "refId": "A",
+      "relativeTimeRange": {
+        "from": 600,
+        "to": 0
+      },
+      "datasourceUid": "__DATASOURCE_UID__",
+      "model": {
+        "refId": "A",
+        "expr": "histogram_quantile(0.95, sum by (le, deployment_environment, service_version) (increase(clipremix_fetch_duration_seconds_bucket{service_name=\"clipremix\", deployment_environment=~\"dev|prod\"}[10m]))) and on (deployment_environment, service_version) (sum by (deployment_environment, service_version) (increase(clipremix_fetch_duration_seconds_count{service_name=\"clipremix\", deployment_environment=~\"dev|prod\"}[10m])) > 4.5)",
+        "instant": true,
+        "range": false,
+        "intervalMs": 1000,
+        "maxDataPoints": 43200
+      }
+    },
+    {
+      "refId": "B",
+      "relativeTimeRange": {
+        "from": 600,
+        "to": 0
+      },
+      "datasourceUid": "__expr__",
+      "model": {
+        "refId": "B",
+        "type": "reduce",
+        "expression": "A",
+        "reducer": "last",
+        "settings": {
+          "mode": "dropNN"
+        },
+        "intervalMs": 1000,
+        "maxDataPoints": 43200
+      }
+    },
+    {
+      "refId": "C",
+      "relativeTimeRange": {
+        "from": 600,
+        "to": 0
+      },
+      "datasourceUid": "__expr__",
+      "model": {
+        "refId": "C",
+        "type": "threshold",
+        "expression": "B",
+        "conditions": [
+          {
+            "evaluator": {
+              "type": "gt",
+              "params": [
+                10
+              ]
+            }
+          }
+        ],
+        "intervalMs": 1000,
+        "maxDataPoints": 43200
+      }
+    }
+  ],
+  "noDataState": "OK",
+  "execErrState": "OK",
+  "for": "10m",
+  "isPaused": false,
+  "labels": {
+    "service": "clipremix",
+    "environment": "{{ $labels.deployment_environment }}",
+    "version": "{{ $labels.service_version }}",
+    "owner": "qwopop"
+  },
+  "annotations": {
+    "summary": "ClipRemix {{ $labels.deployment_environment }} ({{ $labels.service_version }}): fetching videos is slow",
+    "description": "The 95th percentile of the time spent fetching a competitor's videos has been above 10 seconds for 10 minutes (measured over the last 10 minutes, with at least 5 fetches in that window). Users of the {{ $labels.deployment_environment }} environment, version {{ $labels.service_version }}, wait that long or more for 1 in 20 video fetches.",
+    "dashboard_url": "__GRAFANA_URL__/d/clipremix-app/clipremix-application?var-environment={{ $labels.deployment_environment }}&var-version={{ $labels.service_version }}",
+    "runbook_url": "https://github.com/qwopop/competitor-reels-tool/blob/main/docs/runbook.md#clipremix-slow-video-fetches"
+  }
+}

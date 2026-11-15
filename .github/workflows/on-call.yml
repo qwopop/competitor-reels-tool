@@ -1,0 +1,228 @@
+# On-call engineer (#82, docs/on-call.md): poll Grafana alerts, let a headless Gemini agent investigate
+# in a read-only job, and open a pull request from its patch in a separate job.
+#
+# GitHub's cron minimum is 5 minutes and scheduled runs can be late or skipped under load, so this is
+# "about every 5 minutes", not every minute. `make on-call` is the real 60 second loop.
+#
+# Optional variable GEMINI_MODEL (default gemini-3.5-flash; the CLI's own default is retired for new keys).
+# Settings (skip with a ::notice:: until they exist): variable GRAFANA_URL, secret GRAFANA_ALERT_TOKEN
+# (read-only Grafana service account token), secret GEMINI_API_KEY (free key from Google AI Studio).
+# "Run workflow" with `fixture` ticked uses a recorded alert instead of Grafana (no Grafana settings
+# needed) and only dry-runs the pull request step.
+name: On-call engineer
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  # A push of this file to a branch other than main runs the fixture path (a recorded alert, dry-run pull
+  # request), so a change to the workflow is exercised before it reaches main.
+  push:
+    branches-ignore: [main]
+    paths: [.github/workflows/on-call.yml]
+  workflow_dispatch:
+    inputs:
+      fixture:
+        description: "Use the recorded alert in on-call-engineer/tests/fixtures (no Grafana), dry-run the pull request"
+        type: boolean
+        default: false
+      environments:
+        description: "Environments to watch (dev,prod; local only for a local stack)"
+        default: "dev,prod"
+
+permissions: {}
+
+env:
+  GEMINI_CLI_VERSION: "0.68.0"
+
+jobs:
+  poll:
+    name: Poll alerts
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read # `gh pr list` for the dedupe check
+    outputs:
+      count: ${{ steps.poll.outputs.count }}
+      matrix: ${{ steps.poll.outputs.matrix }}
+    env:
+      FIXTURE: ${{ (inputs.fixture || github.event_name == 'push') && 'true' || 'false' }}
+      ENVIRONMENTS: ${{ inputs.environments || 'dev,prod' }}
+      GRAFANA_URL: ${{ vars.GRAFANA_URL }}
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Poll
+        id: poll
+        env:
+          GRAFANA_ALERT_TOKEN: ${{ secrets.GRAFANA_ALERT_TOKEN }}
+        run: |
+          echo "count=0" >> "$GITHUB_OUTPUT"
+          echo "matrix=[]" >> "$GITHUB_OUTPUT"
+          if [ "$FIXTURE" = "true" ]; then
+            python3 -I on-call-engineer/on_call.py poll --environments "$ENVIRONMENTS" --no-dedupe \
+              --alerts-file on-call-engineer/tests/fixtures/alerts.json --out-dir alerts > alerts.json
+          else
+            missing=""
+            [ -n "$GRAFANA_URL" ] || missing="$missing variable GRAFANA_URL"
+            [ -n "$GRAFANA_ALERT_TOKEN" ] || missing="$missing secret GRAFANA_ALERT_TOKEN (read-only Grafana service account token)"
+            if [ -n "$missing" ]; then
+              echo "::notice::Skipping the on-call poll, missing:$missing. See docs/on-call.md."
+              exit 0
+            fi
+            python3 -I on-call-engineer/on_call.py poll --environments "$ENVIRONMENTS" --out-dir alerts > alerts.json
+          fi
+          n=$(jq length alerts.json)
+          echo "$n new alert(s)"
+          echo "count=$n" >> "$GITHUB_OUTPUT"
+          echo "matrix=$(jq -c '[to_entries[] | {idx: .key, slug: (.value.slug + "-" + .value.environment)}]' alerts.json)" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@v4
+        if: steps.poll.outputs.count != '0'
+        with:
+          name: on-call-alerts
+          path: alerts/
+          retention-days: 7
+
+  investigate:
+    name: Investigate ${{ matrix.alert.slug }}
+    needs: poll
+    if: needs.poll.outputs.count != '0'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # The agent runs code from the repository: read-only token, no push credentials, only its own API key.
+    permissions:
+      contents: read
+    concurrency:
+      group: on-call-${{ matrix.alert.slug }}
+      cancel-in-progress: false
+    strategy:
+      fail-fast: false
+      matrix:
+        alert: ${{ fromJSON(needs.poll.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Check the Gemini key
+        id: key
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          if [ -z "$GEMINI_API_KEY" ]; then
+            echo "::notice::Skipping the investigation, missing secret GEMINI_API_KEY (free key from Google AI Studio). See docs/on-call.md."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/setup-node@v4
+        if: steps.key.outputs.ready == 'true'
+        with:
+          node-version: "22"
+      - uses: astral-sh/setup-uv@v6
+        if: steps.key.outputs.ready == 'true'
+        with:
+          version: "0.11.32"
+      - uses: actions/download-artifact@v4
+        if: steps.key.outputs.ready == 'true'
+        with:
+          name: on-call-alerts
+          path: ${{ runner.temp }}/alerts
+      - name: Install the Gemini CLI and the backend dependencies
+        if: steps.key.outputs.ready == 'true'
+        run: |
+          npm install -g "@google/gemini-cli@${GEMINI_CLI_VERSION}"
+          gemini --version
+          (cd backend && uv sync --frozen)
+      - name: Check that the Gemini CLI answers (fails fast on a bad key, retired or overloaded model, exhausted quota)
+        if: steps.key.outputs.ready == 'true'
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GEMINI_MODEL: ${{ vars.GEMINI_MODEL || 'gemini-3.5-flash' }}
+          GEMINI_FALLBACK_MODEL: gemini-3.1-flash-lite
+          GEMINI_CLI_TRUST_WORKSPACE: "true"
+        run: |
+          # Try the chosen model, then the fallback (a model can answer 503 "overloaded" from one runner and 200 elsewhere).
+          for model in "$GEMINI_MODEL" "$GEMINI_FALLBACK_MODEL"; do
+            echo "Gemini model: $model"
+            if timeout 120 gemini -m "$model" --approval-mode yolo --output-format text -p "Reply with the single word OK." < /dev/null > "$RUNNER_TEMP/gemini-check.txt" 2> "$RUNNER_TEMP/gemini-check.err"; then
+              echo "Gemini answered with $model: $(head -c 200 "$RUNNER_TEMP/gemini-check.txt")"
+              echo "GEMINI_MODEL_OK=$model" >> "$GITHUB_ENV"
+              exit 0
+            fi
+            reason=$(grep -iE "404|503|no longer available|unavailable|overloaded|quota|429|API key|PERMISSION_DENIED" "$RUNNER_TEMP/gemini-check.err" | head -n 3 | cut -c1-300 | tr '\n' ' ')
+            echo "::warning::Model $model did not answer within 120 seconds. API message: ${reason:-none found}"
+          done
+          echo "::error::The Gemini CLI did not answer with $GEMINI_MODEL or $GEMINI_FALLBACK_MODEL (bad GEMINI_API_KEY, retired or overloaded model, or exhausted free quota). Last stderr: $(tail -c 500 "$RUNNER_TEMP/gemini-check.err" | tr '\n' ' '). Set the repository variable GEMINI_MODEL to another model; see docs/on-call.md."
+          exit 1
+      - name: Run the agent
+        if: steps.key.outputs.ready == 'true'
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          ALERT_IDX: ${{ matrix.alert.idx }}
+          GEMINI_MODEL: ${{ env.GEMINI_MODEL_OK }}
+          ON_CALL_AGENT_TIMEOUT: "900"
+        run: python3 -I on-call-engineer/on_call.py investigate --alert "$RUNNER_TEMP/alerts/alert-${ALERT_IDX}.json" --out "$RUNNER_TEMP/out"
+      - name: Job summary
+        if: steps.key.outputs.ready == 'true'
+        run: |
+          {
+            echo "### Agent explanation"
+            echo
+            cat "$RUNNER_TEMP/out/explanation.md"
+            echo
+            echo "Patch size: $(wc -c < "$RUNNER_TEMP/out/patch.mbox") bytes"
+          } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: steps.key.outputs.ready == 'true'
+        with:
+          name: on-call-result-${{ matrix.alert.idx }}
+          path: |
+            ${{ runner.temp }}/out/patch.mbox
+            ${{ runner.temp }}/out/explanation.md
+            ${{ runner.temp }}/out/alert.json
+          retention-days: 14
+
+  open-pr:
+    name: Open pull request ${{ matrix.alert.slug }}
+    needs: [poll, investigate]
+    if: ${{ !cancelled() && needs.poll.outputs.count != '0' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # Write access, but no agent secrets: it only applies a patch the guard has checked.
+    permissions:
+      contents: write
+      pull-requests: write
+      actions: write # `gh workflow run ci.yml --ref <branch>`
+    concurrency:
+      group: on-call-pr-${{ matrix.alert.slug }}
+      cancel-in-progress: false
+    strategy:
+      fail-fast: false
+      matrix:
+        alert: ${{ fromJSON(needs.poll.outputs.matrix) }}
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      DRY_RUN: ${{ (inputs.fixture || github.event_name == 'push') && 'true' || 'false' }}
+      ALERT_IDX: ${{ matrix.alert.idx }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        id: result
+        continue-on-error: true
+        with:
+          name: on-call-result-${{ matrix.alert.idx }}
+          path: result
+      - name: Open the pull request
+        if: steps.result.outcome == 'success'
+        run: |
+          flags=""
+          [ "$DRY_RUN" = "true" ] && flags="--dry-run"
+          python3 -I on-call-engineer/on_call.py open-pr $flags --alert result/alert.json \
+            --patch result/patch.mbox --explanation result/explanation.md
+      - name: No investigation result
+        if: steps.result.outcome != 'success'
+        run: echo "::notice::No investigation result for alert ${ALERT_IDX} (the investigate job was skipped or failed); nothing to open."

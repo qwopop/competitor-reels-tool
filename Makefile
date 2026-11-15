@@ -1,4 +1,4 @@
-.PHONY: install run frontend dev test check docker-build docker-run db test-postgres up down integration e2e
+.PHONY: on-call install run frontend dev test check docker-build docker-run db test-postgres up down integration e2e observability-up observability-down grafana-apply-local grafana-dry-run
 
 install:
 	cd backend && uv sync
@@ -63,3 +63,28 @@ e2e:
 	docker compose down -v
 	VIDEO_SOURCE=$${VIDEO_SOURCE:-sample} docker compose up -d --build --wait
 	cd e2e && BASE_URL=$(STACK_URL) npx playwright test
+
+# ---- Local observability (observability/: its own Compose project) ------------
+# Collector, Prometheus, Loki, Tempo and Grafana (http://localhost:3000). Then run the app with
+#   OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 APP_ENV=local make run
+# See docs/observability.md.
+observability-up:
+	docker compose -f observability/docker-compose.yaml up -d --wait
+
+observability-down:
+	docker compose -f observability/docker-compose.yaml down
+
+# Dashboard, alert rule and notification policy (observability/grafana/) into the local Grafana.
+# Safe to run again. For Grafana Cloud: GRAFANA_URL=https://<stack>.grafana.net GRAFANA_API_TOKEN=... python3 -I observability/grafana/apply.py
+grafana-apply-local:
+	python3 -I observability/grafana/apply.py --url http://localhost:3000
+
+grafana-dry-run:
+	python3 -I observability/grafana/apply.py --dry-run
+
+# ---- On-call engineer (on-call-engineer/, docs/on-call.md) ----------------------------------
+# Polls Grafana every 60 s and wakes the headless Gemini agent. Needs GRAFANA_URL, GRAFANA_ALERT_TOKEN,
+# GEMINI_API_KEY and an authenticated `gh`. ENVS=local for the local stack.
+ENVS ?= dev,prod
+on-call:
+	python3 -I on-call-engineer/on_call.py watch --environments $(ENVS)

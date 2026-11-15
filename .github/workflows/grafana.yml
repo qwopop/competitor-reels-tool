@@ -1,0 +1,56 @@
+# Applies observability/grafana/ (dashboard, notification policy, alert rule) to Grafana Cloud.
+# Needs variable GRAFANA_URL and secret GRAFANA_API_TOKEN; skips with a notice until both exist.
+# See "Grafana Cloud" in docs/deploy.md. The token is never printed.
+name: Grafana Cloud
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - observability/grafana/**
+      - .github/workflows/grafana.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: grafana-cloud
+  cancel-in-progress: false
+
+jobs:
+  apply:
+    name: Apply dashboard and alert rule
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GRAFANA_URL: ${{ vars.GRAFANA_URL }}
+      GRAFANA_API_TOKEN: ${{ secrets.GRAFANA_API_TOKEN }}
+    steps:
+      - name: Check the settings
+        id: settings
+        run: |
+          missing=""
+          [ -n "$GRAFANA_URL" ] || missing="$missing variable GRAFANA_URL (for example https://<stack>.grafana.net)"
+          [ -n "$GRAFANA_API_TOKEN" ] || missing="$missing secret GRAFANA_API_TOKEN (service account token that may write dashboards, alert rules and policies)"
+          if [ -n "$missing" ]; then
+            echo "::notice::Skipping the Grafana Cloud apply, missing:$missing. See 'Grafana Cloud' in docs/deploy.md."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@v4
+        if: steps.settings.outputs.ready == 'true'
+
+      - name: Validate (dry run)
+        if: steps.settings.outputs.ready == 'true'
+        run: python3 -I observability/grafana/apply.py --dry-run > /dev/null
+
+      - name: Apply
+        if: steps.settings.outputs.ready == 'true'
+        run: python3 -I observability/grafana/apply.py
+
+      - name: Apply again, nothing may change
+        if: steps.settings.outputs.ready == 'true'
+        run: python3 -I observability/grafana/apply.py | tee apply-second.txt && grep -q "0 change(s)" apply-second.txt

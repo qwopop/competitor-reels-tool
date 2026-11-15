@@ -1,0 +1,382 @@
+{
+  "uid": "clipremix-app",
+  "title": "ClipRemix application",
+  "tags": [
+    "clipremix"
+  ],
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": true,
+  "timezone": "browser",
+  "refresh": "30s",
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  },
+  "description": "Application metrics of ClipRemix. Defined as code in observability/grafana/dashboards/clipremix.json.",
+  "templating": {
+    "list": [
+      {
+        "name": "datasource",
+        "label": "Prometheus",
+        "type": "datasource",
+        "query": "prometheus",
+        "refresh": 1,
+        "multi": false,
+        "includeAll": false,
+        "current": {},
+        "options": []
+      },
+      {
+        "name": "environment",
+        "label": "Environment",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${datasource}"
+        },
+        "query": {
+          "query": "label_values(clipremix_competitors, deployment_environment)",
+          "refId": "environment-q"
+        },
+        "definition": "label_values(clipremix_competitors, deployment_environment)",
+        "multi": true,
+        "includeAll": true,
+        "allValue": ".*",
+        "refresh": 2,
+        "sort": 1,
+        "current": {
+          "selected": true,
+          "text": "All",
+          "value": "$__all"
+        },
+        "options": []
+      },
+      {
+        "name": "version",
+        "label": "Version",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${datasource}"
+        },
+        "query": {
+          "query": "label_values(clipremix_competitors{deployment_environment=~\"$environment\"}, service_version)",
+          "refId": "version-q"
+        },
+        "definition": "label_values(clipremix_competitors{deployment_environment=~\"$environment\"}, service_version)",
+        "multi": true,
+        "includeAll": true,
+        "allValue": ".*",
+        "refresh": 2,
+        "sort": 1,
+        "current": {
+          "selected": true,
+          "text": "All",
+          "value": "$__all"
+        },
+        "options": []
+      }
+    ]
+  },
+  "annotations": {
+    "list": []
+  },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Total competitors",
+      "type": "stat",
+      "description": "Competitors currently in the database (observable gauge clipremix.competitors).",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 6,
+        "h": 5
+      },
+      "targets": [
+        {
+          "expr": "sum by (deployment_environment, service_version) (clipremix_competitors{deployment_environment=~\"$environment\", service_version=~\"$version\"})",
+          "legendFormat": "{{deployment_environment}} {{service_version}}",
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 2,
+      "title": "Remix failures",
+      "type": "timeseries",
+      "description": "Unexpected errors (HTTP 500) while creating, updating or templating a remix. The series does not exist until the first failure, so the query falls back to 0. The alert fires on this metric.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "x": 6,
+        "y": 0,
+        "w": 18,
+        "h": 5
+      },
+      "targets": [
+        {
+          "expr": "sum(increase(clipremix_remix_failures_total{deployment_environment=~\"$environment\", service_version=~\"$version\"}[$__rate_interval])) or vector(0)",
+          "legendFormat": "failures",
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 60
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      }
+    },
+    {
+      "id": 3,
+      "title": "Competitors added",
+      "type": "timeseries",
+      "description": "New competitors (HTTP 201) per interval.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 5,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "expr": "sum by (deployment_environment, service_version) (increase(clipremix_competitors_added_total{deployment_environment=~\"$environment\", service_version=~\"$version\"}[$__rate_interval]))",
+          "legendFormat": "{{deployment_environment}} {{service_version}}",
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 60
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      }
+    },
+    {
+      "id": 4,
+      "title": "Videos fetched by outcome",
+      "type": "timeseries",
+      "description": "Fetch requests by outcome: success, empty or error. Fetch errors are source (YouTube) failures and do not alert.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 5,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "expr": "sum by (outcome) (increase(clipremix_videos_fetched_total{deployment_environment=~\"$environment\", service_version=~\"$version\"}[$__rate_interval]))",
+          "legendFormat": "{{outcome}}",
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 60
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      }
+    },
+    {
+      "id": 5,
+      "title": "Remixes created",
+      "type": "timeseries",
+      "description": "New remixes (HTTP 201) per interval.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 13,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "expr": "sum by (deployment_environment, service_version) (increase(clipremix_remixes_created_total{deployment_environment=~\"$environment\", service_version=~\"$version\"}[$__rate_interval]))",
+          "legendFormat": "{{deployment_environment}} {{service_version}}",
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 60
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      }
+    },
+    {
+      "id": 6,
+      "title": "Plan items added",
+      "type": "timeseries",
+      "description": "New content plan items (HTTP 201) per interval.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 13,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "expr": "sum by (deployment_environment, service_version) (increase(clipremix_plan_items_added_total{deployment_environment=~\"$environment\", service_version=~\"$version\"}[$__rate_interval]))",
+          "legendFormat": "{{deployment_environment}} {{service_version}}",
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 60
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      }
+    },
+    {
+      "id": 7,
+      "title": "Fetch latency p50 and p95",
+      "type": "timeseries",
+      "description": "Seconds spent in the video source fetch, from the histogram clipremix.fetch.duration.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 21,
+        "w": 24,
+        "h": 8
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.5, sum by (le) (rate(clipremix_fetch_duration_seconds_bucket{deployment_environment=~\"$environment\", service_version=~\"$version\"}[$__rate_interval])))",
+          "legendFormat": "p50",
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          }
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(clipremix_fetch_duration_seconds_bucket{deployment_environment=~\"$environment\", service_version=~\"$version\"}[$__rate_interval])))",
+          "legendFormat": "p95",
+          "refId": "B",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 0
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      }
+    }
+  ],
+  "links": []
+}
