@@ -83,7 +83,8 @@ make observability-down    # stop
 ```
 
 CI checks the file with `docker compose -f observability/docker-compose.yaml config` (no containers),
-and `backend/tests/test_observability_config.py` parses the stack's files.
+`backend/tests/test_observability_config.py` parses the stack's files, and the workflow
+`observability.yml` (push to paths that affect it, or run it by hand) starts the stack and runs `observability/smoke.py`.
 
 ## Manual check
 
@@ -104,26 +105,46 @@ and `backend/tests/test_observability_config.py` parses the stack's files.
    - `clipremix_remix_failures_total` is absent or 0.
 7. `make observability-down`.
 
-**Status:** this check has **not been carried out**. The sandbox this work was
-done in has no Docker daemon, so the stack was never started and nothing was
-seen in Grafana. What was verified without Docker: the Compose and config files
-parse; the backend tests read every signal and metric from in-memory exporters;
-and a run of the real OTLP exporters against a local receiver delivered
-`/v1/traces`, `/v1/metrics` and `/v1/logs` with the configured `Authorization`
-header. Whoever runs the steps above should tick this off in issue #80 and
-correct the label table below if Grafana shows something else.
+**Status.** Nobody has opened the Grafana UI or run the steps above by hand.
+What has been done is an automated version of the same check on a GitHub
+Actions runner, which has Docker: workflow `.github/workflows/observability.yml`
+runs `observability/smoke.py`, which starts this stack, runs the backend with
+`VIDEO_SOURCE=sample APP_ENV=dev APP_VERSION=<sha>` and OTLP to the Collector,
+adds a competitor, fetches videos, creates a remix and adds a plan item (each
+with a repeat call and a 404), then queries Prometheus, Loki, Tempo and
+Grafana's datasource proxy and fails if anything is missing. It passed in
+[run 43735262200](https://github.com/qwopop/competitor-reels-tool/actions/runs/43735262200)
+(commit `605419f`); the run's job summary lists the observed names and the raw
+query results are in its artifact `observability-results`.
+
+Verified automatically in that run:
+
+- every metric above except `clipremix_remix_failures_total` is exposed by Prometheus, each series with `deployment_environment=dev` and `service_version=<sha>`; the counters read 1 after the repeat calls and 404s (so those are not counted); `clipremix_remix_failures_total` is absent;
+- Loki holds the app's log lines under `service_name="clipremix"` and `deployment_environment`, with `service_version`, `trace_id` and `span_id` (every line had both ids);
+- Tempo finds a trace by `resource.service.name = "clipremix"` with the three resource attributes and the request span plus database child spans;
+- Grafana provisioned the three datasources and answered a query for each through its proxy (`/api/datasources/proxy/uid/<uid>/...`; Grafana's Tempo plugin has no `/health` route, so `/api/echo` is used).
+
+Not verified by anyone: what the Explore screens look like, the Loki-to-Tempo and
+Tempo-to-Loki links, and an outgoing YouTube span (the sample source makes no HTTP call).
 
 ## Label names for service, environment and version
 
-#81 (dashboard and alert) depends on these names. They are **expected from the
-OTel conversion rules and the Collector/Loki/Tempo configuration in this
-directory, not yet observed** (see Status above).
+#81 (dashboard and alert) depends on these names. They are **observed** in
+[CI run 43735262200](https://github.com/qwopop/competitor-reels-tool/actions/runs/43735262200)
+(see Status above), not predicted.
 
 | Backend | service | environment | version |
 | --- | --- | --- | --- |
-| Prometheus (labels on every `clipremix_*` series, because the Collector sets `resource_to_telemetry_conversion`) | `service_name` | `deployment_environment` | `service_version` |
-| Loki (index labels / structured metadata, native OTLP ingestion) | `service_name` (label) | `deployment_environment` (label) | `service_version` (structured metadata: `{service_name="clipremix"} \| service_version="1.2.3"`) |
-| Tempo (TraceQL resource attributes) | `resource.service.name` | `resource.deployment.environment` | `resource.service.version` |
+| Prometheus (labels on every `clipremix_*` series) | `service_name` | `deployment_environment` | `service_version` |
+| Loki | `service_name` (stream label) | `deployment_environment` (stream label) | `service_version` (structured metadata, not a stream label: `{service_name="clipremix"} \| service_version="1.2.3"`) |
+| Tempo (resource attributes, TraceQL `resource.<name>`) | `service.name` | `deployment.environment` | `service.version` |
+
+Other names seen in the same run:
+
+- **Prometheus** metric names: `clipremix_competitors`, `clipremix_competitors_added_total`, `clipremix_fetch_duration_seconds_bucket`, `_count`, `_sum`, `clipremix_plan_items_added_total`, `clipremix_remixes_created_total`, `clipremix_videos_fetched_total`. Labels on the application series: `deployment_environment`, `service_name`, `service_version`, `service_instance_id`, `telemetry_sdk_language`, `telemetry_sdk_name`, `telemetry_sdk_version`, plus `job` and `instance` from the scrape, `outcome` (on `videos_fetched` and `fetch_duration`) and `le` (histogram buckets). Other labels on the standard HTTP and database metrics: `http_method`, `http_status_code`, `http_target`, `pool_name`, `state` and more.
+- **Loki** labels (`/loki/api/v1/labels`): `service_name`, `deployment_environment`, `service_instance_id`. Structured metadata on log lines: `trace_id`, `span_id`, `service_version`, `severity_text`, `severity_number`, `detected_level`, `scope_name`, `flags`, `observed_timestamp`, `telemetry_sdk_*`.
+- **Tempo** resource tags (`/api/v2/search/tags?scope=resource`): `service.name`, `deployment.environment`, `service.version`, `service.instance.id`, `telemetry.sdk.language`, `telemetry.sdk.name`, `telemetry.sdk.version`. Span attributes include `http.method`, `http.route`, `http.status_code`, `http.target`, `db.system`, `db.name`, `db.operation`, `db.statement`.
+- A trace of `POST /api/content-plan` held six spans: the request span, its `http receive` and `http send` spans, and two `SELECT` database spans.
 
 ## Deployed: Grafana Cloud, no Collector
 

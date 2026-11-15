@@ -37,6 +37,8 @@ reasons unrelated to the feature under test.
 
 ## CI/CD (GitHub Actions)
 
+A separate workflow, `.github/workflows/observability.yml`, starts the observability stack and the backend on a runner and runs `observability/smoke.py` (metrics in Prometheus, logs in Loki, a trace in Tempo, datasources in Grafana); see `docs/observability.md`.
+
 ```
 backend tests (SQLite + PostgreSQL) ─┐
                                      ├─> compose stack: integration + end-to-end ─> image ─> deploy-dev
