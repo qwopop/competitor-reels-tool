@@ -215,14 +215,24 @@ free**, with no Collector to run (the reasoning is in `docs/observability.md`).
 | --- | --- |
 | `OTEL_EXPORTER_OTLP_PROTOCOL` | `http/protobuf` (set in `render.yaml`) |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | the OTLP endpoint of your Grafana Cloud stack (you set it, `sync: false`) |
-| `OTEL_EXPORTER_OTLP_HEADERS` | `Authorization=Basic <base64 instance-id:token>` (you set it, `sync: false`) |
+| `OTEL_EXPORTER_OTLP_HEADERS` | `Authorization=Basic%20<base64 instance-id:token>` (you set it, `sync: false`) |
 
 Where to find them: sign in to Grafana Cloud, open **Connections → OpenTelemetry** (or
 **Connections → Add new connection → OpenTelemetry**), choose **Create a token**, and copy
 the endpoint (like `https://otlp-gateway-<zone>.grafana.net/otlp`) and the header it
-shows. The header value is `Authorization=Basic ` followed by the base64 of
+shows. The header value is `Authorization=Basic%20` followed by the base64 of
 `<instance id>:<token>`. Set the same endpoint on both services; `dev` and `prod`
 are told apart by `deployment.environment` (`APP_ENV`).
+
+**Write `Basic%20`, not `Basic ` with a space.** The Grafana page shows a space, but the
+OpenTelemetry Python SDK requires header values in environment variables to be URL
+encoded and silently drops a header that has a space (checked with the SDK this app
+pins: `parse_env_headers("Authorization=Basic xyz")` returns `{}`, while
+`Authorization=Basic%20xyz` returns the header). Without the header every export is
+rejected as unauthenticated. Grafana's own docs give the same advice for Python. The
+base64 text is `base64("<instance id>:<token>")`, e.g.
+`printf '%s' '<instance id>:<token>' | base64 -w0` (never paste the token into chat or
+a commit).
 
 **Nothing is exported until you set `OTEL_EXPORTER_OTLP_ENDPOINT`.** Without it the
 app makes no telemetry connection at all. No GitHub secret or variable is needed.
