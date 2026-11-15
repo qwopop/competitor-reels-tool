@@ -57,7 +57,7 @@ curl -i -X POST $base/api/videos/$vid/remix        # HTTP/1.1 500 Internal Serve
 ```
 
 CI on the branch is green with the bug in place: backend tests on SQLite and PostgreSQL, frontend tests, integration and end-to-end
-tests. Run: CI_RUN_LINK. The bug is never merged and never promoted.
+tests. Run: [run 43738295297](https://github.com/qwopop/competitor-reels-tool/actions/runs/43738295297) (commit `f38f339`). The bug is never merged and never promoted.
 
 ## 2. `scripts/remix-all-videos.sh`
 
@@ -98,8 +98,8 @@ Do this once the owner has done the steps in `docs/deploy.md` (Render, Neon, Gra
 3. Open the dashboard (`<grafana>/d/clipremix-app/clipremix-application`, Environment `dev`, Version = the bug build's tag): **Remix failures** rises while **Remixes created** stays flat after the first pass. Save a screenshot as `docs/screenshots/on-call-dashboard.png`. **(missing)**
 4. After about 10 minutes (`increase(...[5m]) > 4.5`, `for: 5m`) the alert **ClipRemix: repeated remix failures** goes to firing with `service`, `environment`, `version`, `owner` and `dashboard_url`. Link: **(missing)**
 5. The on-call workflow (`on-call.yml`, every 5 minutes at best) picks it up. Its run log shows the poll, the agent start and the agent's explanation. Run: **(missing)**
-6. A pull request from `on-call/clipremix-remix-failures-dev-<run id>` appears, with a fix and a regression test that fails on the bug build and passes on the fix, backend tests green on SQLite and PostgreSQL. Check that nothing was pushed to `main` and nothing merged by automation. Pull request: **(missing)**
-7. Stop the loop, run "Deploy a branch to dev" is not needed again: push to `main` (or re-run CI/CD on `main`) to put a good build back on dev, then close the exercise pull requests (`docs/cleanup.md`).
+6. A pull request from `on-call/<alert name>-dev-<run id>` appears, with a fix and a regression test that fails on the bug build and passes on the fix, backend tests green on SQLite and PostgreSQL. Check that nothing was pushed to `main` and nothing merged by automation. Pull request: **(missing)**
+7. Stop the loop. Put a good build back on dev by pushing to `main` (or re-running CI/CD on `main`), then close the exercise pull requests (`docs/cleanup.md`).
 8. Write up the timeline here: when each step happened, the links above, and what the agent got right or wrong. **(missing)**
 
 ## 6. The chain, locally (no accounts)
@@ -129,7 +129,7 @@ label `dev` puts its data where the rule looks; it is still your machine. `make 
    ```bash
    make grafana-apply-local
    ```
-   Shows: the script prints each object it created (folder, dashboard, rule, notification policy); running it again changes nothing.
+   Shows: the script reports what it applied (dashboard, alert rule, notification policy; see `docs/observability.md`), and running it again changes nothing.
 4. Break remixes, repeatedly (the rule needs 5 failures in 5 minutes, held for 5 more):
    ```bash
    while true; do SEED_CHANNEL=smokecheck scripts/remix-all-videos.sh http://localhost:8092 | tail -4; sleep 30; done
@@ -145,7 +145,7 @@ label `dev` puts its data where the rule looks; it is still your machine. `make 
    make on-call ENVS=dev
    ```
    Shows, in this order: the poll finding the firing alert, the agent starting (`gemini` headless), the agent's explanation, and
-   `open-pr` pushing a branch `on-call/clipremix-remix-failures-dev-<id>` and printing the pull request URL.
+   `open-pr` pushing a branch `on-call/<alert name>-dev-<id>` and printing the pull request URL.
 8. Review that pull request (do not let automation merge it): the fix (look the acronym up with a default) and a regression test that
    fails on the bug branch and passes on the fix; CI on it passes on SQLite and PostgreSQL.
 9. Stop everything (`Ctrl-C` the loops and the app, `make observability-down`) and delete the exercise branches (`docs/cleanup.md`).

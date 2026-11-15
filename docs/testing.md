@@ -37,6 +37,8 @@ reasons unrelated to the feature under test.
 
 ## CI/CD (GitHub Actions)
 
+The end-to-end exercise with a deliberate bug (alert, on-call run, fix pull request) is in [on-call-exercise.md](on-call-exercise.md); deleting everything the DevOps set created is in [cleanup.md](cleanup.md).
+
 The on-call engineer (poller, patch guard, fake agent) has its own tests in `on-call-engineer/tests/`, run by the backend job; see [on-call.md](on-call.md).
 
 A separate workflow, `.github/workflows/observability.yml`, starts the observability stack and the backend on a runner and runs `observability/smoke.py` (metrics in Prometheus, logs in Loki, a trace in Tempo, datasources in Grafana); see `docs/observability.md`.

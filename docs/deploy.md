@@ -231,5 +231,7 @@ Details in `docs/on-call.md`.
 
 ## Clean up
 
+Everything the DevOps set created, and how to delete each piece and check it is gone: [cleanup.md](cleanup.md). The exercise that proves alert and on-call response end to end: [on-call-exercise.md](on-call-exercise.md).
+
 In Render delete the `clipremix-dev` and `clipremix-prod` services (Settings →
 Delete). In Neon delete the project; that deletes both databases and their data.
