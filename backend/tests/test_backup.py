@@ -63,6 +63,11 @@ needs_pg = pytest.mark.skipif(
 @needs_pg
 def test_backup_restore_rehearsal_on_postgresql():
     admin = os.environ["TEST_DATABASE_URL"].rsplit("/", 1)[0] + "/postgres"
+    # A dump from a newer pg_dump does not restore into an older server (see docs/deploy.md).
+    server = int(subprocess.run(["psql", admin, "-tAc", "SHOW server_version_num"], capture_output=True, text=True).stdout.strip() or 0) // 10000
+    client = int(re.search(r"(\d+)", subprocess.run(["pg_dump", "--version"], capture_output=True, text=True).stdout).group(1))
+    if client > server:
+        pytest.skip(f"pg_dump {client} is newer than the server {server}; the CI rehearsal job covers this")
     res = subprocess.run([str(ROOT / "scripts/backup/rehearse.sh"), admin], capture_output=True, text=True)
     assert res.returncode == 0, res.stdout + res.stderr
     assert "row counts match" in res.stdout
