@@ -115,7 +115,8 @@ jobs:
           scripts/backup/compare.sh "$SOURCE_DATABASE_URL" "$TARGET_DATABASE_URL"
       - name: Scratch restore skipped
         if: steps.gate.outputs.run == 'true' && steps.gate.outputs.scratch == 'false'
-        run: echo "::notice::Scratch restore check skipped: set NEON_SCRATCH_DATABASE_URL to a scratch Neon branch to verify every backup."
+        run: |
+          echo "::notice::Scratch restore check skipped: set NEON_SCRATCH_DATABASE_URL to a scratch Neon branch to verify every backup."
       - name: Upload the encrypted dump
         if: steps.gate.outputs.run == 'true'
         uses: actions/upload-artifact@v4
