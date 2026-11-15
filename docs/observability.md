@@ -160,3 +160,81 @@ secret or variable is needed.
 
 In Grafana Cloud the same resource attributes identify the environment, so
 `dev` and `prod` data are told apart by `deployment.environment`.
+
+## Dashboard and alert (Grafana, defined as code)
+
+`observability/grafana/` holds everything as JSON: `dashboards/clipremix.json` (uid `clipremix-app`; variables
+Prometheus data source, `environment`, `version`, both multi-select; panels for competitors added, videos fetched by outcome,
+remixes created, remix failures, plan items added, fetch latency p50 and p95, total competitors, every query filtered by both variables),
+`alerting/` (folder, notification policy, rule `clipremix-remix-failures`) and `apply.py`, which applies them through
+Grafana's HTTP API (Prometheus data source uid looked up, never hard-coded; `--dry-run`; idempotent).
+Locally: `make observability-up && make grafana-apply-local`, then http://localhost:3000/d/clipremix-app/clipremix-application.
+Grafana Cloud: "Grafana Cloud" in `docs/deploy.md` (workflow `grafana.yml`, which skips with a notice until `GRAFANA_URL` and
+`GRAFANA_API_TOKEN` exist; **no Grafana Cloud stack has been created yet, so nothing was applied there**). Alert meaning, thresholds and first checks: `docs/runbook.md`.
+
+Alert rule in short: `increase(clipremix_remix_failures_total{deployment_environment=~"dev|prod"}[5m]) > 4.5` per
+`deployment_environment` and `service_version`, `for: 5m`, `noDataState: OK`, `execErrState: OK` (the counter is absent until the
+first failure and a sleeping free Render service sends nothing, neither fires). Fetch errors are not alerted. No webhook contact point.
+
+### Listing firing alerts: the contract for the on-call script (#82)
+
+```
+GET <grafana>/api/alertmanager/grafana/api/v2/alerts?active=true&silenced=false&inhibited=false
+Authorization: Bearer <token>        (the local Grafana needs none)
+```
+
+The response is a JSON array of alerts, empty when nothing fires. Use `labels.service`, `labels.environment`, `labels.version`,
+`labels.owner`, `labels.alertname` and the annotations `summary`, `description`, `dashboard_url`, `runbook_url`; ignore the
+`__...__` entries (`__value_string__` and `__values__` carry the measured value, `__alert_rule_uid__` the rule uid).
+`environment` and `version` repeat `deployment_environment` and `service_version`. Output observed in CI, with synthetic data
+(see below), trimmed of nothing but the internal `__orgId__` annotation:
+
+```json
+[
+  {
+    "annotations": {
+      "__value_string__": "[ var='A' labels={deployment_environment=dev, service_version=synthetic-ci} value=180 ], [ var='B' ... value=180 ], [ var='C' ... value=1 ]",
+      "__values__": "{\"A\":180,\"B\":180,\"C\":1}",
+      "dashboard_url": "http://localhost:3000/d/clipremix-app/clipremix-application?var-environment=dev&var-version=synthetic-ci",
+      "description": "Saving remixes fails with an unexpected server error (HTTP 500): about 5 or more failures in the last 5 minutes, sustained for 5 minutes. Users of the dev environment, version synthetic-ci, cannot create, update or template remixes.",
+      "runbook_url": "https://github.com/qwopop/competitor-reels-tool/blob/main/docs/runbook.md",
+      "summary": "ClipRemix dev (synthetic-ci): repeated remix failures"
+    },
+    "endsAt": "2026-11-15T16:51:00.000Z",
+    "fingerprint": "cc0b1f0e01cf1d0f",
+    "receivers": [{ "name": "grafana-default-email" }],
+    "startsAt": "2026-11-15T16:47:00.000Z",
+    "status": { "inhibitedBy": [], "silencedBy": [], "state": "active" },
+    "updatedAt": "2026-11-15T16:47:00.004Z",
+    "generatorURL": "http://localhost:3000/alerting/grafana/clipremix-remix-failures/view",
+    "labels": {
+      "__alert_rule_uid__": "clipremix-remix-failures",
+      "alertname": "ClipRemix: repeated remix failures",
+      "deployment_environment": "dev",
+      "environment": "dev",
+      "grafana_folder": "ClipRemix",
+      "owner": "qwopop",
+      "service": "clipremix",
+      "service_version": "synthetic-ci",
+      "version": "synthetic-ci"
+    }
+  }
+]
+```
+
+In Grafana Cloud `dashboard_url` starts with the stack URL instead of `http://localhost:3000`.
+
+### What CI verified (and what not)
+
+Workflow `.github/workflows/grafana-local.yml`, run
+[43736738302](https://github.com/qwopop/competitor-reels-tool/actions/runs/43736738302) (commit `7166253`, passed; the job summary
+and artifact `grafana-results` hold the full output). On a runner it started this stack and the backend, clicked through the app
+(`smoke.py`), then `observability/grafana/verify.py`:
+
+- ran `apply.py` twice against the local Grafana with an empty token: first run created folder, dashboard, policy and rule, second run reported `0 change(s)`;
+- read the dashboard back through the API: variables `datasource`, `environment`, `version`; the seven panels; every panel query, with the variables filled in (`dev`, the app's version), returned a series from Grafana;
+- the rule was loaded (`health=ok`, `state=inactive`) and no alert was active while `clipremix_remix_failures_total` did not exist (no data does not fire);
+- **synthetic firing:** `verify.py` sent fake `clipremix.remix.failures` counters over OTLP to the Collector (same metric name and labels, version `synthetic-ci`, resource attribute `synthetic=true`; not produced by the app) for `dev` and `local`. The `dev` rule instance was Pending after 60 s and firing after 360 s with the labels and annotations above; nothing fired for `local`.
+
+Not verified: how the dashboard looks in a browser (only its queries were run), real application failures (#88), that an alert resolves or that the
+default contact point delivers an email, anything in Grafana Cloud (no stack yet), and the Cloud workflow `grafana.yml` (it only ran the skip path in no run so far).
