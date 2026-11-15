@@ -217,6 +217,7 @@ Details in `docs/on-call.md`.
 | Variable | `GRAFANA_URL` | `https://<stack>.grafana.net` (shared with the Grafana Cloud workflow) |
 | Secret | `GRAFANA_ALERT_TOKEN` | read-only (Viewer) Grafana service account token |
 | Secret | `GEMINI_API_KEY` | free key from Google AI Studio |
+| Variable (optional) | `GEMINI_MODEL` | Gemini model, default `gemini-3.5-flash`; the CLI's default model is retired for new keys |
 
 ## Things to know
 

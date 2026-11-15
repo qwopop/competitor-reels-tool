@@ -24,6 +24,7 @@ HERE = Path(__file__).resolve().parent
 ALERTS_PATH = "/api/alertmanager/grafana/api/v2/alerts?active=true&silenced=false&inhibited=false"
 DEDUPE_HOURS = 6
 SERVICE = "clipremix"
+DEFAULT_MODEL = "gemini-3.5-flash"
 PROTECTED_BRANCHES = {"main", "master"}
 DOCS = "docs/on-call.md"
 IDENTITY = {
@@ -181,7 +182,9 @@ def agent_command() -> list[str]:
     override = os.environ.get("GEMINI_CMD")
     if override:
         return shlex.split(override)
-    return ["gemini", "--approval-mode", "yolo", "--output-format", "text",
+    # The CLI's default model (gemini-2.5-flash) is retired for new API keys, so the model is always explicit.
+    model = os.environ.get("GEMINI_MODEL") or DEFAULT_MODEL
+    return ["gemini", "-m", model, "--approval-mode", "yolo", "--output-format", "text",
             "-p", "Follow the instructions you were given on stdin."]
 
 

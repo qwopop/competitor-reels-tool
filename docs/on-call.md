@@ -44,6 +44,7 @@ and open-pr. Needs `GRAFANA_URL`, `GRAFANA_ALERT_TOKEN`, `GEMINI_API_KEY` in you
 | Actions variable | `GRAFANA_URL` | `https://<stack>.grafana.net` (the same variable as `grafana.yml`) |
 | Actions secret | `GRAFANA_ALERT_TOKEN` | read-only Grafana service account token |
 | Actions secret | `GEMINI_API_KEY` | free key from Google AI Studio |
+| Actions variable (optional) | `GEMINI_MODEL` | model for the agent, default `gemini-3.5-flash` |
 | Repository setting | Allow GitHub Actions to create and approve pull requests | see below |
 
 **Grafana token.** In the stack: **Administration, Users and access, Service accounts**, add an account with the role
@@ -52,6 +53,8 @@ and open-pr. Needs `GRAFANA_URL`, `GRAFANA_ALERT_TOKEN`, `GEMINI_API_KEY` in you
 **Gemini key.** Open https://aistudio.google.com/apikey, create a key (free tier, no card), and add it as the repository
 secret `GEMINI_API_KEY`. The free tier has request limits: when they are exhausted the investigate job fails with an
 `::error::` that mentions the quota, nothing is pushed, and the next scheduled run tries again.
+
+**Model.** Both the check step and the agent run `gemini -m <model>`. The CLI's own default model (`gemini-2.5-flash`) is retired for new API keys (HTTP 404 "no longer available to new users") and the CLI retries instead of failing, so the model is pinned: `gemini-3.5-flash` unless the variable `GEMINI_MODEL` is set (locally, the environment variable of the same name). The check step prints the model and the API error line (404, quota, API key) when it fails.
 
 **Pull requests from Actions.** Only the repository owner can enable this: **Settings, Actions, General, Workflow permissions,
 tick "Allow GitHub Actions to create and approve pull requests"**. If it is off, the `open-pr` job fails with an `::error::`
