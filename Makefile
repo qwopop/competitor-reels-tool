@@ -1,4 +1,4 @@
-.PHONY: install run frontend dev test check docker-build docker-run db test-postgres up down integration e2e
+.PHONY: install run frontend dev test check docker-build docker-run db test-postgres up down integration e2e observability-up observability-down
 
 install:
 	cd backend && uv sync
@@ -63,3 +63,13 @@ e2e:
 	docker compose down -v
 	VIDEO_SOURCE=$${VIDEO_SOURCE:-sample} docker compose up -d --build --wait
 	cd e2e && BASE_URL=$(STACK_URL) npx playwright test
+
+# ---- Local observability (observability/: its own Compose project) ------------
+# Collector, Prometheus, Loki, Tempo and Grafana (http://localhost:3000). Then run the app with
+#   OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 APP_ENV=local make run
+# See docs/observability.md.
+observability-up:
+	docker compose -f observability/docker-compose.yaml up -d --wait
+
+observability-down:
+	docker compose -f observability/docker-compose.yaml down

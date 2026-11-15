@@ -49,6 +49,9 @@ jobs:
       - uses: astral-sh/setup-uv@v6
         with:
           version: "0.11.32"
+      - name: Validate the observability Compose file
+        working-directory: .
+        run: docker compose -f observability/docker-compose.yaml config --quiet
       - run: uv sync --frozen
       - name: Tests on SQLite
         run: uv run pytest -q
