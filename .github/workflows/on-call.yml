@@ -136,26 +136,33 @@ jobs:
           npm install -g "@google/gemini-cli@${GEMINI_CLI_VERSION}"
           gemini --version
           (cd backend && uv sync --frozen)
-      - name: Check that the Gemini CLI answers (fails fast on a bad key, retired model or exhausted quota)
+      - name: Check that the Gemini CLI answers (fails fast on a bad key, retired or overloaded model, exhausted quota)
         if: steps.key.outputs.ready == 'true'
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GEMINI_MODEL: ${{ vars.GEMINI_MODEL || 'gemini-3.5-flash' }}
+          GEMINI_FALLBACK_MODEL: gemini-3.1-flash-lite
           GEMINI_CLI_TRUST_WORKSPACE: "true"
         run: |
-          echo "Gemini model: $GEMINI_MODEL"
-          if ! timeout 120 gemini -m "$GEMINI_MODEL" --approval-mode yolo --output-format text -p "Reply with the single word OK." < /dev/null > "$RUNNER_TEMP/gemini-check.txt" 2> "$RUNNER_TEMP/gemini-check.err"; then
-            reason=$(grep -iE "404|no longer available|quota|429|API key|PERMISSION_DENIED" "$RUNNER_TEMP/gemini-check.err" | head -n 3 | cut -c1-300 | tr '\n' ' ')
-            echo "::error::The Gemini CLI did not answer within 120 seconds or failed with model $GEMINI_MODEL. API message: ${reason:-none found}. Last stderr: $(tail -c 500 "$RUNNER_TEMP/gemini-check.err" | tr '\n' ' '). Set the repository variable GEMINI_MODEL to another model if this one is retired; see docs/on-call.md."
-            exit 1
-          fi
-          echo "Gemini answered: $(head -c 200 "$RUNNER_TEMP/gemini-check.txt")"
+          # Try the chosen model, then the fallback (a model can answer 503 "overloaded" from one runner and 200 elsewhere).
+          for model in "$GEMINI_MODEL" "$GEMINI_FALLBACK_MODEL"; do
+            echo "Gemini model: $model"
+            if timeout 120 gemini -m "$model" --approval-mode yolo --output-format text -p "Reply with the single word OK." < /dev/null > "$RUNNER_TEMP/gemini-check.txt" 2> "$RUNNER_TEMP/gemini-check.err"; then
+              echo "Gemini answered with $model: $(head -c 200 "$RUNNER_TEMP/gemini-check.txt")"
+              echo "GEMINI_MODEL_OK=$model" >> "$GITHUB_ENV"
+              exit 0
+            fi
+            reason=$(grep -iE "404|503|no longer available|unavailable|overloaded|quota|429|API key|PERMISSION_DENIED" "$RUNNER_TEMP/gemini-check.err" | head -n 3 | cut -c1-300 | tr '\n' ' ')
+            echo "::warning::Model $model did not answer within 120 seconds. API message: ${reason:-none found}"
+          done
+          echo "::error::The Gemini CLI did not answer with $GEMINI_MODEL or $GEMINI_FALLBACK_MODEL (bad GEMINI_API_KEY, retired or overloaded model, or exhausted free quota). Last stderr: $(tail -c 500 "$RUNNER_TEMP/gemini-check.err" | tr '\n' ' '). Set the repository variable GEMINI_MODEL to another model; see docs/on-call.md."
+          exit 1
       - name: Run the agent
         if: steps.key.outputs.ready == 'true'
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           ALERT_IDX: ${{ matrix.alert.idx }}
-          GEMINI_MODEL: ${{ vars.GEMINI_MODEL || 'gemini-3.5-flash' }}
+          GEMINI_MODEL: ${{ env.GEMINI_MODEL_OK }}
           ON_CALL_AGENT_TIMEOUT: "900"
         run: python3 -I on-call-engineer/on_call.py investigate --alert "$RUNNER_TEMP/alerts/alert-${ALERT_IDX}.json" --out "$RUNNER_TEMP/out"
       - name: Job summary

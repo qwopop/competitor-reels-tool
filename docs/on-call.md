@@ -54,7 +54,7 @@ and open-pr. Needs `GRAFANA_URL`, `GRAFANA_ALERT_TOKEN`, `GEMINI_API_KEY` in you
 secret `GEMINI_API_KEY`. The free tier has request limits: when they are exhausted the investigate job fails with an
 `::error::` that mentions the quota, nothing is pushed, and the next scheduled run tries again.
 
-**Model.** Both the check step and the agent run `gemini -m <model>`. The CLI's own default model (`gemini-2.5-flash`) is retired for new API keys (HTTP 404 "no longer available to new users") and the CLI retries instead of failing, so the model is pinned: `gemini-3.5-flash` unless the variable `GEMINI_MODEL` is set (locally, the environment variable of the same name). The check step prints the model and the API error line (404, quota, API key) when it fails.
+**Model.** Both the check step and the agent run `gemini -m <model>`. The CLI's own default model (`gemini-2.5-flash`) is retired for new API keys (HTTP 404 "no longer available to new users") and the CLI retries instead of failing, so the model is pinned: `gemini-3.5-flash` unless the variable `GEMINI_MODEL` is set (locally, the environment variable of the same name). The check step prints the model and the API error line (404, 503, quota, API key) when it fails. If the chosen model does not answer, it tries `gemini-3.1-flash-lite` and the agent then uses whichever answered (observed: `gemini-3.5-flash` answered HTTP 503 from a runner while the CLI kept retrying).
 
 **Pull requests from Actions.** Only the repository owner can enable this: **Settings, Actions, General, Workflow permissions,
 tick "Allow GitHub Actions to create and approve pull requests"**. If it is off, the `open-pr` job fails with an `::error::`
