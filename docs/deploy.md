@@ -250,7 +250,13 @@ It replaces the stack's **root notification policy** with `observability/grafana
 Rules and the dashboard are created with `X-Disable-Provenance`, so they stay editable in the UI, and the next apply overwrites such edits.
 
 Locally: `make observability-up`, then `make grafana-apply-local` (no token needed). `make grafana-dry-run` only validates.
-Free tier: one dashboard, one rule group with one rule, a few series per environment and version.
+Free tier: one dashboard, two rule groups with one rule each (remix failures, slow fetches), a few series per environment and version.
+
+### Uptime check (#87)
+
+`.github/workflows/uptime.yml` pings `/api/health` of the deployed services hourly. Repository **variables** `UPTIME_URL_DEV` and
+`UPTIME_URL_PROD` (`https://<service>.onrender.com`); it skips with a notice until one exists. How the Render free sleep is handled
+(tolerated, not kept warm), why and what it cannot see: "Uptime and the Render free cold start" in `docs/runbook.md`.
 
 ### Secrets and variables for the on-call engineer (#82)
 

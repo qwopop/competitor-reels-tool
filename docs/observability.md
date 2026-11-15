@@ -182,7 +182,21 @@ Locally: `make observability-up && make grafana-apply-local`, then http://localh
 Grafana Cloud: "Grafana Cloud" in `docs/deploy.md` (workflow `grafana.yml`, which skips with a notice until `GRAFANA_URL` and
 `GRAFANA_API_TOKEN` exist; **no Grafana Cloud stack has been created yet, so nothing was applied there**). Alert meaning, thresholds and first checks: `docs/runbook.md`.
 
-Alert rule in short: `increase(clipremix_remix_failures_total{deployment_environment=~"dev|prod"}[5m]) > 4.5` per
+Alert rules in short (each in its own file `alerting/rule-*.json`, applied by `apply.py` in the order of the file names; both have the same labels
+`service`, `environment`, `version`, `owner` and annotations `summary`, `description`, `dashboard_url`, `runbook_url`; both select `dev|prod` only, never `local`):
+
+| Rule uid | `alertname` | Query | `for` |
+| --- | --- | --- | --- |
+| `clipremix-remix-failures` | `ClipRemix: repeated remix failures` | failures over 5 m above 4.5 | 5m |
+| `clipremix-fetch-latency` (#87) | `ClipRemix: slow video fetches` | p95 of `clipremix_fetch_duration_seconds` over 10 m above 10 s, and more than 4.5 fetches in those 10 m | 10m |
+
+Both have `noDataState: OK` and `execErrState: OK`. The latency query is
+`histogram_quantile(0.95, sum by (le, deployment_environment, service_version) (increase(clipremix_fetch_duration_seconds_bucket{...}[10m]))) and on (deployment_environment, service_version) (sum by (...) (increase(clipremix_fetch_duration_seconds_count{...}[10m])) > 4.5)`,
+so it returns nothing (no data, OK) unless there were at least 5 fetches. The HTTP server duration histogram of the FastAPI instrumentation
+is not used: it would include the cold-start wait of the first request and `/api/health` polling. Uptime is not a Grafana alert (a sleeping
+service sends no telemetry): scheduled workflow `uptime.yml`, see `docs/runbook.md`, "Uptime and the Render free cold start".
+
+The failure rule in detail: `increase(clipremix_remix_failures_total{deployment_environment=~"dev|prod"}[5m]) > 4.5` per
 `deployment_environment` and `service_version`, `for: 5m`, `noDataState: OK`, `execErrState: OK` (the counter is absent until the
 first failure and a sleeping free Render service sends nothing, neither fires). Fetch errors are not alerted. No webhook contact point.
 
@@ -193,7 +207,7 @@ GET <grafana>/api/alertmanager/grafana/api/v2/alerts?active=true&silenced=false&
 Authorization: Bearer <token>        (the local Grafana needs none)
 ```
 
-The response is a JSON array of alerts, empty when nothing fires. Use `labels.service`, `labels.environment`, `labels.version`,
+The response is a JSON array of alerts, empty when nothing fires, one entry per firing rule instance (so the array can hold `ClipRemix: repeated remix failures` and `ClipRemix: slow video fetches` entries at once; tell them apart by `labels.alertname` or `labels.__alert_rule_uid__`). The shape below is the same for both rules. Use `labels.service`, `labels.environment`, `labels.version`,
 `labels.owner`, `labels.alertname` and the annotations `summary`, `description`, `dashboard_url`, `runbook_url`; ignore the
 `__...__` entries (`__value_string__` and `__values__` carry the measured value, `__alert_rule_uid__` the rule uid).
 `environment` and `version` repeat `deployment_environment` and `service_version`. Output observed in CI, with synthetic data
