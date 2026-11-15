@@ -10,7 +10,7 @@ Steps, each idempotent (a second run reports "unchanged" and changes nothing):
   1. folder       alerting/folder.json                  (fixed uid)
   2. dashboard    dashboards/clipremix.json             (fixed uid clipremix-app)
   3. policy       alerting/notification-policy.json     (replaces the root notification policy)
-  4. alert rule   alerting/rule-remix-failures.json     (fixed uid, created or updated by uid)
+  4. alert rules  alerting/rule-*.json                  (one file per rule, fixed uid, created or updated by uid)
 
 The Prometheus datasource uid is looked up through GET /api/datasources (the datasource named by
 --datasource-name or $GRAFANA_PROMETHEUS_DATASOURCE, else the default Prometheus, else the first
@@ -80,17 +80,22 @@ def covers(actual, wanted):
     return seconds(actual) == seconds(wanted)
 
 
-def validate(folder, dashboard, policy, rule):
+def validate(folder, dashboard, policy, rules):
     problems = []
     if dashboard.get("uid") != "clipremix-app":
         problems.append("dashboard uid must be clipremix-app")
-    if rule.get("folderUID") != folder["uid"]:
-        problems.append("rule folderUID must be the folder's uid")
-    if not rule.get("uid"):
-        problems.append("rule has no uid")
-    for key in ("for", "labels", "annotations", "noDataState", "condition", "data"):
-        if not rule.get(key):
-            problems.append(f"rule has no {key}")
+    uids = [r.get("uid") for r in rules]
+    if len(set(uids)) != len(uids):
+        problems.append("rule uids must be unique")
+    for rule in rules:
+        name = rule.get("uid") or "?"
+        if rule.get("folderUID") != folder["uid"]:
+            problems.append(f"rule {name}: folderUID must be the folder's uid")
+        if not rule.get("uid"):
+            problems.append("a rule has no uid")
+        for key in ("for", "labels", "annotations", "noDataState", "condition", "data"):
+            if not rule.get(key):
+                problems.append(f"rule {name} has no {key}")
     if not policy.get("receiver"):
         problems.append("policy has no receiver")
     if problems:
@@ -117,8 +122,10 @@ def main():
     folder = load("alerting/folder.json")
     dashboard = load("dashboards/clipremix.json")
     policy = load("alerting/notification-policy.json")
-    rule_text = (HERE / "alerting/rule-remix-failures.json").read_text()
-    validate(folder, dashboard, policy, json.loads(rule_text))
+    rule_texts = [p.read_text() for p in sorted((HERE / "alerting").glob("rule-*.json"))]
+    if not rule_texts:
+        sys.exit("no alerting/rule-*.json files")
+    validate(folder, dashboard, policy, [json.loads(t) for t in rule_texts])
 
     g = Grafana(url, os.environ.get("GRAFANA_API_TOKEN", ""))
     if args.dry_run:
@@ -130,7 +137,7 @@ def main():
         source = pick_datasource(sources, args.datasource_name)
         ds_uid = source["uid"]
         print(f"datasource: {source['name']} (uid {ds_uid})")
-    rule = json.loads(rule_text.replace("__DATASOURCE_UID__", ds_uid).replace("__GRAFANA_URL__", url))
+    rules = [json.loads(t.replace("__DATASOURCE_UID__", ds_uid).replace("__GRAFANA_URL__", url)) for t in rule_texts]
 
     # Each step: (what, how to read the current state, desired body, how to write it).
     changed = 0
@@ -163,12 +170,14 @@ def main():
     status, cur = (None, None) if args.dry_run else g.call("GET", "/api/v1/provisioning/policies")
     step("policy", "PUT", "/api/v1/provisioning/policies", policy, status == 200, cur, lambda c: covers(c, policy))
 
-    # 4. alert rule
-    status, cur = (None, None) if args.dry_run else g.call("GET", f"/api/v1/provisioning/alert-rules/{rule['uid']}")
-    if status == 200:
-        step("alert rule", "PUT", f"/api/v1/provisioning/alert-rules/{rule['uid']}", rule, True, cur, lambda c: covers(c, rule))
-    else:
-        step("alert rule", "POST", "/api/v1/provisioning/alert-rules", rule, False, None, None)
+    # 4. alert rules
+    for rule in rules:
+        status, cur = (None, None) if args.dry_run else g.call("GET", f"/api/v1/provisioning/alert-rules/{rule['uid']}")
+        label = f"alert rule {rule['uid']}"
+        if status == 200:
+            step(label, "PUT", f"/api/v1/provisioning/alert-rules/{rule['uid']}", rule, True, cur, lambda c, rule=rule: covers(c, rule))
+        else:
+            step(label, "POST", "/api/v1/provisioning/alert-rules", rule, False, None, None)
 
     if args.dry_run:
         print("dry run: nothing was sent")

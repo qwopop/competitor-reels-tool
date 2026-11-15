@@ -27,6 +27,10 @@ instead of AWS).
 | Integration | The compose stack: frontend served, backend on PostgreSQL | `make integration` | 13 tests |
 | End-to-end | Each feature in a real browser against the compose stack | `make e2e` | 20 specs, 59 tests |
 
+| Smoke (dev) | The `@smoke` subset, `e2e/tests/smoke.spec.ts`: health, pages, list endpoints, one add/remix/delete cycle that cleans up after itself | `cd e2e && npm run smoke` | 4 tests |
+
+The smoke subset is also run against the dev site after every deploy, and promotion to prod needs it to have passed (see below).
+
 All of them run with sample videos (`VIDEO_SOURCE=sample`), so no test
 depends on YouTube.
 
@@ -78,6 +82,10 @@ minutes. It builds nothing: prod runs the exact image dev runs. Missing settings
 skip with a notice. The shell logic is checked locally by running the workflows'
 `run` blocks with mocked `curl`, `docker` and `jq` inputs; the full flow runs only
 on GitHub. See "Container registry" and "Promote to production" in `docs/deploy.md`.
+
+## Smoke tests on dev before promotion (#86)
+
+After the dev deploy, job `smoke` in `deploy-dev.yml` runs `npm run smoke` (the specs tagged `@smoke` in `e2e/tests/smoke.spec.ts`) with `BASE_URL` set to dev. It is the only part of `e2e/` meant for a long-lived database: it never opens `/videos`, never counts totals, and its single write test deletes what it created. The full suite stays on the compose stack. The result is the commit status `dev-smoke` on the image's commit; `promote.yml` runs `scripts/smoke/check_gate.sh` and refuses a tag without a successful, matching status. Rollback is not gated. The gate and the status recorder are tested with a mock `gh` (`cd backend && uv run python -m pytest ../scripts/smoke/tests`, part of the backend CI job), and the subset runs on the compose stack in `ci.yml`. Details and settings: `docs/deploy.md`.
 
 ## How the end-to-end backlog was worked
 

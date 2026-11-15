@@ -1,7 +1,8 @@
-# #81: applies the dashboard and the alert rule to the local Grafana with observability/grafana/apply.py
+# #81, #87: applies the dashboard and the alert rules (remix failures, slow fetches) to the local Grafana with observability/grafana/apply.py
 # and checks them through Grafana's HTTP API. observability/grafana/verify.py also sends SYNTHETIC remix
-# failures over OTLP (not produced by the app) to make the rule fire, and records the alert API output.
-# A workflow of its own so that pushes to the other observability jobs do not cancel this 10 minute run.
+# failures and slow fetches over OTLP (not produced by the app) to make the rules fire, checks that a cold-start
+# series and fast fetches do not, and records the alert API output.
+# A workflow of its own, one concurrency group per commit, so that pushes to the other observability jobs do not cancel this 15 minute run.
 name: Grafana dashboard and alert (local stack)
 
 on:
@@ -24,7 +25,7 @@ jobs:
   grafana:
     name: Dashboard and alert rule in the local Grafana
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 40
     env:
       APP_ENV: dev
       APP_VERSION: ${{ github.sha }}
@@ -54,7 +55,7 @@ jobs:
       - name: Click through the app (real metrics, no failures)
         run: python3 -I observability/smoke.py --out smoke-results --version "$APP_VERSION"
 
-      - name: Apply the dashboard and alert rule, check them, make the rule fire with synthetic data
+      - name: Apply the dashboard and alert rules, check them, make the rules fire with synthetic data
         run: python3 -I observability/grafana/verify.py --out grafana-results --version "$APP_VERSION"
 
       - name: Logs of the stack

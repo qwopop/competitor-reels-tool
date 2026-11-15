@@ -107,6 +107,23 @@ deploy hook is the only credential GitHub holds: it can start a deploy, nothing 
 an image that hasn't passed the tests. Runs of `deploy-dev` queue (they never
 cancel one another halfway).
 
+### Smoke tests on dev (#86)
+
+After `deploy-dev` the job `smoke` (in `.github/workflows/deploy-dev.yml`, environment `dev`) runs the `@smoke` Playwright subset (`e2e/tests/smoke.spec.ts`, `cd e2e && npm run smoke`) against `RENDER_APP_URL`, with `EXPECT_VERSION=<the deployed tag>` and `EXPECT_ENVIRONMENT=dev`, so it proves it tested the version just deployed.
+
+- **Recorded as** the commit status `dev-smoke` on the image's commit (`scripts/smoke/record_status.sh`): `pending` when the run starts, then `success`, `failure` or `error`. The description starts with the image tag. A cancelled run stays `pending`.
+- **No new secret or setting.** It uses the `dev` environment's `RENDER_APP_URL` and the workflow's `GITHUB_TOKEN` (`statuses: write`, granted in `ci.yml` and `deploy-dev-branch.yml`).
+- **Skips with `::notice::`** when the dev settings do not exist (nothing was deployed), and for tags that are not `YYYYMMDD-HHMMSS-shortsha` (the bug build, which can never be promoted).
+- **Specs do not need YouTube.** Dev runs with `VIDEO_SOURCE=sample` (set it as an environment variable of the `clipremix-dev` service in Render, as `render.yaml` does); the smoke tests add a channel through the API and fetch sample videos.
+- **Safe on a long-lived database:** four tests. Health (version, environment, database), the five small pages and three list endpoints (read only), and one write path that creates a uniquely named `smoke-…` channel, fetches its 15 sample videos, makes one remix and deletes the channel again in a `finally` (videos and remixes cascade). It never opens `/videos` (renders every stored video) or compares totals, which the full suite does on an empty database.
+- **Waking up:** a free dev service may sleep; the job calls `/api/health` first with a 120 s timeout, and Playwright retries once.
+
+`promote.yml` (job `resolve`) runs `scripts/smoke/check_gate.sh` for the tag dev runs and fails with `Promotion refused: ...` unless the newest `dev-smoke` status recorded for exactly that tag is `success`. Missing, pending, failed, stale (the status belongs to another image of the same commit) or unreadable statuses all refuse. **Rollback is not gated** (section 7a): it is the emergency path and needs no smoke run.
+
+If the smoke run fails for a flaky reason, re-run the `smoke` job from the CI run on `main` (Re-run failed jobs); it records a new status. To promote without it there is no switch, by design: push a fix to main.
+
+What is proven where: the gate and recorder logic runs in CI against a mock `gh` (`scripts/smoke/tests`, pass, fail, pending, missing, stale, API error); the smoke spec runs in CI on the compose stack. The real Render dev and the status call on a real commit need the owner's `dev` environment and are not exercised before it exists.
+
 ## 6. Container registry
 
 CI builds the image **once** and Render only **pulls** it. Building in each

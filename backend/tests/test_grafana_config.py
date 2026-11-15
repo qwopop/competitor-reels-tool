@@ -28,7 +28,7 @@ def test_all_json_parses_and_uids_are_unique():
         data = json.loads(f.read_text())
         if "uid" in data:
             uids.append(data["uid"])
-    assert len(uids) == len(set(uids)) == 3
+    assert len(uids) == len(set(uids)) == 4  # folder, dashboard, two rules
 
 
 def test_dashboard_has_variables_and_a_panel_per_metric():
@@ -77,6 +77,25 @@ def test_alert_rule_has_for_labels_annotations_and_does_not_fire_on_no_data():
     assert "clipremix_remix_failures_total" in expr and "deployment_environment=~\"dev|prod\"" in expr
     assert "by (deployment_environment, service_version)" in expr
     assert rule["condition"] == "C"
+
+
+def test_latency_rule_uses_the_same_pattern_as_the_failure_rule():
+    failure = load("alerting/rule-remix-failures.json")
+    rule = load("alerting/rule-fetch-latency.json")
+    assert rule["uid"] == "clipremix-fetch-latency" and rule["folderUID"] == failure["folderUID"]
+    assert rule["for"] == "10m"
+    assert rule["noDataState"] == "OK" and rule["execErrState"] == "OK"
+    assert rule["labels"] == failure["labels"]  # same service, environment, version and owner labels
+    assert set(rule["annotations"]) == set(failure["annotations"])
+    assert rule["annotations"]["dashboard_url"] == failure["annotations"]["dashboard_url"]
+    assert rule["annotations"]["runbook_url"].endswith("docs/runbook.md#clipremix-slow-video-fetches")
+    expr = next(d for d in rule["data"] if d["refId"] == "A")["model"]["expr"]
+    assert "histogram_quantile(0.95" in expr and "clipremix_fetch_duration_seconds_bucket" in expr
+    assert expr.count('deployment_environment=~"dev|prod"') == 2  # never local
+    assert "> 4.5" in expr  # at least 5 fetches in the window, so one slow fetch after a cold start cannot fire it
+    threshold = next(d for d in rule["data"] if d["refId"] == "C")["model"]["conditions"][0]["evaluator"]
+    assert threshold == {"type": "gt", "params": [10]}
+    assert "[10m]" in expr
 
 
 def test_policy_routes_to_the_default_contact_point_without_webhooks():
@@ -143,7 +162,7 @@ class FakeGrafana(BaseHTTPRequestHandler):
             d = b["dashboard"]
             FakeGrafana.store[f"/api/dashboards/uid/{d['uid']}"] = {"dashboard": {**d, "id": 5, "version": 2}, "meta": {"folderUid": b["folderUid"]}}
         elif self.path == "/api/v1/provisioning/alert-rules":
-            FakeGrafana.store[f"/api/v1/provisioning/alert-rules/{b['uid']}"] = {**b, "id": 9, "updated": "now", "for": "5m0s"}
+            FakeGrafana.store[f"/api/v1/provisioning/alert-rules/{b['uid']}"] = {**b, "id": 9, "updated": "now", "for": f"{int(b['for'][:-1])}m0s"}
         self.reply(200, {})
 
     def do_PUT(self):
@@ -169,11 +188,12 @@ def test_apply_creates_then_changes_nothing_and_resolves_the_datasource_uid():
     try:
         first = run_apply(url)
         assert first.returncode == 0, first.stdout + first.stderr
-        assert "4 change(s)" in first.stdout
-        rule = FakeGrafana.store["/api/v1/provisioning/alert-rules/clipremix-remix-failures"]
-        assert rule["data"][0]["datasourceUid"] == "prom-uid"
-        assert rule["annotations"]["dashboard_url"].startswith(url + "/d/clipremix-app")
-        assert "__" not in json.dumps(rule["annotations"]) and "__DATASOURCE_UID__" not in json.dumps(rule)
+        assert "5 change(s)" in first.stdout
+        for uid in ("clipremix-remix-failures", "clipremix-fetch-latency"):
+            rule = FakeGrafana.store[f"/api/v1/provisioning/alert-rules/{uid}"]
+            assert rule["data"][0]["datasourceUid"] == "prom-uid"
+            assert rule["annotations"]["dashboard_url"].startswith(url + "/d/clipremix-app")
+            assert "__" not in json.dumps(rule["annotations"]) and "__DATASOURCE_UID__" not in json.dumps(rule)
         writes_after_first = len(FakeGrafana.writes)
         second = run_apply(url, token="secret-token-value")
         assert second.returncode == 0, second.stdout + second.stderr

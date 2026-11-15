@@ -7,11 +7,13 @@ It
   1. runs apply.py twice (empty token) and checks the second run changes nothing,
   2. checks the dashboard: uid, the variables, a panel for every application metric, every query
      uses both variables, and runs each query through Grafana against the real data,
-  3. checks that the alert rule and the policy are loaded and the rule evaluates without error,
-  4. SENDS SYNTHETIC remix-failure metrics over OTLP/HTTP to the Collector (same metric name and
-     labels as the app, version "synthetic-ci", resource attribute synthetic=true), for
-     environment dev (must alert) and local (must not), and waits for the alert to go
-     Pending and then Firing in Grafana,
+  3. checks that the alert rules (remix failures, slow fetches) and the policy are loaded, and the
+     rules evaluate without error and do not fire with the real traffic of the app (#87),
+  4. SENDS SYNTHETIC metrics over OTLP/HTTP to the Collector (same metric names and labels as the
+     app, resource attribute synthetic=true): remix failures and slow fetches (version
+     "synthetic-ci") for environment dev (must alert) and local (must not); plus two series that
+     must NOT alert: "synthetic-fast" (many fast fetches) and "synthetic-coldstart" (a single 60 s
+     fetch, as after a Render cold start). Waits for both rules to go Firing in Grafana,
   5. calls the alert API documented for the on-call script (#82) and checks the shape.
 The synthetic data is not produced by the application. Standard library only.
 """
@@ -32,6 +34,10 @@ HERE = Path(__file__).resolve().parent
 ALERTS_PATH = "/api/alertmanager/grafana/api/v2/alerts?active=true&silenced=false&inhibited=false"
 RULE_UID = "clipremix-remix-failures"
 RULE_TITLE = "ClipRemix: repeated remix failures"
+LATENCY_UID = "clipremix-fetch-latency"
+LATENCY_TITLE = "ClipRemix: slow video fetches"
+RULES = {RULE_UID: RULE_TITLE, LATENCY_UID: LATENCY_TITLE}
+FETCH_BOUNDS = [0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 20, 30]
 EXPECTED_PANELS = {
     "Competitors added": "clipremix_competitors_added_total",
     "Videos fetched by outcome": "clipremix_videos_fetched_total",
@@ -145,61 +151,105 @@ def check_dashboard(grafana, version):
         note(f"  panel query {k}: status {v['status']}, {v['series']} series")
 
 
-def rule_state(grafana):
+def rule_state(grafana, uid=RULE_UID):
     groups = get(f"{grafana}/api/prometheus/grafana/api/v1/rules")["data"]["groups"]
     for g in groups:
         for r in g["rules"]:
-            if r.get("uid") == RULE_UID or r.get("name") == RULE_TITLE:
+            if r.get("uid") == uid or r.get("name") == RULES[uid]:
                 raw["rules_api"] = groups
                 return r
     return None
 
 
 def check_rule_loaded(grafana):
-    rule = get(f"{grafana}/api/v1/provisioning/alert-rules/{RULE_UID}")
-    raw["rule"] = rule
-    if rule.get("noDataState") != "OK" or rule.get("execErrState") != "OK":
-        fail(f"noDataState/execErrState are {rule.get('noDataState')}/{rule.get('execErrState')}, expected OK")
     policy = get(f"{grafana}/api/v1/provisioning/policies")
     raw["policy"] = policy
     if policy.get("receiver") != "grafana-default-email" or policy.get("routes"):
         fail(f"unexpected policy {policy}")
-    deadline = time.time() + 150
-    state = None
-    while time.time() < deadline:
-        state = rule_state(grafana)
-        if state and not state.get("lastEvaluation", "0001").startswith("0001") and state.get("health") in ("ok", "nodata", "error"):
-            break
-        time.sleep(5)
-    raw["rule_state_before"] = state
-    if not state:
-        raw["rules_api"] = get(f"{grafana}/api/prometheus/grafana/api/v1/rules")
-        fail("the rule is not listed by /api/prometheus/grafana/api/v1/rules")
-        return
-    note(f"rule loaded: health={state.get('health')}, state={state.get('state')}, lastError={state.get('lastError')!r}, for={rule.get('for')}")
-    if state.get("health") == "error" or state.get("lastError"):
-        fail(f"the rule evaluates with an error: {state.get('lastError')}")
+    raw["rules"] = {}
+    for uid in RULES:
+        rule = get(f"{grafana}/api/v1/provisioning/alert-rules/{uid}")
+        raw["rules"][uid] = rule
+        if uid == RULE_UID:
+            raw["rule"] = rule  # bug_chain.py reads this one
+        if rule.get("noDataState") != "OK" or rule.get("execErrState") != "OK":
+            fail(f"{uid}: noDataState/execErrState are {rule.get('noDataState')}/{rule.get('execErrState')}, expected OK")
+        if "dev|prod" not in json.dumps(rule["data"]) or "local" in json.dumps(rule["data"]):
+            fail(f"{uid}: the query must select dev|prod only")
+        for k in ("service", "environment", "version", "owner"):
+            if k not in rule.get("labels", {}):
+                fail(f"{uid}: label {k} missing")
+        for k in ("summary", "description", "dashboard_url", "runbook_url"):
+            if not rule.get("annotations", {}).get(k):
+                fail(f"{uid}: annotation {k} missing")
+    for uid, title in RULES.items():
+        deadline = time.time() + 150
+        state = None
+        while time.time() < deadline:
+            state = rule_state(grafana, uid)
+            if state and not state.get("lastEvaluation", "0001").startswith("0001") and state.get("health") in ("ok", "nodata", "error"):
+                break
+            time.sleep(5)
+        raw[f"rule_state_before_{uid}"] = state
+        if not state:
+            raw["rules_api"] = get(f"{grafana}/api/prometheus/grafana/api/v1/rules")
+            fail(f"{uid}: not listed by /api/prometheus/grafana/api/v1/rules")
+            continue
+        note(f"rule {uid} loaded: health={state.get('health')}, state={state.get('state')}, lastError={state.get('lastError')!r}, for={raw['rules'][uid].get('for')}")
+        if state.get("health") == "error" or state.get("lastError"):
+            fail(f"{uid}: the rule evaluates with an error: {state.get('lastError')}")
+    # Real traffic only so far (the app's fast sample fetches, no failures): nothing may fire.
+    time.sleep(70)  # at least one more evaluation of every rule after the traffic
     status, active = http("GET", grafana + ALERTS_PATH)
-    mine = [a for a in active if a["labels"].get("alertname") == rule["title"]] if status == 200 else []
+    mine = [a for a in active if a["labels"].get("alertname") in RULES.values()] if status == 200 else []
+    raw["alerts_with_real_traffic"] = active
     if mine:
-        fail(f"the alert fires before any failure: {mine}")
+        fail(f"an alert fires with real, normal traffic: {mine}")
     else:
-        note("no alert is active while the series clipremix_remix_failures_total is absent (no data does not fire)")
+        note("no alert is active with the app's real traffic: no remix failure series (no data), fast fetches, fewer than 5 of them (no data does not fire)")
 
 
 # ---- synthetic remix failures over OTLP -----------------------------------------
 
 
-def otlp_payload(env, version, value, start_ns):
+def resource(env, version):
     attrs = {"service.name": "clipremix", "deployment.environment": env, "service.version": version,
              "service.instance.id": "synthetic-ci", "synthetic": "true"}
+    return {"attributes": [{"key": k, "value": {"stringValue": v}} for k, v in attrs.items()]}
+
+
+def otlp_payload(env, version, value, start_ns):
     return {"resourceMetrics": [{
-        "resource": {"attributes": [{"key": k, "value": {"stringValue": v}} for k, v in attrs.items()]},
+        "resource": resource(env, version),
         "scopeMetrics": [{"scope": {"name": "synthetic-ci"}, "metrics": [{
             "name": "clipremix.remix.failures",
             "description": "SYNTHETIC: sent by observability/grafana/verify.py, not by the application",
             "sum": {"aggregationTemporality": 2, "isMonotonic": True,
                     "dataPoints": [{"startTimeUnixNano": str(start_ns), "timeUnixNano": str(time.time_ns()), "asInt": str(value)}]}}]}]}]}
+
+
+def histogram_payload(env, version, start_ns, count, seconds_each):
+    """Cumulative histogram of clipremix.fetch.duration with `count` observations of `seconds_each` (outcome=success)."""
+    counts = [0] * (len(FETCH_BOUNDS) + 1)
+    idx = next((i for i, b in enumerate(FETCH_BOUNDS) if seconds_each <= b), len(FETCH_BOUNDS))
+    counts[idx] = count
+    point = {"startTimeUnixNano": str(start_ns), "timeUnixNano": str(time.time_ns()), "count": str(count),
+             "sum": count * seconds_each, "bucketCounts": [str(c) for c in counts], "explicitBounds": FETCH_BOUNDS,
+             "attributes": [{"key": "outcome", "value": {"stringValue": "success"}}]}
+    return {"resourceMetrics": [{
+        "resource": resource(env, version),
+        "scopeMetrics": [{"scope": {"name": "synthetic-ci"}, "metrics": [{
+            "name": "clipremix.fetch.duration", "unit": "s",
+            "description": "SYNTHETIC: sent by observability/grafana/verify.py, not by the application",
+            "histogram": {"aggregationTemporality": 2, "dataPoints": [point]}}]}]}]}
+
+
+# version -> (observations added per 5 s tick, seconds each, should it alert)
+SYNTHETIC_FETCHES = {
+    "synthetic-ci": (2, 15.0, True),         # slow and many: p95 ~19 s, must alert for dev
+    "synthetic-fast": (2, 0.1, False),       # many but fast: must not alert
+    "synthetic-coldstart": (0, 60.0, False)  # one 60 s fetch (a cold start), then nothing: must not alert
+}
 
 
 def send_synthetic(collector, stop, versions):
@@ -208,9 +258,14 @@ def send_synthetic(collector, stop, versions):
     while not stop.is_set():
         n += 3
         for env in ("dev", "local"):
-            status, _ = http("POST", f"{collector}/v1/metrics", otlp_payload(env, versions, n, start))
-            if status != 200:
-                print(f"synthetic OTLP send -> {status}", flush=True)
+            sends = [otlp_payload(env, versions, n, start)]
+            for version, (per_tick, secs, _) in SYNTHETIC_FETCHES.items():
+                total = per_tick * (n // 3) if per_tick else 1
+                sends.append(histogram_payload(env, version, start, total, secs))
+            for payload in sends:
+                status, _ = http("POST", f"{collector}/v1/metrics", payload)
+                if status != 200:
+                    print(f"synthetic OTLP send -> {status}", flush=True)
         stop.wait(5)
 
 
@@ -220,55 +275,65 @@ def check_alert_fires(grafana, collector, version):
     thread = threading.Thread(target=send_synthetic, args=(collector, stop, synth_version), daemon=True)
     thread.start()
     started = time.time()
-    rule_title = raw["rule"]["title"]
-    seen_pending = None
-    firing = None
+    pending, firing = {}, {}
+    wrong = []  # alerts that must not exist
     try:
-        while time.time() - started < 14 * 60:
-            state = rule_state(grafana)
-            if state:
-                instances = [a for a in state.get("alerts", []) if a["labels"].get("environment") == "dev"]
-                if instances and seen_pending is None and instances[0]["state"].lower().startswith("pending"):
-                    seen_pending = {"after_seconds": round(time.time() - started), "alert": instances[0]}
-                    note(f"after {seen_pending['after_seconds']}s the rule instance for dev is Pending")
+        while time.time() - started < 18 * 60 and len(firing) < len(RULES):
+            for uid, title in RULES.items():
+                state = rule_state(grafana, uid)
+                for a in (state or {}).get("alerts", []):
+                    if a["labels"].get("environment") == "dev" and a["labels"].get("version") == synth_version \
+                            and a["state"].lower().startswith("pending") and uid not in pending:
+                        pending[uid] = {"after_seconds": round(time.time() - started), "alert": a}
+                        note(f"after {pending[uid]['after_seconds']}s the {title!r} instance for dev is Pending (synthetic)")
             status, active = http("GET", grafana + ALERTS_PATH)
             if status == 200:
-                mine = [a for a in active if a["labels"].get("alertname") == rule_title]
-                if any(a["labels"].get("environment") == "dev" for a in mine):
-                    firing = {"after_seconds": round(time.time() - started), "alerts": active}
-                    break
+                for a in active:
+                    lb = a["labels"]
+                    if lb.get("alertname") not in RULES.values():
+                        continue
+                    if lb.get("environment") == "local" or lb.get("version") in ("synthetic-fast", "synthetic-coldstart"):
+                        wrong.append(a)
+                    elif lb.get("environment") == "dev" and lb.get("version") == synth_version:
+                        uid = next(u for u, t in RULES.items() if t == lb["alertname"])
+                        if uid not in firing:
+                            firing[uid] = {"after_seconds": round(time.time() - started), "alerts": active}
+                            note(f"after {firing[uid]['after_seconds']}s {lb['alertname']!r} is firing for dev (synthetic data)")
             time.sleep(10)
     finally:
         stop.set()
         thread.join(timeout=10)
-    raw["synthetic_pending"] = seen_pending
-    raw["alerts_api_output"] = firing
-    if not firing:
-        fail("the alert did not fire within 14 minutes of synthetic failures")
-        return
-    note(f"after {firing['after_seconds']}s the alert is firing (synthetic data)")
-    alerts = [a for a in firing["alerts"] if a["labels"].get("alertname") == rule_title]
-    if any(a["labels"].get("environment") == "local" for a in alerts):
-        fail("the alert fired for environment local")
+    raw["synthetic_pending"] = pending
+    raw["synthetic_firing"] = {k: v["after_seconds"] for k, v in firing.items()}
+    raw["alerts_api_output"] = firing.get(RULE_UID)
+    raw["alerts_api_output_latency"] = firing.get(LATENCY_UID)
+    raw["alerts_that_must_not_fire"] = wrong
+    if wrong:
+        fail(f"alerts fired that must not: {[(a['labels'].get('alertname'), a['labels'].get('environment'), a['labels'].get('version')) for a in wrong]}")
     else:
-        note("no alert for environment local, although the same synthetic failures were sent for it")
-    alert = next(a for a in alerts if a["labels"].get("environment") == "dev")
-    labels, ann = alert["labels"], alert["annotations"]
-    expect = {"service": "clipremix", "environment": "dev", "version": synth_version, "owner": "qwopop"}
-    for k, v in expect.items():
-        if labels.get(k) != v:
-            fail(f"label {k}={labels.get(k)!r}, expected {v!r}")
-    for k in ("summary", "description", "dashboard_url", "runbook_url"):
-        if not ann.get(k):
-            fail(f"annotation {k} is missing")
-    want_url = f"{grafana}/d/clipremix-app/clipremix-application?var-environment=dev&var-version={synth_version}"
-    if ann.get("dashboard_url") != want_url:
-        fail(f"dashboard_url {ann.get('dashboard_url')!r}, expected {want_url!r}")
-    if alert.get("status", {}).get("state") != "active":
-        fail(f"status.state is {alert.get('status')}")
-    for k in ("startsAt", "endsAt", "fingerprint", "generatorURL", "receivers"):
-        if k not in alert:
-            fail(f"alert has no field {k}")
+        note("no alert for environment local, for synthetic-fast (many fast fetches) or synthetic-coldstart (one 60 s fetch), although all were sent")
+    for uid, title in RULES.items():
+        if uid not in firing:
+            fail(f"{title!r} did not fire within 18 minutes of synthetic data")
+            continue
+        alerts = [a for a in firing[uid]["alerts"] if a["labels"].get("alertname") == title]
+        alert = next(a for a in alerts if a["labels"].get("environment") == "dev" and a["labels"].get("version") == synth_version)
+        labels, ann = alert["labels"], alert["annotations"]
+        expect = {"service": "clipremix", "environment": "dev", "version": synth_version, "owner": "qwopop"}
+        for k, v in expect.items():
+            if labels.get(k) != v:
+                fail(f"{uid}: label {k}={labels.get(k)!r}, expected {v!r}")
+        for k in ("summary", "description", "dashboard_url", "runbook_url"):
+            if not ann.get(k):
+                fail(f"{uid}: annotation {k} is missing")
+        want_url = f"{grafana}/d/clipremix-app/clipremix-application?var-environment=dev&var-version={synth_version}"
+        if ann.get("dashboard_url") != want_url:
+            fail(f"{uid}: dashboard_url {ann.get('dashboard_url')!r}, expected {want_url!r}")
+        if alert.get("status", {}).get("state") != "active":
+            fail(f"{uid}: status.state is {alert.get('status')}")
+        for k in ("startsAt", "endsAt", "fingerprint", "generatorURL", "receivers"):
+            if k not in alert:
+                fail(f"{uid}: alert has no field {k}")
 
 
 def report(out, grafana):
@@ -276,10 +341,12 @@ def report(out, grafana):
     (out / "grafana-results.json").write_text(json.dumps(raw, indent=2, default=str))
     lines = ["# Grafana dashboard and alert, local stack", "", f"Grafana: `{grafana}`", ""]
     lines += [f"- {n}" for n in notes]
-    fired = raw.get("alerts_api_output")
-    if fired:
-        lines += ["", f"Output of `GET {ALERTS_PATH}` while firing (synthetic data):", "", "```json",
-                  json.dumps(fired["alerts"], indent=2), "```"]
+    for key, what in (("alerts_api_output", RULE_TITLE), ("alerts_api_output_latency", LATENCY_TITLE)):
+        fired = raw.get(key)
+        if fired:
+            mine = [a for a in fired["alerts"] if a["labels"].get("alertname") == what]
+            lines += ["", f"Output of `GET {ALERTS_PATH}` while {what!r} fires (synthetic data, only its alerts):", "", "```json",
+                      json.dumps(mine, indent=2), "```"]
     lines += ["", "Result: " + ("FAILED\n\n" + "\n".join(f"- {p}" for p in problems) if problems else "passed")]
     text = "\n".join(lines) + "\n"
     (out / "summary.md").write_text(text)

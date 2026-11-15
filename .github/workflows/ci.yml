@@ -60,6 +60,8 @@ jobs:
         run: uv run pytest -q
       - name: On-call engineer tests (fake agent, no network)
         run: uv run pytest ../on-call-engineer/tests -q
+      - name: Smoke gate and status recorder tests (mock gh, no network)
+        run: uv run pytest ../scripts/smoke/tests -q
       - name: Tests on PostgreSQL
         env:
           TEST_DATABASE_URL: postgresql://clipremix:clipremix@localhost:5432/clipremix
@@ -122,6 +124,14 @@ jobs:
         working-directory: e2e
         run: npx playwright test
 
+      # The same subset deploy-dev.yml runs against dev, proven here on a real stack.
+      - name: Smoke subset (as run against dev)
+        working-directory: e2e
+        env:
+          EXPECT_VERSION: ${{ github.sha }}
+          EXPECT_ENVIRONMENT: local
+        run: npm run smoke
+
       - name: App logs
         if: failure()
         run: docker compose logs --no-color app db
@@ -153,6 +163,7 @@ jobs:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     permissions:
       contents: read
+      statuses: write
     uses: ./.github/workflows/deploy-dev.yml
     with:
       image: ${{ needs.image.outputs.image }}

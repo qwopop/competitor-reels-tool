@@ -14,6 +14,8 @@
 #   dev   variable RENDER_APP_URL
 #   prod  variable RENDER_APP_URL, secret RENDER_DEPLOY_HOOK_URL, required reviewer
 # Missing settings skip the job with a notice.
+# `resolve` also refuses a tag without a successful `dev-smoke` commit status (#86), recorded
+# by the smoke job of deploy-dev.yml; rollback.yml has no such gate.
 name: Promote dev to prod
 
 on:
@@ -31,6 +33,9 @@ jobs:
     name: Read the version dev runs
     runs-on: ubuntu-latest
     environment: dev
+    permissions:
+      contents: read
+      statuses: read
     outputs:
       ready: ${{ steps.dev.outputs.ready }}
       tag: ${{ steps.dev.outputs.tag }}
@@ -101,6 +106,17 @@ jobs:
             echo
             echo "https://github.com/$GITHUB_REPOSITORY/commit/$short"
           } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Require a passing smoke run on dev for this version
+        if: steps.dev.outputs.ready == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          TAG: ${{ steps.dev.outputs.tag }}
+        run: |
+          SHA=$(git rev-parse "${TAG##*-}^{commit}")
+          export SHA
+          bash scripts/smoke/check_gate.sh
 
   promote:
     name: Deploy that version to prod (Render)

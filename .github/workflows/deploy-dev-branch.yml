@@ -42,6 +42,7 @@ jobs:
     needs: image
     permissions:
       contents: read
+      statuses: write
     uses: ./.github/workflows/deploy-dev.yml
     with:
       image: ${{ needs.image.outputs.image }}

@@ -9,6 +9,11 @@
 #   secret   RENDER_DEPLOY_HOOK_URL   the clipremix-dev service's Deploy Hook
 #   variable RENDER_APP_URL           the dev site's address
 # Without them the job is skipped with a notice (docs/deploy.md).
+#
+# After the deploy, job `smoke` runs the @smoke Playwright subset (e2e/tests/smoke.spec.ts)
+# against the dev site and records the result as the commit status `dev-smoke` on the image's
+# commit. promote.yml refuses an image without a successful dev-smoke (#86). The caller must
+# grant `statuses: write`. Tags that are not YYYYMMDD-HHMMSS-shortsha (the bug build) skip it.
 name: Deploy image to dev
 
 on:
@@ -31,6 +36,8 @@ jobs:
     name: Deploy to dev (Render)
     runs-on: ubuntu-latest
     environment: dev
+    outputs:
+      ready: ${{ steps.settings.outputs.ready }}
     concurrency:
       group: deploy-dev
       cancel-in-progress: false
@@ -88,3 +95,97 @@ jobs:
           done
           echo "::error::The new version did not become healthy on dev within 20 minutes. Check the deploy log in Render."
           exit 1
+
+  smoke:
+    name: Smoke tests on dev
+    needs: deploy
+    runs-on: ubuntu-latest
+    environment: dev
+    permissions:
+      contents: read
+      statuses: write
+    # Same group as the deploy: no new deploy replaces the version while it is being tested.
+    concurrency:
+      group: deploy-dev
+      cancel-in-progress: false
+    env:
+      APP_URL: ${{ vars.RENDER_APP_URL }}
+      DEPLOYED: ${{ needs.deploy.outputs.ready }}
+      TAG: ${{ inputs.tag }}
+      GH_TOKEN: ${{ github.token }}
+      REPO: ${{ github.repository }}
+    steps:
+      - name: Decide whether to run
+        id: gate
+        run: |
+          if [ "$DEPLOYED" != "true" ] || [ -z "$APP_URL" ]; then
+            echo "::notice::Smoke tests on dev skipped: the dev settings do not exist yet, so nothing was deployed (docs/deploy.md)."
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          elif ! echo "$TAG" | grep -Eq '^[0-9]{8}-[0-9]{6}-[0-9a-f]{7}$'; then
+            echo "::notice::Smoke tests skipped: $TAG is not a promotable image tag (for example the bug build), so no dev-smoke status is recorded."
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@v4
+        if: steps.gate.outputs.run == 'true'
+
+      - name: Mark the image as being smoke tested
+        id: sha
+        if: steps.gate.outputs.run == 'true'
+        run: |
+          full=$(gh api "repos/$REPO/commits/${TAG##*-}" --jq .sha)
+          echo "full=$full" >> "$GITHUB_OUTPUT"
+          SHA="$full" STATE=pending TARGET_URL="$GITHUB_SERVER_URL/$REPO/actions/runs/$GITHUB_RUN_ID" \
+            bash scripts/smoke/record_status.sh
+
+      - uses: actions/setup-node@v4
+        if: steps.gate.outputs.run == 'true'
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: e2e/package-lock.json
+
+      - name: Install Playwright
+        if: steps.gate.outputs.run == 'true'
+        working-directory: e2e
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+
+      - name: Smoke tests against dev
+        id: smoke
+        if: steps.gate.outputs.run == 'true'
+        working-directory: e2e
+        env:
+          BASE_URL: ${{ vars.RENDER_APP_URL }}
+          EXPECT_VERSION: ${{ inputs.tag }}
+          EXPECT_ENVIRONMENT: dev
+        # A free dev service may still be waking up: the first request can take a minute.
+        run: |
+          curl -fsS --max-time 120 -o /dev/null "${BASE_URL%/}/api/health" || true
+          npm run smoke
+
+      - name: Record the result
+        # Runs after a failure too. A cancelled run leaves the status pending, which promote refuses.
+        if: always() && steps.gate.outputs.run == 'true'
+        run: |
+          case "${{ steps.smoke.outcome }}" in
+            success) state=success ;;
+            failure) state=failure ;;
+            *) state=error ;;
+          esac
+          SHA="${{ steps.sha.outputs.full }}" STATE="$state" TARGET_URL="$GITHUB_SERVER_URL/$REPO/actions/runs/$GITHUB_RUN_ID" \
+            bash scripts/smoke/record_status.sh
+          echo "Smoke tests on dev for \`$TAG\`: $state (commit status \`dev-smoke\`)." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Playwright report
+        if: failure() && steps.gate.outputs.run == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-report
+          path: |
+            e2e/playwright-report
+            e2e/test-results
+          retention-days: 7
