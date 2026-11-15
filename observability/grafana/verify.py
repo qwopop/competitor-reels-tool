@@ -31,6 +31,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 ALERTS_PATH = "/api/alertmanager/grafana/api/v2/alerts?active=true&silenced=false&inhibited=false"
 RULE_UID = "clipremix-remix-failures"
+RULE_TITLE = "ClipRemix: repeated remix failures"
 EXPECTED_PANELS = {
     "Competitors added": "clipremix_competitors_added_total",
     "Videos fetched by outcome": "clipremix_videos_fetched_total",
@@ -148,7 +149,8 @@ def rule_state(grafana):
     groups = get(f"{grafana}/api/prometheus/grafana/api/v1/rules")["data"]["groups"]
     for g in groups:
         for r in g["rules"]:
-            if r.get("uid") == RULE_UID:
+            if r.get("uid") == RULE_UID or r.get("name") == RULE_TITLE:
+                raw["rules_api"] = groups
                 return r
     return None
 
@@ -162,7 +164,7 @@ def check_rule_loaded(grafana):
     raw["policy"] = policy
     if policy.get("receiver") != "grafana-default-email" or policy.get("routes"):
         fail(f"unexpected policy {policy}")
-    deadline = time.time() + 240
+    deadline = time.time() + 150
     state = None
     while time.time() < deadline:
         state = rule_state(grafana)
@@ -171,6 +173,7 @@ def check_rule_loaded(grafana):
         time.sleep(5)
     raw["rule_state_before"] = state
     if not state:
+        raw["rules_api"] = get(f"{grafana}/api/prometheus/grafana/api/v1/rules")
         fail("the rule is not listed by /api/prometheus/grafana/api/v1/rules")
         return
     note(f"rule loaded: health={state.get('health')}, state={state.get('state')}, lastError={state.get('lastError')!r}, for={rule.get('for')}")

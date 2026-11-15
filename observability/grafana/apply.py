@@ -72,7 +72,7 @@ def seconds(value):
 def covers(actual, wanted):
     """True when `actual` contains everything in `wanted` (Grafana adds defaults and ids)."""
     if isinstance(wanted, dict):
-        return isinstance(actual, dict) and all(k in actual and covers(actual[k], v) for k, v in wanted.items())
+        return isinstance(actual, dict) and all(covers(actual.get(k), v) if (k in actual or v) else True for k, v in wanted.items())
     if isinstance(wanted, list):
         if not wanted:
             return not actual
