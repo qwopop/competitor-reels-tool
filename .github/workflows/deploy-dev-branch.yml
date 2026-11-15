@@ -1,22 +1,30 @@
-# Deploy a branch to DEV by hand (never to prod). Used by docs/on-call-exercise.md to put the
-# throwaway branch bug/remix-intermittent-failure on dev.
+# Deploy a ref to DEV by hand, with the intermittent-failure bug applied (never to prod).
+# Used by docs/on-call-exercise.md. The bug is NOT a branch: it is the patch file
+# scripts/bugs/remix-intermittent-failure.patch, applied to the CI workspace only, so the
+# committed application code never contains it.
 #
-#   Actions -> "Deploy a branch to dev" -> Run workflow -> choose the branch
+#   Actions -> "Deploy the bug build to dev" -> Run workflow -> choose the ref
+#             ("Use workflow from"; the default is the branch you are looking at)
 #
 #   image (build-image.yml)  ->  deploy (deploy-dev.yml)
 #
-# Both stages are the same reusable workflows that ci.yml calls for main (#77): the image gets
-# the same tag format (YYYYMMDD-HHMMSS-shortsha) and is pushed to GHCR, then dev's Deploy
-# Hook is called with imgURL. There is no step here for the `prod` environment, and the
-# image is not promotable: promote.yml refuses a version whose commit is not on main.
-# To go back to main's version on dev, push to main (or re-run the last CI/CD run on main).
-name: Deploy a branch to dev
+# Both stages are the same reusable workflows that ci.yml calls for main (#77). The image tag
+# is `bugtest-YYYYMMDD-HHMMSS-shortsha`: the `bugtest-` prefix makes it fail the tag-format
+# check of promote.yml (^[0-9]{8}-[0-9]{6}-[0-9a-f]{7}$), so it can never be promoted. It is
+# pushed to GHCR and dev's Deploy Hook is called with imgURL. There is no step here for the
+# `prod` environment. Without the dev secrets/variable the deploy is skipped with ::notice::
+# (deploy-dev.yml). To go back to main's version on dev, push to main.
+name: Deploy the bug build to dev
 
 on:
   workflow_dispatch:
 
 permissions:
   contents: read
+
+concurrency:
+  group: deploy-bug-build-${{ github.sha }}
+  cancel-in-progress: false
 
 jobs:
   image:
@@ -25,6 +33,9 @@ jobs:
       contents: read
       packages: write
     uses: ./.github/workflows/build-image.yml
+    with:
+      tag_prefix: bugtest-
+      patch: scripts/bugs/remix-intermittent-failure.patch
 
   deploy:
     name: Deploy to dev (Render)
@@ -43,11 +54,9 @@ jobs:
     steps:
       - run: |
           {
-            echo "## Branch deployed to dev"
+            echo "## Bug build deployed to dev"
             echo
-            echo "Branch \`$GITHUB_REF_NAME\`, image \`${{ needs.image.outputs.image }}:${{ needs.image.outputs.tag }}\`."
+            echo "Ref \`$GITHUB_REF_NAME\` plus scripts/bugs/remix-intermittent-failure.patch, image \`${{ needs.image.outputs.image }}:${{ needs.image.outputs.tag }}\`."
             echo
-            if [ "$GITHUB_REF_NAME" != "main" ]; then
-              echo "This is not main. Promoting it to prod fails on purpose (its commit is not on main). Return dev to main by pushing to main."
-            fi
+            echo "The tag has the bugtest- prefix: promoting it to prod fails on purpose (not an image tag). Return dev to main by pushing to main."
           } >> "$GITHUB_STEP_SUMMARY"

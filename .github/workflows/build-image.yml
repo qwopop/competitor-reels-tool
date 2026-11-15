@@ -13,6 +13,17 @@ name: Build and push image
 
 on:
   workflow_call:
+    inputs:
+      tag_prefix:
+        description: Optional tag prefix for builds that must never be promoted (bugtest-). Empty for normal builds.
+        type: string
+        required: false
+        default: ""
+      patch:
+        description: Optional patch file (path in the repository) applied to the workspace before the build. Never committed.
+        type: string
+        required: false
+        default: ""
     outputs:
       tag:
         description: Image tag, YYYYMMDD-HHMMSS-shortsha (UTC time, first 7 characters of the commit)
@@ -35,12 +46,25 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Apply the patch to this workspace only (never committed)
+        if: inputs.patch != ''
+        env:
+          PATCH: ${{ inputs.patch }}
+        run: |
+          git apply --check "$PATCH"
+          git apply "$PATCH"
+          git status --short
+          echo "Applied $PATCH to the workspace; it is not committed anywhere." >> "$GITHUB_STEP_SUMMARY"
+
       - name: Compute the image name and tag (once)
         id: tag
+        env:
+          PREFIX: ${{ inputs.tag_prefix }}
         run: |
-          tag="$(date -u +%Y%m%d-%H%M%S)-${GITHUB_SHA::7}"
-          if ! echo "$tag" | grep -Eq '^[0-9]{8}-[0-9]{6}-[0-9a-f]{7}$'; then
-            echo "::error::The image tag \"$tag\" does not match YYYYMMDD-HHMMSS-shortsha."
+          tag="${PREFIX}$(date -u +%Y%m%d-%H%M%S)-${GITHUB_SHA::7}"
+          # With a prefix the tag is deliberately NOT YYYYMMDD-HHMMSS-shortsha, so promote.yml refuses it.
+          if ! echo "${tag#"$PREFIX"}" | grep -Eq '^[0-9]{8}-[0-9]{6}-[0-9a-f]{7}$'; then
+            echo "::error::The image tag \"$tag\" does not match [prefix]YYYYMMDD-HHMMSS-shortsha."
             exit 1
           fi
           owner="${GITHUB_REPOSITORY_OWNER,,}"
@@ -66,6 +90,7 @@ jobs:
           labels: |
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
+            clipremix.patch=${{ inputs.patch }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 

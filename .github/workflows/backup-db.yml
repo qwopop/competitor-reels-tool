@@ -1,0 +1,126 @@
+# Back up the prod Neon database (#84). Free tooling only: pg_dump on a runner,
+# an encrypted dump kept as a workflow artifact.
+#
+# Secrets (repository level; see docs/deploy.md, "Backups and restore"):
+#   NEON_PROD_DATABASE_URL     connection string of the Neon `prod` branch (a read-only role is enough)
+#   BACKUP_PASSPHRASE          passphrase the dump is encrypted with (keep a copy outside GitHub)
+#   NEON_SCRATCH_DATABASE_URL  optional: a scratch Neon branch; if set, every backup is also restored there and checked
+# Without the first two the backup job skips with a ::notice::. The repository is
+# public, so artifacts are readable by anyone: the dump is encrypted (AES-256, openssl)
+# before it is written to disk and is never printed.
+name: Back up prod database
+
+on:
+  schedule:
+    - cron: "17 3 * * *" # daily, 03:17 UTC
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - ".github/workflows/backup-db.yml"
+      - "scripts/backup/**"
+
+permissions:
+  contents: read
+
+env:
+  RETENTION_DAYS: 30 # keep each backup artifact this long (free public-repo maximum is 90)
+  PG_VERSION: 17 # pg_dump must be at least as new as the Neon server
+
+jobs:
+  rehearsal:
+    name: Rehearsal on a local PostgreSQL (backup, restore, compare)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: clipremix
+          POSTGRES_PASSWORD: clipremix
+          POSTGRES_DB: postgres
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U clipremix" --health-interval 5s
+          --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - name: Install PostgreSQL client ${{ env.PG_VERSION }}
+        run: |
+          sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
+          sudo apt-get install -y "postgresql-client-${PG_VERSION}"
+          pg_dump --version
+      - name: Backend dependencies
+        run: cd backend && uv sync
+      - name: Seed, back up, restore into a fresh database, compare row counts
+        env:
+          # Throwaway local service, not a secret.
+          ADMIN_URL: postgresql://clipremix:clipremix@localhost:5432/postgres
+        run: scripts/backup/rehearse.sh "$ADMIN_URL"
+
+  backup:
+    name: Back up prod
+    runs-on: ubuntu-latest
+    # Rehearsal PRs must not touch prod.
+    if: github.event_name != 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check secrets
+        id: gate
+        env:
+          URL: ${{ secrets.NEON_PROD_DATABASE_URL }}
+          PASS: ${{ secrets.BACKUP_PASSPHRASE }}
+          SCRATCH: ${{ secrets.NEON_SCRATCH_DATABASE_URL }}
+        run: |
+          if [ -z "$URL" ] || [ -z "$PASS" ]; then
+            echo "::notice::Backup skipped: set the secrets NEON_PROD_DATABASE_URL and BACKUP_PASSPHRASE (docs/deploy.md, Backups and restore)."
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          fi
+          if [ -z "$SCRATCH" ]; then
+            echo "scratch=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "scratch=true" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Install PostgreSQL client ${{ env.PG_VERSION }}
+        if: steps.gate.outputs.run == 'true'
+        run: |
+          sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
+          sudo apt-get install -y "postgresql-client-${PG_VERSION}"
+      - name: Dump and encrypt (nothing is printed)
+        if: steps.gate.outputs.run == 'true'
+        env:
+          SOURCE_DATABASE_URL: ${{ secrets.NEON_PROD_DATABASE_URL }}
+          BACKUP_PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
+        run: |
+          mkdir -p out
+          scripts/backup/backup.sh "out/clipremix-prod-$(date -u +%Y%m%d-%H%M%S).dump.enc"
+      - name: Check the dump can be read back
+        if: steps.gate.outputs.run == 'true'
+        env:
+          BACKUP_PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
+        run: |
+          for f in out/*.enc; do
+            openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -pass env:BACKUP_PASSPHRASE -in "$f" | pg_restore --list > /dev/null
+          done
+          echo "dump is a valid, decryptable archive"
+      - name: Restore into the scratch branch and compare row counts
+        if: steps.gate.outputs.run == 'true' && steps.gate.outputs.scratch == 'true'
+        env:
+          SOURCE_DATABASE_URL: ${{ secrets.NEON_PROD_DATABASE_URL }}
+          TARGET_DATABASE_URL: ${{ secrets.NEON_SCRATCH_DATABASE_URL }}
+          BACKUP_PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
+        run: |
+          RESTORE_CLEAN=1 scripts/backup/restore.sh out/*.enc
+          scripts/backup/compare.sh "$SOURCE_DATABASE_URL" "$TARGET_DATABASE_URL"
+      - name: Scratch restore skipped
+        if: steps.gate.outputs.run == 'true' && steps.gate.outputs.scratch == 'false'
+        run: echo "::notice::Scratch restore check skipped: set NEON_SCRATCH_DATABASE_URL to a scratch Neon branch to verify every backup."
+      - name: Upload the encrypted dump
+        if: steps.gate.outputs.run == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: clipremix-prod-backup
+          path: out/*.enc
+          retention-days: 30 # keep equal to RETENTION_DAYS above (expressions are not allowed here)
+          if-no-files-found: error

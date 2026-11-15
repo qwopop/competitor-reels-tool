@@ -19,7 +19,7 @@ on:
         type: string
         required: true
       tag:
-        description: Image tag, YYYYMMDD-HHMMSS-shortsha
+        description: Image tag, YYYYMMDD-HHMMSS-shortsha (bugtest- prefix for the bug build)
         type: string
         required: true
 
