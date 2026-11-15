@@ -1,9 +1,11 @@
 # CI/CD: test everything on every push and pull request; deploy main to dev.
 #
 #   backend ─┐
-#            ├─> stack (compose: integration + end-to-end) ─> deploy-dev (main only)
-#   frontend ┘
+#            ├─> stack (compose: integration + end-to-end) ─> image ─> deploy-dev
+#   frontend ┘                                              (main only: build once, push to GHCR, deploy that image)
 #
+# `image` (build-image.yml) pushes ghcr.io/<owner>/clipremix:YYYYMMDD-HHMMSS-shortsha
+# with the GITHUB_TOKEN; no secret. Render pulls that image, it never builds.
 # deploy-dev uses the GitHub Environment `dev`, which needs (Settings → Environments → dev):
 #   secret   RENDER_DEPLOY_HOOK_URL   the clipremix-dev service's Deploy Hook (Render → Settings)
 #   variable RENDER_APP_URL           the dev site's address, e.g. https://clipremix-dev.onrender.com
@@ -128,9 +130,18 @@ jobs:
         if: always()
         run: docker compose down -v
 
+  image:
+    name: Build and push the image (GHCR)
+    needs: stack
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    permissions:
+      contents: read
+      packages: write
+    uses: ./.github/workflows/build-image.yml
+
   deploy-dev:
     name: Deploy to dev (Render)
-    needs: stack
+    needs: image
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     environment: dev
@@ -140,6 +151,8 @@ jobs:
     env:
       DEPLOY_HOOK: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
       APP_URL: ${{ vars.RENDER_APP_URL }}
+      IMAGE: ${{ needs.image.outputs.image }}
+      TAG: ${{ needs.image.outputs.tag }}
     steps:
       - name: Check the deploy settings
         id: settings
@@ -157,13 +170,14 @@ jobs:
             echo "ready=true" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Trigger the deploy of this commit
+      - name: Trigger the deploy of this image
         if: steps.settings.outputs.ready == 'true'
         run: |
-          # ref=<sha> makes Render build exactly the pushed commit. The URL is never printed.
+          # imgURL makes Render pull exactly this image. The URL is never printed.
+          img=$(printf '%s' "$IMAGE:$TAG" | jq -sRr @uri)
           case "$DEPLOY_HOOK" in
-            *\?*) url="${DEPLOY_HOOK}&ref=${GITHUB_SHA}" ;;
-            *)    url="${DEPLOY_HOOK}?ref=${GITHUB_SHA}" ;;
+            *\?*) url="${DEPLOY_HOOK}&imgURL=${img}" ;;
+            *)    url="${DEPLOY_HOOK}?imgURL=${img}" ;;
           esac
           # curl's own error output is discarded because it can contain the URL.
           curl -fsS -o /dev/null -X POST "$url" 2>/dev/null \
@@ -172,15 +186,16 @@ jobs:
       - name: Wait until the new version is live and healthy
         if: steps.settings.outputs.ready == 'true'
         run: |
-          # /api/health must report this commit, environment dev and a working database.
-          # Render builds the image first, so allow up to 20 minutes.
+          # /api/health must report this image tag, environment dev and a working database.
+          # Render pulls the image and may wake from sleep, so allow up to 20 minutes.
           for attempt in $(seq 1 80); do
             body=$(curl -fsS --max-time 10 "${APP_URL%/}/api/health" || true)
             echo "[$attempt] $body"
-            if echo "$body" | grep -q "\"version\":\"$GITHUB_SHA\"" \
+            if echo "$body" | grep -q "\"version\":\"$TAG\"" \
               && echo "$body" | grep -q '"environment":"dev"' \
               && echo "$body" | grep -q '"database":"ok"'; then
-              echo "Deployed $GITHUB_SHA to dev and healthy."
+              echo "Deployed $IMAGE:$TAG to dev and healthy."
+              echo "Deployed \`$IMAGE:$TAG\` to dev; it reports that version and a working database." >> "$GITHUB_STEP_SUMMARY"
               exit 0
             fi
             sleep 15

@@ -1,0 +1,95 @@
+# Build stage, reusable: build the Docker image once and push it to GHCR.
+#
+#   ci.yml (job `image`)  ->  this workflow  ->  ghcr.io/<owner>/clipremix:YYYYMMDD-HHMMSS-shortsha
+#
+# Called with `uses: ./.github/workflows/build-image.yml` by ci.yml, and meant to be
+# reused by other workflows (#88). The caller decides when it runs and must grant
+# `packages: write` to the calling job; login uses the GITHUB_TOKEN, no other secret.
+# Only the immutable tag is pushed, never `latest`.
+#
+# A re-run of a failed job computes a new timestamp, so it pushes a new tag and
+# never collides with a tag that an earlier attempt already pushed.
+name: Build and push image
+
+on:
+  workflow_call:
+    outputs:
+      tag:
+        description: Image tag, YYYYMMDD-HHMMSS-shortsha (UTC time, first 7 characters of the commit)
+        value: ${{ jobs.build.outputs.tag }}
+      image:
+        description: Image name without tag, ghcr.io/<owner lowercase>/clipremix
+        value: ${{ jobs.build.outputs.image }}
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build:
+    name: Build and push the image (GHCR)
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
+      image: ${{ steps.tag.outputs.image }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compute the image name and tag (once)
+        id: tag
+        run: |
+          tag="$(date -u +%Y%m%d-%H%M%S)-${GITHUB_SHA::7}"
+          if ! echo "$tag" | grep -Eq '^[0-9]{8}-[0-9]{6}-[0-9a-f]{7}$'; then
+            echo "::error::The image tag \"$tag\" does not match YYYYMMDD-HHMMSS-shortsha."
+            exit 1
+          fi
+          owner="${GITHUB_REPOSITORY_OWNER,,}"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "image=ghcr.io/$owner/clipremix" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.tag.outputs.image }}:${{ steps.tag.outputs.tag }}
+          build-args: |
+            APP_VERSION=${{ steps.tag.outputs.tag }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Summary and public-pull check
+        env:
+          IMAGE: ${{ steps.tag.outputs.image }}
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          {
+            echo "## Image pushed"
+            echo
+            echo "\`$IMAGE:$TAG\`"
+            echo
+            echo "Commit \`$GITHUB_SHA\`. Pull it with \`docker pull $IMAGE:$TAG\`."
+          } >> "$GITHUB_STEP_SUMMARY"
+          # Render pulls without credentials, so the package must be public (docs/deploy.md).
+          repo="${IMAGE#ghcr.io/}"
+          token=$(curl -fsS "https://ghcr.io/token?scope=repository:$repo:pull" 2>/dev/null | jq -r '.token // empty' || true)
+          code=$(curl -s -o /dev/null -w '%{http_code}' -I \
+            -H "Authorization: Bearer $token" \
+            -H 'Accept: application/vnd.oci.image.index.v1+json, application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json' \
+            "https://ghcr.io/v2/$repo/manifests/$TAG" || true)
+          if [ "$code" = "200" ]; then
+            echo "Anonymous pull works for $IMAGE:$TAG."
+          else
+            echo "::warning::$IMAGE:$TAG cannot be pulled without logging in (HTTP $code). Make the GHCR package Public so Render can pull it (docs/deploy.md)."
+          fi
