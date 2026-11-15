@@ -42,6 +42,7 @@ def test_health_reports_the_database_is_reachable(http):
     assert res.status_code == 200
     assert res.json()["status"] == "ok"
     assert res.json()["database"] == "ok"
+    assert res.json()["environment"] == "local"
 
 
 def test_unknown_api_paths_are_json_404s(http):

@@ -2,13 +2,12 @@
 
 from collections.abc import Iterator
 
-import os
-
 from fastapi import APIRouter, Body, Depends, HTTPException, Request, Response, status
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app import store
+from app.config import app_environment, app_version
 from app.youtube import YouTubeError, parse_channel_input
 from app.schemas import (
     AddCompetitorRequest,
@@ -37,15 +36,14 @@ def get_db(request: Request) -> Iterator[Session]:
 def health(db: Session = Depends(get_db)):
     """For load balancers, Docker and CI: is the app up, and can it reach its database?
 
-    `version` is the deployed git commit (Render sets RENDER_GIT_COMMIT; the
-    Dockerfile can set APP_VERSION), so CI can tell when a new deploy is live.
+    `version` is the deployed git commit (see app.config.app_version) so CI can
+    tell when a new deploy is live; `environment` is APP_ENV (dev, prod or local).
     """
     try:
         db.execute(text("SELECT 1"))
     except Exception as err:  # any database failure means "not healthy"
         raise HTTPException(status_code=503, detail="Database unavailable.") from err
-    version = os.getenv("RENDER_GIT_COMMIT") or os.getenv("APP_VERSION") or "dev"
-    return {"status": "ok", "database": "ok", "version": version}
+    return {"status": "ok", "database": "ok", "version": app_version(), "environment": app_environment()}
 
 
 def not_found(message: str) -> HTTPException:

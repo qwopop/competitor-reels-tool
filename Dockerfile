@@ -38,8 +38,9 @@ COPY --from=frontend /frontend/dist ./static
 ENV STATIC_DIR=/app/static
 RUN mkdir -p /app/data
 
-# The commit being built, reported by /api/health (CI passes it in).
-ARG APP_VERSION=dev
+# The commit being built, reported by /api/health (CI passes it in). Empty by
+# default so that RENDER_GIT_COMMIT is used on Render and `dev` otherwise.
+ARG APP_VERSION=
 ENV APP_VERSION=${APP_VERSION}
 
 EXPOSE 8000

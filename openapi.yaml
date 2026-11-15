@@ -10,6 +10,27 @@ servers:
     description: Local development server
 
 paths:
+  /api/health:
+    get:
+      operationId: getHealth
+      summary: Is the app up, and can it reach its database?
+      description: >
+        Used by Docker, Render and CI. `version` is the deployed git commit
+        (APP_VERSION, then RENDER_GIT_COMMIT, then `dev`). `environment` is
+        APP_ENV: `dev`, `prod` or `local`.
+      responses:
+        "200":
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Health"
+        "503":
+          description: The database is unreachable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
   /api/competitors:
     get:
       operationId: listCompetitors
@@ -359,6 +380,25 @@ components:
             $ref: "#/components/schemas/ErrorResponse"
 
   schemas:
+    Health:
+      type: object
+      required: [status, database, version, environment]
+      properties:
+        status:
+          type: string
+          example: ok
+        database:
+          type: string
+          example: ok
+        version:
+          type: string
+          description: Deployed git commit, or `dev` when unknown.
+          example: 4d32956
+        environment:
+          type: string
+          description: The APP_ENV the app runs as.
+          enum: [dev, prod, local]
+          example: dev
     Competitor:
       type: object
       required: [id, channelId, username, channelUrl, displayName, avatarUrl, addedAt]
