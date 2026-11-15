@@ -149,6 +149,8 @@ jobs:
           done
           echo "Prod health: ${body:-no answer}"
           current=$(echo "$body" | jq -r '.version // empty' 2>/dev/null || true)
+          # Read by rollback.yml (#83) from this job's log; keep the wording.
+          echo "Previous prod version: ${current:-unknown}"
           {
             echo "### Prod before this promotion"
             echo

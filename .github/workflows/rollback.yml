@@ -1,0 +1,191 @@
+# Manual rollback: put prod back on a previous image tag (#83).
+#
+#   resolve (no environment)  ->  rollback (environment prod, needs approval)
+#
+# Start it from Actions -> "Roll back prod" -> Run workflow, on branch main.
+# Without `image_tag` it rolls back to the version prod ran before the last
+# promotion that deployed something: promote.yml prints "Previous prod version: <tag>"
+# in its log and run summary, and `resolve` reads it from the log of the newest
+# successful promote run whose deploy step ran. If that cannot be found (no promotion
+# yet, logs expired after 90 days, version "unknown"), the run fails and asks for an
+# explicit `image_tag`. An explicit tag always wins.
+# `resolve` checks the tag format (YYYYMMDD-HHMMSS-shortsha) and that
+# ghcr.io/<owner>/clipremix:<tag> exists. `rollback` waits for the required reviewer
+# of the `prod` GitHub Environment (same gate as promote.yml), calls prod's Render
+# Deploy Hook with imgURL=<image:tag> and polls prod's /api/health until it reports
+# that tag. Nothing is built. Database changes are not rolled back (docs/deploy.md).
+#
+# Settings (Settings -> Environments), same names as promote.yml and ci.yml:
+#   prod  variable RENDER_APP_URL, secret RENDER_DEPLOY_HOOK_URL, required reviewer
+# Missing settings skip the rollback job with a notice.
+name: Roll back prod
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "Image tag to restore (YYYYMMDD-HHMMSS-shortsha). Empty: the version prod ran before the last promotion."
+        required: false
+        default: ""
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-prod
+  cancel-in-progress: false
+
+jobs:
+  resolve:
+    name: Choose and check the version to restore
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.pick.outputs.tag }}
+      image: ${{ steps.pick.outputs.image }}
+    permissions:
+      contents: read
+      actions: read
+    env:
+      INPUT_TAG: ${{ inputs.image_tag }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Only run from main
+        run: |
+          if [ "$GITHUB_REF" != "refs/heads/main" ]; then
+            echo "::error::Rollback only runs from main (this run is on $GITHUB_REF). Choose branch main when starting the workflow."
+            exit 1
+          fi
+
+      - name: Pick the tag
+        id: pick
+        run: |
+          tag_re='^[0-9]{8}-[0-9]{6}-[0-9a-f]{7}$'
+          tag=$(printf '%s' "$INPUT_TAG" | tr -d '[:space:]')
+          source="the image_tag input"
+          if [ -z "$tag" ]; then
+            source="the last promotion"
+            # Newest successful promote runs first; take the first whose deploy step ran.
+            runs=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/promote.yml/runs?status=success&per_page=20" \
+              --jq '.workflow_runs[].id' 2>/dev/null || true)
+            for run in $runs; do
+              job=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$run/jobs" \
+                --jq '.jobs[] | select(.steps[]? | select(.name == "Trigger the deploy of this image" and .conclusion == "success")) | .id' \
+                2>/dev/null | head -n 1 || true)
+              [ -z "$job" ] && continue
+              log=$(gh api "repos/$GITHUB_REPOSITORY/actions/jobs/$job/logs" 2>/dev/null || true)
+              found=$(printf '%s\n' "$log" | tr -d '\r' | sed -n 's/.*Previous prod version: \([^ ]*\).*/\1/p' | head -n 1)
+              echo "Promote run $run: previous prod version \"${found:-not recorded}\"."
+              tag="$found"
+              break
+            done
+            if [ -z "$tag" ]; then
+              echo "::error::No previous prod version is recorded (no successful promotion that deployed, or its log is gone). Run again and set the image_tag input; find tags under Packages -> clipremix (docs/deploy.md, Roll back)."
+              exit 1
+            fi
+          fi
+          if ! printf '%s' "$tag" | grep -Eq "$tag_re"; then
+            echo "::error::\"$tag\" (from $source) is not an image tag (YYYYMMDD-HHMMSS-shortsha, for example 20261115-153000-a1b2c3d). Set the image_tag input."
+            exit 1
+          fi
+          image="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/clipremix"
+          if ! docker buildx imagetools inspect "$image:$tag" >/dev/null 2>&1; then
+            echo "::error::The image $image:$tag (from $source) does not exist or cannot be read. It may have been cleaned up (#85) or the package is not Public (docs/deploy.md)."
+            exit 1
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "image=$image" >> "$GITHUB_OUTPUT"
+          {
+            echo "## Roll back production"
+            echo
+            echo "Restores image \`$image:$tag\` (from $source). Approving the next job deploys it to prod."
+            echo
+            echo "Database changes made since that version are not undone."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  rollback:
+    name: Deploy that version to prod (Render)
+    needs: resolve
+    runs-on: ubuntu-latest
+    environment: prod
+    env:
+      DEPLOY_HOOK: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
+      PROD_URL: ${{ vars.RENDER_APP_URL }}
+      TAG: ${{ needs.resolve.outputs.tag }}
+      IMAGE: ${{ needs.resolve.outputs.image }}
+    steps:
+      - name: Only run from main
+        run: |
+          if [ "$GITHUB_REF" != "refs/heads/main" ]; then
+            echo "::error::Rollback only runs from main (this run is on $GITHUB_REF)."
+            exit 1
+          fi
+
+      - name: Check the deploy settings
+        id: settings
+        run: |
+          missing=""
+          [ -z "$DEPLOY_HOOK" ] && missing="the RENDER_DEPLOY_HOOK_URL secret"
+          if [ -z "$PROD_URL" ]; then
+            [ -n "$missing" ] && missing="$missing and "
+            missing="${missing}the RENDER_APP_URL variable"
+          fi
+          if [ -n "$missing" ]; then
+            echo "::notice::Rollback skipped: set $missing in the prod environment (docs/deploy.md)."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Check what prod runs now
+        id: current
+        if: steps.settings.outputs.ready == 'true'
+        run: |
+          body=""
+          for attempt in 1 2 3; do
+            body=$(curl -fsS --max-time 90 "${PROD_URL%/}/api/health" 2>/dev/null) && break
+            body=""
+            sleep 10
+          done
+          echo "Prod health: ${body:-no answer}"
+          current=$(echo "$body" | jq -r '.version // empty' 2>/dev/null || true)
+          echo "Prod ran version \`${current:-unknown}\` before this rollback. Restoring \`$TAG\`." >> "$GITHUB_STEP_SUMMARY"
+          if [ "$current" = "$TAG" ]; then
+            echo "::notice::Prod already runs $TAG. Nothing to deploy."
+            echo "already=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "already=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Trigger the deploy of this image
+        if: steps.settings.outputs.ready == 'true' && steps.current.outputs.already != 'true'
+        run: |
+          # imgURL makes Render pull exactly that image. The URL is never printed.
+          img=$(printf '%s' "$IMAGE:$TAG" | jq -sRr @uri)
+          case "$DEPLOY_HOOK" in
+            *\?*) url="${DEPLOY_HOOK}&imgURL=${img}" ;;
+            *)    url="${DEPLOY_HOOK}?imgURL=${img}" ;;
+          esac
+          # curl's own error output is discarded because it can contain the URL.
+          curl -fsS -o /dev/null -X POST "$url" 2>/dev/null \
+            || { echo "::error::The deploy hook call failed (check the RENDER_DEPLOY_HOOK_URL secret of the prod environment)."; exit 1; }
+
+      - name: Wait until the old version is live and healthy
+        if: steps.settings.outputs.ready == 'true' && steps.current.outputs.already != 'true'
+        run: |
+          # /api/health must report this image tag, environment prod and a working database.
+          # Render pulls the image and may wake from sleep, so allow up to 20 minutes.
+          for attempt in $(seq 1 80); do
+            body=$(curl -fsS --max-time 10 "${PROD_URL%/}/api/health" || true)
+            echo "[$attempt] $body"
+            if echo "$body" | grep -q "\"version\":\"$TAG\"" \
+              && echo "$body" | grep -q '"environment":"prod"' \
+              && echo "$body" | grep -q '"database":"ok"'; then
+              echo "Rolled prod back to $IMAGE:$TAG and healthy."
+              echo "Rolled prod back to \`$IMAGE:$TAG\`; it reports that version and a working database." >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+            sleep 15
+          done
+          echo "::error::The restored version did not become healthy on prod within 20 minutes. Check the deploy log in Render."
+          exit 1

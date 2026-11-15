@@ -143,10 +143,38 @@ you tested on dev is exactly what reaches prod. Nothing is rebuilt.
 1. **Actions → Promote dev to prod → Run workflow**, branch **`main`** (any other branch is refused).
 2. Job `resolve` reads `<dev RENDER_APP_URL>/api/health` and writes the version to the run summary. It fails with an error if dev is unreachable, if dev's `environment` is not `dev`, if the version is not an image tag (for example `dev`, when no tag is known), if `ghcr.io/<owner>/clipremix:<tag>` does not exist (checked with `docker buildx imagetools inspect`), or if the tag's short sha is not a commit on `main` (for example an image deployed to dev by hand).
 3. Job `promote` then waits for the reviewer. The reviewer opens the run, reads the version in the summary and clicks **Review deployments → Approve**.
-4. If prod already reports that version, the job ends with a notice and does not deploy. Otherwise it writes prod's current version to the summary (needed to roll back later, #83), calls prod's deploy hook with `imgURL=<image:tag>` and polls `<prod RENDER_APP_URL>/api/health` for up to 20 minutes until `version` is the tag, `environment` is `prod` and `database` is `ok`.
+4. If prod already reports that version, the job ends with a notice and does not deploy. Otherwise it writes prod's current version to the summary and the log (`Previous prod version: <tag>`, used by the rollback, section 7a), calls prod's deploy hook with `imgURL=<image:tag>` and polls `<prod RENDER_APP_URL>/api/health` for up to 20 minutes until `version` is the tag, `environment` is `prod` and `database` is `ok`.
 
 If the settings are missing, the jobs end with a notice that names them instead of failing.
 Runs queue in the concurrency group `deploy-prod` and never cancel one another.
+
+## 7a. Roll back prod
+
+If a promoted release misbehaves, restore the previous image with the manual workflow
+`.github/workflows/rollback.yml` ("Roll back prod"). It uses the same `prod`
+environment, secret `RENDER_DEPLOY_HOOK_URL`, variable `RENDER_APP_URL`, required
+reviewer and `deploy-prod` concurrency group as the promotion, so there is nothing new
+to set up. Nothing is rebuilt: Render pulls the old image from GHCR.
+
+**Steps:**
+
+1. **Actions → Roll back prod → Run workflow**, branch **`main`** (any other branch is refused).
+2. Leave `image_tag` empty to restore the version prod ran before the last promotion, or enter a tag (`YYYYMMDD-HHMMSS-shortsha`, for example `20261110-100000-aaaaaaa`) to go back further. Tags are listed under **Packages → clipremix**; an older promote run's summary also shows "Prod ran version ...".
+3. Job `resolve` picks the tag, checks its format and that `ghcr.io/<owner>/clipremix:<tag>` exists (`docker buildx imagetools inspect`), and writes the tag to the run summary. It fails if the tag is malformed or missing from GHCR.
+4. Job `rollback` waits for the reviewer, who reads the tag in the summary and clicks **Review deployments → Approve**.
+5. It calls prod's deploy hook with `imgURL=<image:tag>` and polls `<prod RENDER_APP_URL>/api/health` for up to 20 minutes until `version` is the tag, `environment` is `prod` and `database` is `ok`. If prod already runs the tag, it ends with a notice and deploys nothing.
+
+**Where the default comes from:** `promote.yml` prints `Previous prod version: <tag>` in the log of its "Check what prod runs now" step. `resolve` reads it from the newest successful promote run in which the deploy step actually ran (a "prod already runs it" promotion is skipped). GitHub keeps logs 90 days. If no such run exists, or prod's version was unknown, the run fails with a message asking for `image_tag`; an explicit input always wins.
+
+**Missing settings:** if the prod secret or variable is missing, the `rollback` job ends with a `::notice::` naming them. `resolve` runs first without the environment, so it still validates the tag (and fails if there is nothing to roll back to).
+
+**What it does not do:**
+
+- It does not undo database changes. Prod's database keeps whatever the newer version wrote or migrated (`upgrade_schema` only adds columns, so the older version normally still runs, but data from the newer version stays). Restore a backup separately if needed.
+- It does not change dev, `main` or the promote record. Dev keeps running the newer image, so promoting again would redeploy the bad release: fix it or deploy a fixed image to dev first.
+- The old image must still exist: the GHCR clean-up (section on clean-up, `keep`) deletes old tags, so raise `keep` for a longer rollback window.
+
+Tested without Render: `scripts/rollback/test_rollback.sh` runs every `run` block of the workflow against mocks (gh, docker, curl). The real deploy needs the owner's prod service and has not been run.
 
 ## 8. Check it works
 
