@@ -31,6 +31,10 @@ def list_competitors(db: Session) -> list[CompetitorRow]:
     return list(db.scalars(stmt))
 
 
+def count_competitors(db: Session) -> int:
+    return db.scalar(select(func.count()).select_from(CompetitorRow)) or 0
+
+
 def get_competitor(db: Session, competitor_id: str) -> CompetitorRow | None:
     return db.get(CompetitorRow, competitor_id)
 

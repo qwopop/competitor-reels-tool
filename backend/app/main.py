@@ -14,6 +14,7 @@ from app.youtube import YouTubeSource
 from app.models import Base, make_engine, upgrade_schema
 from app.frontend import mount_frontend
 from app.routers import router
+from app import store, telemetry as otel
 
 # A new file name: the YouTube tables differ from the earlier Instagram ones.
 DEFAULT_DATABASE_URL = "sqlite:///./data/clipremix.db"
@@ -28,11 +29,16 @@ def source_from_env():
     return SampleSource() if os.getenv("VIDEO_SOURCE", "youtube").strip().lower() == "sample" else YouTubeSource()
 
 
-def create_app(database_url: str | None = None, video_source=_FROM_ENV) -> FastAPI:
-    """`video_source` looks channels up and fetches their videos; by default it comes from VIDEO_SOURCE."""
+def create_app(database_url: str | None = None, video_source=_FROM_ENV, telemetry=_FROM_ENV) -> FastAPI:
+    """`video_source` looks channels up and fetches their videos; by default it comes from VIDEO_SOURCE.
+
+    `telemetry` is an app.telemetry.Telemetry; by default it comes from the OTEL_EXPORTER_OTLP_*
+    variables and is disabled (nothing exported) when OTEL_EXPORTER_OTLP_ENDPOINT is unset.
+    """
     url = database_url or os.getenv("DATABASE_URL", DEFAULT_DATABASE_URL)
     engine = make_engine(url)
     session_factory = sessionmaker(bind=engine, expire_on_commit=False)
+    telemetry = otel.from_env() if telemetry is _FROM_ENV else telemetry
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -42,12 +48,14 @@ def create_app(database_url: str | None = None, video_source=_FROM_ENV) -> FastA
         Base.metadata.create_all(engine)
         upgrade_schema(engine)
         yield
+        telemetry.shutdown()  # flush pending telemetry (Render sends SIGTERM when a free service sleeps)
         engine.dispose()
 
     # Comma-separated list. Set CORS_ORIGINS to the deployed frontend's URL.
     origins = [o.strip() for o in os.getenv("CORS_ORIGINS", DEV_CORS_ORIGINS).split(",") if o.strip()]
     app = FastAPI(title="Competitor Videos API", version="0.1.0", lifespan=lifespan)
     app.state.session_factory = session_factory
+    app.state.telemetry = telemetry
     app.state.video_source = source_from_env() if video_source is _FROM_ENV else video_source
     # The Vite dev server proxies /api, so CORS only matters if you call the API directly.
     app.add_middleware(
@@ -57,6 +65,7 @@ def create_app(database_url: str | None = None, video_source=_FROM_ENV) -> FastA
         allow_headers=["*"],
     )
     app.include_router(router)
+    telemetry.instrument(app, engine, session_factory, store.count_competitors)
     # Production: the same server also serves the built frontend (see Dockerfile).
     static_dir = os.getenv("STATIC_DIR", "").strip()
     if static_dir:
