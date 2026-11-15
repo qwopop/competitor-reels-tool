@@ -28,8 +28,8 @@ cp "$root/scripts/bugs/test_patched_remix.py" "$work/backend/tests/test_patched_
 export UV_PROJECT_ENVIRONMENT="${UV_PROJECT_ENVIRONMENT:-$root/backend/.venv}"
 cd "$work/backend"
 
-echo "== 1. existing suite on the patched copy (must pass) =="
-uv run --frozen pytest -q --ignore=tests/test_patched_remix.py
+echo "== 1. existing suite on the patched copy (must pass; test_bug_patch.py is skipped because it asserts the tree is unpatched) =="
+uv run --frozen pytest -q --ignore=tests/test_patched_remix.py --ignore=tests/test_bug_patch.py
 echo "== 2. the bug test on the patched copy (500 for acronym titles, counter rises) =="
 BUG_PATCH_APPLIED=1 uv run --frozen pytest -q tests/test_patched_remix.py
 echo "== 3. the same bug test on the clean code (must detect that the patch is absent) =="

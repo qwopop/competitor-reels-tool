@@ -33,7 +33,9 @@ jobs:
         working-directory: backend
         run: uv sync --frozen
       - name: Apply the patch to a scratch copy and run both test sets
-        run: scripts/bugs/apply-and-test.sh 2>&1 | tee bug-patch.log | grep -E "^(==|OK|[0-9]+ (passed|failed))|passed|FAILED|failed"
+        run: |
+          set -o pipefail
+          scripts/bugs/apply-and-test.sh 2>&1 | tee bug-patch.log | grep -E "^(==|OK)|passed|FAILED|failed|Error"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
