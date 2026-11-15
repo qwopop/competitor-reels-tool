@@ -135,7 +135,7 @@ const hasRows = (frames) => frames.some((f) => values(f).some((col) => col && co
     const q = `{ resource.service.name = "clipremix" && resource.deployment.environment = "${ENV}" && resource.service.version = "${VERSION}" }`;
     const url = explorePane("tempo", "tempo", { queryType: "traceql", query: q, limit: 20, tableType: "traces" });
     await page.goto(url, { waitUntil: "domcontentloaded" });
-    const row = page.locator("[role=row]", { hasText: "POST /api/competitors" }).first();
+    const row = page.locator("[role=row]", { hasText: /POST \/api\/competitors(?!\/)/ }).first();
     let ok = true;
     try {
       await row.waitFor({ timeout: 60000 });
@@ -156,7 +156,7 @@ const hasRows = (frames) => frames.some((f) => values(f).some((col) => col && co
       while (Date.now() < deadline) {
         await page.waitForTimeout(1000);
         text = await page.locator("body").innerText();
-        const m = text.match(/Total Spans\s*\n?\s*(\d+)/i);
+        const m = text.match(/\b(\d+) spans\b/i); // "4 spans" above the trace timeline
         if (m) {
           spans = Number(m[1]);
           break;
@@ -165,7 +165,7 @@ const hasRows = (frames) => frames.some((f) => values(f).some((col) => col && co
       await page.screenshot({ path: path.join(OUT, "tempo-trace.png"), fullPage: true });
       const tok = spans >= 2 && text.includes("POST /api/competitors");
       report.push(`- Tempo trace of POST /api/competitors: ${tok ? "opened" : "NOT OPENED"}, ${spans} span(s) (screenshot tempo-trace.png)`);
-      if (!tok) fail(`Explore (Tempo) did not open the POST /api/competitors trace with at least 2 spans (Total Spans ${spans})`);
+      if (!tok) fail(`Explore (Tempo) did not open the POST /api/competitors trace with at least 2 spans (${spans} spans shown)`);
     }
   }
 
