@@ -1,0 +1,75 @@
+# Proves the telemetry chain end to end on a runner that has Docker:
+#   backend (OTLP) -> Collector -> Prometheus / Loki / Tempo -> Grafana
+# observability/smoke.py drives the API, queries all four, asserts the metrics, labels,
+# logs and a trace, and writes the observed names to the job summary and an artifact.
+name: Observability smoke test
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - observability/**
+      - backend/app/**
+      - backend/uv.lock
+      - .github/workflows/observability.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: observability-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  smoke:
+    name: Stack and app, end to end
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      APP_ENV: dev
+      APP_VERSION: ${{ github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.11.32"
+
+      - name: Start the observability stack
+        run: docker compose -f observability/docker-compose.yaml up -d --wait
+
+      - name: Start the backend with OTLP export to the Collector
+        working-directory: backend
+        env:
+          VIDEO_SOURCE: sample
+          DATABASE_URL: sqlite:///./data/smoke.db
+          OTEL_EXPORTER_OTLP_ENDPOINT: http://localhost:4318
+          OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
+          OTEL_METRIC_EXPORT_INTERVAL: "5000"
+          OTEL_BSP_SCHEDULE_DELAY: "1000"
+          OTEL_BLRP_SCHEDULE_DELAY: "1000"
+        run: |
+          uv sync --frozen
+          nohup uv run uvicorn app.main:app --port 8091 > ../app.log 2>&1 &
+
+      - name: Smoke test
+        run: python3 -I observability/smoke.py --out observability-results --version "$APP_VERSION"
+
+      - name: Logs of the app and the stack
+        if: failure()
+        run: |
+          echo "::group::app"; cat app.log || true; echo "::endgroup::"
+          docker compose -f observability/docker-compose.yaml logs --no-color otel-collector prometheus loki tempo grafana || true
+
+      - name: Upload the raw query results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: observability-results
+          path: |
+            observability-results
+            app.log
+          if-no-files-found: warn
+
+      - name: Stop the stack
+        if: always()
+        run: docker compose -f observability/docker-compose.yaml down -v
