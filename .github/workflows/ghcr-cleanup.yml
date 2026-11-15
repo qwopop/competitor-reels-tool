@@ -1,0 +1,132 @@
+# Image retention: delete old versions of ghcr.io/<owner>/clipremix (issue #85).
+#
+#   plan (packages: read)  ->  delete (packages: write, only when confirmed)
+#
+# Never deletes the tag dev or prod currently runs (read from each /api/health), the
+# newest `keep` tagged versions, or anything it cannot prove safe; if a health check or
+# a manifest cannot be read it fails closed and deletes nothing. Runs as a dry run
+# unless explicitly confirmed:
+#   manual:    dry_run=false AND confirm=delete
+#   scheduled: only when the repository variable GHCR_CLEANUP_CONFIRM is "delete"
+# Needs the repository variables DEV_APP_URL and PROD_APP_URL (docs/deploy.md);
+# without them, or before the package exists, it skips with a notice.
+# Only the workflow's own GITHUB_TOKEN is used, no other secret.
+name: Image retention (GHCR cleanup)
+
+on:
+  schedule:
+    - cron: "23 4 * * 0"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Only print what would be deleted"
+        type: boolean
+        default: true
+      confirm:
+        description: 'Type "delete" (with dry_run off) to really delete'
+        type: string
+        default: ""
+      keep:
+        description: "Number of newest tagged versions to keep"
+        type: string
+        default: "20"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ghcr-cleanup
+  cancel-in-progress: false
+
+jobs:
+  plan:
+    name: Plan (dry run)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+    outputs:
+      ready: ${{ steps.plan.outputs.ready }}
+      count: ${{ steps.plan.outputs.count }}
+      delete: ${{ steps.mode.outputs.delete }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Decide dry run or delete
+        id: mode
+        env:
+          EVENT: ${{ github.event_name }}
+          DRY_RUN: ${{ inputs.dry_run }}
+          CONFIRM: ${{ inputs.confirm }}
+          KEEP_INPUT: ${{ inputs.keep }}
+          SCHEDULED_CONFIRM: ${{ vars.GHCR_CLEANUP_CONFIRM }}
+        run: |
+          delete=false
+          if [ "$EVENT" = "workflow_dispatch" ]; then
+            if [ "$DRY_RUN" = "false" ] && [ "$CONFIRM" = "delete" ]; then delete=true; fi
+            if [ "$DRY_RUN" = "false" ] && [ "$CONFIRM" != "delete" ]; then
+              echo "::warning::dry_run is off but confirm is not \"delete\": running as a dry run."
+            fi
+          elif [ "$SCHEDULED_CONFIRM" = "delete" ]; then
+            delete=true
+          fi
+          keep="${KEEP_INPUT:-20}"
+          if ! echo "$keep" | grep -Eq '^[1-9][0-9]*$'; then
+            echo "::error::keep must be a positive integer, got \"$keep\"."
+            exit 1
+          fi
+          echo "delete=$delete" >> "$GITHUB_OUTPUT"
+          echo "keep=$keep" >> "$GITHUB_OUTPUT"
+          echo "Mode: $([ $delete = true ] && echo DELETE || echo 'dry run (nothing is deleted)'), keeping the newest $keep tags."
+
+      - name: Unit tests of the selection logic
+        run: |
+          pip install --quiet pytest
+          python -m pytest -q scripts/ghcr/tests
+
+      - name: Read dev and prod, list versions, print the plan
+        id: plan
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DEV_APP_URL: ${{ vars.DEV_APP_URL }}
+          PROD_APP_URL: ${{ vars.PROD_APP_URL }}
+        run: |
+          python scripts/ghcr/ghcr_cleanup.py plan --owner "$GITHUB_REPOSITORY_OWNER" \
+            --keep "${{ steps.mode.outputs.keep }}" --plan plan.json
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "## Image retention"
+            echo
+            if [ "${{ steps.plan.outputs.ready }}" = "true" ]; then
+              echo "Versions to delete: ${{ steps.plan.outputs.count }}. Mode: $([ '${{ steps.mode.outputs.delete }}' = true ] && echo delete || echo 'dry run, nothing deleted')."
+            else
+              echo "No plan was made (skipped or failed closed); see the log."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        if: steps.plan.outputs.ready == 'true'
+        with:
+          name: ghcr-cleanup-plan
+          path: plan.json
+
+  delete:
+    name: Delete the planned versions
+    needs: plan
+    if: needs.plan.outputs.ready == 'true' && needs.plan.outputs.delete == 'true' && needs.plan.outputs.count != '0'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: ghcr-cleanup-plan
+      - name: Delete
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python scripts/ghcr/ghcr_cleanup.py delete --owner "$GITHUB_REPOSITORY_OWNER" --plan plan.json

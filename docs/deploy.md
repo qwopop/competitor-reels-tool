@@ -235,3 +235,13 @@ Everything the DevOps set created, and how to delete each piece and check it is 
 
 In Render delete the `clipremix-dev` and `clipremix-prod` services (Settings →
 Delete). In Neon delete the project; that deletes both databases and their data.
+
+## Image retention
+
+`.github/workflows/ghcr-cleanup.yml` ("Image retention (GHCR cleanup)") keeps GHCR from filling up with one image per push. It runs weekly and by hand, and is a dry run unless told otherwise: it lists the versions of `ghcr.io/<owner>/clipremix` and prints which would be deleted.
+
+- **Never deleted:** the tag dev runs and the tag prod runs (read from each `/api/health`), the newest `keep` tagged versions (input, default 20), versions with a tag that is not an image tag, and the untagged manifests that a kept image refers to. Untagged versions older than 7 days that nothing refers to are deleted.
+- **Fails closed:** if dev or prod is unreachable, reports the wrong environment or a version that is not an image tag, or a kept manifest cannot be read, the run fails and deletes nothing.
+- **Setup:** repository variables `DEV_APP_URL` and `PROD_APP_URL` (the same addresses as `RENDER_APP_URL` in the dev and prod environments; they are repository-level so the scheduled run does not wait for the prod reviewer). Without them, or before the package exists, the run skips with a notice.
+- **Deleting for real:** Run workflow with `dry_run` off and `confirm` set to `delete`. A scheduled run deletes only if the repository variable `GHCR_CLEANUP_CONFIRM` is `delete`; otherwise it stays a dry run. `packages: write` is granted only to the `delete` job; the plan job has `packages: read`.
+- Rollback needs an older tag: raise `keep` if you want a longer rollback window.

@@ -102,3 +102,7 @@ preview; the **Go to videos** page had no tab title.
 - #73, #74: the follow-ups above.
 - The Videos page loads every video at once; a large library is slow.
 - The deployed site has no login.
+
+## Image retention (#85)
+
+`scripts/ghcr/ghcr_cleanup.py` holds the selection logic of `.github/workflows/ghcr-cleanup.yml`; `scripts/ghcr/tests/` tests it with mock package-version data (newest N, protected tags, non-image tags, untagged versions and referenced manifests, failing closed on bad health data, unreadable manifests, delete refusing a protected tag). Run with `cd backend && uv run python -m pytest ../scripts/ghcr/tests`. The workflow runs these tests first, then a dry run against the real package (skips with a notice if it does not exist). Deleting for real is never part of CI.
