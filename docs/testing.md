@@ -49,6 +49,17 @@ service's Render deploy hook (`RENDER_DEPLOY_HOOK_URL` secret) with
 commit, `environment` `dev` and a working database. Prod is never deployed by
 a push. Render's own auto-deploy is off. Setup: `docs/deploy.md`.
 
+Prod is deployed only by the manual workflow `.github/workflows/promote.yml`
+("Promote dev to prod", `workflow_dispatch`, branch `main` only). Job `resolve`
+(environment `dev`) reads the version from dev's `/api/health` and fails unless
+it is a 40-character sha of a commit on `main`. Job `promote` (environment
+`prod`, so it waits for the required reviewer) skips if prod already runs that
+version, otherwise calls prod's deploy hook with `ref=<sha>` and polls prod's
+`/api/health` for 20 minutes. Missing settings skip with a notice. The shell
+logic is checked locally by running the workflow's `run` blocks with a mocked
+`curl` (see the commit message of the workflow); the full flow runs only on
+GitHub. See "Promote to production" in `docs/deploy.md`.
+
 ## How the end-to-end backlog was worked
 
 The backlog of 20 `e2e-test` issues went through the team process in

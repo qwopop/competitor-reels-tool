@@ -10,7 +10,7 @@ own branch of one Neon free PostgreSQL project.
 | Neon branch | `dev` | `prod` |
 | `APP_ENV` | `dev` | `prod` |
 | `VIDEO_SOURCE` | `sample` | `youtube` |
-| Deployed by | every push to `main` that passes all tests | by hand for now; promotion comes in #79 |
+| Deployed by | every push to `main` that passes all tests | the manual "Promote dev to prod" workflow, after approval (section 6) |
 
 Render doesn't read compose files, so `render.yaml` (a Render *Blueprint*)
 describes the two services. Render gives each site HTTPS and a public address.
@@ -85,7 +85,7 @@ Steps:
 
 1. In GitHub open the repository → **Settings → Environments → New environment**, name it `dev`.
 2. In `dev`, add the secret `RENDER_DEPLOY_HOOK_URL` and the variable `RENDER_APP_URL` from the table.
-3. Create a second environment named `prod` and add its secret and variable the same way. The required reviewer for `prod` is set up in #79.
+3. Create a second environment named `prod` and add its secret and variable the same way. Its required reviewer is set up in section 6.
 4. **Delete the old repository-level** secret `RENDER_DEPLOY_HOOK_URL` and variable `RENDER_APP_URL` (Settings → Secrets and variables → Actions). They are not used any more.
 
 Until the `dev` secret and variable exist, the `deploy-dev` job is skipped with a
@@ -111,7 +111,33 @@ deploy hook is the only credential GitHub holds: it can start a deploy, nothing 
 a commit that hasn't passed the tests. Runs of `deploy-dev` queue (they never
 cancel one another halfway).
 
-## 6. Check it works
+## 6. Promote to production
+
+Prod is only deployed by the manual workflow `.github/workflows/promote.yml`
+("Promote dev to prod"). It deploys **the commit that dev is running**, so what
+you tested on dev is what reaches prod.
+
+**Set up the `prod` environment (once, owner):**
+
+1. Create the `prod` environment and add its secret `RENDER_DEPLOY_HOOK_URL` and variable `RENDER_APP_URL` (section 4). The `dev` environment needs its `RENDER_APP_URL` variable too, because the workflow reads dev's version from it. No other secrets or variables are used.
+2. Open **Settings → Environments → prod → Required reviewers**, tick it, and add the person who approves production deploys (up to 6 people or teams). Required reviewers are free on a public repository.
+3. **Prevent self-review must be off** if you are the only reviewer, because you start the workflow yourself and could not approve your own run otherwise.
+4. Save protection rules.
+
+**Run it:**
+
+1. **Actions → Promote dev to prod → Run workflow**, branch **`main`** (any other branch is refused).
+2. Job `resolve` reads `<dev RENDER_APP_URL>/api/health` and writes the version to the run summary. It fails with an error if dev is unreachable, if dev's `environment` is not `dev`, if the version is not a 40-character commit sha (for example `dev`, when no commit is known), or if that commit is not on `main` (for example a branch build deployed to dev by hand).
+3. Job `promote` then waits for the reviewer. The reviewer opens the run, reads the version in the summary and clicks **Review deployments → Approve**.
+4. If prod already reports that version, the job ends with a notice and does not deploy. Otherwise it writes prod's current version to the summary (needed to roll back later, #83), calls prod's deploy hook with `ref=<sha>` and polls `<prod RENDER_APP_URL>/api/health` for up to 20 minutes until `version` is the sha, `environment` is `prod` and `database` is `ok`.
+
+If the settings are missing, the jobs end with a notice that names them instead of failing.
+Runs queue in the concurrency group `deploy-prod` and never cancel one another.
+
+**Note:** this step builds the commit again on Render for prod. It does not move
+the image that ran on dev; that is #77.
+
+## 7. Check it works
 
 1. Open `https://<dev-service>.onrender.com/api/health`. It should return
    `{"status":"ok","database":"ok","version":"<git commit>","environment":"dev"}`.
