@@ -262,3 +262,21 @@ and artifact `grafana-results` hold the full output). On a runner it started thi
 
 Not verified: how the dashboard looks in a browser (only its queries were run), real application failures (#88), that an alert resolves or that the
 default contact point delivers an email, anything in Grafana Cloud (no stack yet), and the Cloud workflow `grafana.yml` (it has not run yet, not even its skip path).
+
+### What CI verified for the latency and uptime alerts (#87)
+
+Workflow `grafana-local.yml` (one concurrency group per commit), run
+[43758259780](https://github.com/qwopop/competitor-reels-tool/actions/runs/43758259780) (commit `0277957`; that commit message names #86 because
+another engineer's commit picked up my staged files; confirmed from the job log, not the job colour):
+
+- `apply.py` created folder, dashboard, policy and **both** rules (`5 change(s)`), the second run reported `0 change(s)`;
+- both rules loaded with `health=ok`, `state=inactive`, `for=5m` and `for=10m`, `noDataState` and `execErrState` `OK`, the four labels and four annotations present, queries select `dev|prod` only;
+- with the app's real traffic (fast sample fetches, fewer than 5 of them, no remix failures) no alert was active (checked after at least one more evaluation of both rules);
+- **synthetic data** (OTLP, resource attribute `synthetic=true`, not from the app): remix failures went Pending after 50 s and Firing after 350 s; slow fetches (2 fetches of 15 s every 5 s, p95 19.5 s) went Pending after 60 s and Firing after 661 s, with the labels `service=clipremix`, `environment=dev`, `version=synthetic-ci`, `owner=qwopop` and the annotations shown above (latency `__values__` `{"A":19.5,"B":19.5,"C":1}`; the JSON has the same shape as the example above and is in the artifact `grafana-results`);
+- **must not fire, and did not** (the same data was sent for them for the whole 11 minutes): environment `local`; version `synthetic-fast` (many fetches of 0.1 s); version `synthetic-coldstart` (a single 60 s fetch, as the first request after a wake-up would be).
+
+Uptime: workflow `uptime.yml`, run [43758259891](https://github.com/qwopop/competitor-reels-tool/actions/runs/43758259891). Job log: the `check` job printed the
+`::notice::Skipping the uptime check` line (no variables set); the `selftest` job started the real backend 25 s late, `check.py` saw `Connection refused` for attempts 1 to 3 and an HTTP 200
+(`version dev, environment dev`) on attempt 4, and printed `RESULT ...: WOKE (attempts used: 4)` with a notice; a URL that never answers printed `DOWN` and exited 1.
+Not verified: the scheduled run itself (GitHub only runs schedules from `main`), a real Render service (no URLs set), the email on a failed run, and that the real YouTube source stays under 10 s (the CI source is the sample source, so the p95 threshold is a judgement, adjust it after real data exists).
+
