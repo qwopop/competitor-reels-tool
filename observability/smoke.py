@@ -280,13 +280,16 @@ def check_grafana(grafana):
         fail(f"Grafana datasource types {sorted(types)}")
     health_results = {}
     for source in sources:
+        # Grafana's Tempo plugin has no /health route (404 "method not implemented"), so ask
+        # each backend something real through Grafana's datasource proxy instead.
+        probe = {"prometheus": "/api/v1/query?query=1", "loki": "/loki/api/v1/labels", "tempo": "/api/echo"}[source["type"]]
         try:
-            status, body = http("GET", f"{grafana}/api/datasources/uid/{source['uid']}/health")
+            status, body = http("GET", f"{grafana}/api/datasources/proxy/uid/{source['uid']}{probe}")
         except Exception as err:
             status, body = 0, str(err)
         health_results[source["name"]] = {"status": status, "body": body}
         if status != 200:
-            fail(f"Grafana datasource {source['name']} health -> {status}: {str(body)[:200]}")
+            fail(f"Grafana datasource {source['name']} probe {probe} -> {status}: {str(body)[:200]}")
     raw["grafana_datasource_health"] = health_results
     # A real query through Grafana's datasource proxy.
     q = urllib.parse.urlencode({"query": "sum(clipremix_competitors_added_total)"})
@@ -321,8 +324,8 @@ def report(env, version, prom, loki, tempo, grafana_health, run_url):
               f"- span attributes: {', '.join('`'+l+'`' for l in tempo.get('span', []))}",
               f"- spans in the trace `{tempo.get('root')}`: {', '.join('`'+n+'`' for n in tempo.get('spans', []))}",
               f"- resource tags from `/api/v2/search/tags?scope=resource`: `{json.dumps(tempo.get('tags'))[:600]}`"]
-    lines += ["", "### Grafana", "", *[f"- datasource `{n}` health: HTTP {r['status']}" for n, r in (grafana_health or {}).items()],
-              "", "Grafana's UI (Explore) was not opened by this script: it checks datasource health and a Prometheus query through Grafana's proxy."]
+    lines += ["", "### Grafana", "", *[f"- datasource `{n}` queried through Grafana's proxy: HTTP {r['status']}" for n, r in (grafana_health or {}).items()],
+              "", "Grafana's UI (Explore) was not opened by this script: it asks each of the three backends a real question through Grafana's datasource proxy."]
     return "\n".join(lines) + "\n"
 
 
