@@ -183,6 +183,30 @@ are told apart by `deployment.environment` (`APP_ENV`).
 app makes no telemetry connection at all. No GitHub secret or variable is needed.
 Treat the header as a secret: it is only ever stored in Render.
 
+## Grafana Cloud (dashboard and alert rule)
+
+The dashboard `clipremix-app` and the alert "ClipRemix: repeated remix failures" are stored as JSON in
+`observability/grafana/` and applied by `observability/grafana/apply.py`, which the workflow
+`.github/workflows/grafana.yml` runs on every push to `main` that changes `observability/grafana/**`
+(or by hand: **Actions, Grafana Cloud, Run workflow**). Until you create the settings below the workflow
+skips with a notice naming what is missing.
+
+1. **Stack.** Sign up at grafana.com for Grafana Cloud free (no card), create a stack, and note its URL, `https://<stack>.grafana.net`. Metrics from the app (see "OpenTelemetry" above) land in that stack's Prometheus data source.
+2. **Service account and token.** In the stack open **Administration, Users and access, Service accounts**, add a service account with the role **Editor** (it needs to write dashboards, folders, alert rules and notification policies; **Admin** also works), then **Add service account token** and copy it (`glsa_...`). It is shown once.
+3. **Repository settings** (GitHub: Settings, Secrets and variables, Actions):
+   - variable `GRAFANA_URL` = `https://<stack>.grafana.net` (a variable, not a secret; no trailing path)
+   - secret `GRAFANA_API_TOKEN` = the token. The scripts never print it.
+4. Push to `main`, or run the workflow by hand. A second apply must report `0 change(s)`.
+5. **Where to look.** Dashboard: **Dashboards, ClipRemix, ClipRemix application**. Alert rule: **Alerting, Alert rules, ClipRemix, ClipRemix: repeated remix failures**; firing alerts: **Alerting, Active notifications** (older versions: Alert groups). Notifications go to the default contact point (`grafana-default-email`): put your address on it under **Alerting, Contact points**.
+
+The apply script picks the default Prometheus data source of the stack; if the stack has several, set
+`GRAFANA_PROMETHEUS_DATASOURCE` to the name of the one that holds the app metrics (in Grafana Cloud usually `grafanacloud-<stack>-prom`).
+It replaces the stack's **root notification policy** with `observability/grafana/alerting/notification-policy.json`.
+Rules and the dashboard are created with `X-Disable-Provenance`, so they stay editable in the UI, and the next apply overwrites such edits.
+
+Locally: `make observability-up`, then `make grafana-apply-local` (no token needed). `make grafana-dry-run` only validates.
+Free tier: one dashboard, one rule group with one rule, a few series per environment and version.
+
 ## Things to know
 
 - **No login.** Anyone with the address can read and change the data. Add

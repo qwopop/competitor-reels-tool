@@ -12,6 +12,7 @@ on:
       - backend/app/**
       - backend/uv.lock
       - .github/workflows/observability.yml
+      - docs/runbook.md
 
 permissions:
   contents: read
@@ -67,6 +68,64 @@ jobs:
           name: observability-results
           path: |
             observability-results
+            app.log
+          if-no-files-found: warn
+
+      - name: Stop the stack
+        if: always()
+        run: docker compose -f observability/docker-compose.yaml down -v
+
+  # #81: apply the dashboard and the alert rule to the local Grafana with apply.py and check them
+  # through Grafana's HTTP API. observability/grafana/verify.py also sends SYNTHETIC remix failures
+  # over OTLP (not produced by the app) to make the rule fire, and records the alert API output.
+  grafana:
+    name: Dashboard and alert rule in the local Grafana
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      APP_ENV: dev
+      APP_VERSION: ${{ github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.11.32"
+
+      - name: Start the observability stack
+        run: docker compose -f observability/docker-compose.yaml up -d --wait
+
+      - name: Start the backend with OTLP export to the Collector
+        working-directory: backend
+        env:
+          VIDEO_SOURCE: sample
+          DATABASE_URL: sqlite:///./data/grafana.db
+          OTEL_EXPORTER_OTLP_ENDPOINT: http://localhost:4318
+          OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
+          OTEL_METRIC_EXPORT_INTERVAL: "5000"
+          OTEL_BSP_SCHEDULE_DELAY: "1000"
+          OTEL_BLRP_SCHEDULE_DELAY: "1000"
+        run: |
+          uv sync --frozen
+          nohup uv run uvicorn app.main:app --port 8091 > ../app.log 2>&1 &
+
+      - name: Click through the app (real metrics, no failures)
+        run: python3 -I observability/smoke.py --out smoke-results --version "$APP_VERSION"
+
+      - name: Apply the dashboard and alert rule, check them, make the rule fire with synthetic data
+        run: python3 -I observability/grafana/verify.py --out grafana-results --version "$APP_VERSION"
+
+      - name: Logs of the stack
+        if: failure()
+        run: docker compose -f observability/docker-compose.yaml logs --no-color grafana prometheus otel-collector | tail -n 300
+
+      - name: Upload the results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: grafana-results
+          path: |
+            grafana-results
+            smoke-results
             app.log
           if-no-files-found: warn
 

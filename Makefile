@@ -1,4 +1,4 @@
-.PHONY: install run frontend dev test check docker-build docker-run db test-postgres up down integration e2e observability-up observability-down
+.PHONY: install run frontend dev test check docker-build docker-run db test-postgres up down integration e2e observability-up observability-down grafana-apply-local grafana-dry-run
 
 install:
 	cd backend && uv sync
@@ -73,3 +73,11 @@ observability-up:
 
 observability-down:
 	docker compose -f observability/docker-compose.yaml down
+
+# Dashboard, alert rule and notification policy (observability/grafana/) into the local Grafana.
+# Safe to run again. For Grafana Cloud: GRAFANA_URL=https://<stack>.grafana.net GRAFANA_API_TOKEN=... python3 -I observability/grafana/apply.py
+grafana-apply-local:
+	python3 -I observability/grafana/apply.py --url http://localhost:3000
+
+grafana-dry-run:
+	python3 -I observability/grafana/apply.py --dry-run
