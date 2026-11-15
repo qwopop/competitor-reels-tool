@@ -160,6 +160,29 @@ Runs queue in the concurrency group `deploy-prod` and never cancel one another.
 Without `DATABASE_URL` the app falls back to a SQLite file inside the
 container, which is lost on every deploy.
 
+## OpenTelemetry (Grafana Cloud)
+
+The app can send traces, metrics and logs over OTLP straight to **Grafana Cloud
+free**, with no Collector to run (the reasoning is in `docs/observability.md`).
+`render.yaml` declares, for both services:
+
+| Render variable | Value |
+| --- | --- |
+| `OTEL_EXPORTER_OTLP_PROTOCOL` | `http/protobuf` (set in `render.yaml`) |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | the OTLP endpoint of your Grafana Cloud stack (you set it, `sync: false`) |
+| `OTEL_EXPORTER_OTLP_HEADERS` | `Authorization=Basic <base64 instance-id:token>` (you set it, `sync: false`) |
+
+Where to find them: sign in to Grafana Cloud, open **Connections → OpenTelemetry** (or
+**Connections → Add new connection → OpenTelemetry**), choose **Create a token**, and copy
+the endpoint (like `https://otlp-gateway-<zone>.grafana.net/otlp`) and the header it
+shows. The header value is `Authorization=Basic ` followed by the base64 of
+`<instance id>:<token>`. Set the same endpoint on both services; `dev` and `prod`
+are told apart by `deployment.environment` (`APP_ENV`).
+
+**Nothing is exported until you set `OTEL_EXPORTER_OTLP_ENDPOINT`.** Without it the
+app makes no telemetry connection at all. No GitHub secret or variable is needed.
+Treat the header as a secret: it is only ever stored in Render.
+
 ## Things to know
 
 - **No login.** Anyone with the address can read and change the data. Add

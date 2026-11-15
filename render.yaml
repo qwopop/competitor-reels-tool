@@ -33,6 +33,14 @@ services:
         sync: false
       - key: VIDEO_SOURCE
         value: sample
+      # OpenTelemetry straight to Grafana Cloud (docs/observability.md). Nothing is
+      # exported until the owner sets the endpoint and headers in Render.
+      - key: OTEL_EXPORTER_OTLP_PROTOCOL
+        value: http/protobuf
+      - key: OTEL_EXPORTER_OTLP_ENDPOINT
+        sync: false
+      - key: OTEL_EXPORTER_OTLP_HEADERS
+        sync: false
 
   - type: web
     name: clipremix-prod
@@ -50,3 +58,11 @@ services:
         sync: false
       - key: VIDEO_SOURCE
         value: youtube
+      # OpenTelemetry straight to Grafana Cloud (docs/observability.md). Nothing is
+      # exported until the owner sets the endpoint and headers in Render.
+      - key: OTEL_EXPORTER_OTLP_PROTOCOL
+        value: http/protobuf
+      - key: OTEL_EXPORTER_OTLP_ENDPOINT
+        sync: false
+      - key: OTEL_EXPORTER_OTLP_HEADERS
+        sync: false

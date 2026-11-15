@@ -22,7 +22,7 @@ instead of AWS).
 
 | Layer | What it checks | Command | Size |
 | --- | --- | --- | --- |
-| Backend unit and API | Every endpoint, YouTube parsing, remix writing, schema upgrades | `make test` (SQLite) and `make test-postgres` (PostgreSQL) | 178 tests |
+| Backend unit and API | Every endpoint, YouTube parsing, remix writing, schema upgrades, OpenTelemetry signals and metrics (in-memory exporters, `tests/test_telemetry.py`), observability config files | `make test` (SQLite) and `make test-postgres` (PostgreSQL) | 211 tests |
 | Frontend unit | Pages, components, helpers | `cd frontend && npm test` | 152 tests |
 | Integration | The compose stack: frontend served, backend on PostgreSQL | `make integration` | 13 tests |
 | End-to-end | Each feature in a real browser against the compose stack | `make e2e` | 20 specs, 59 tests |
