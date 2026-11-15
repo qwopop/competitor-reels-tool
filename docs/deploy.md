@@ -239,7 +239,7 @@ This repository is public, so anyone can download workflow artifacts. The dump i
 
 ### Restore
 
-Download the artifact (Actions run, Artifacts, or `gh run download <run-id> -n clipremix-prod-backup`), then restore into an **empty** database or Neon branch. PostgreSQL client 16 or newer is needed (`pg_restore` and `openssl`).
+Download the artifact (Actions run, Artifacts, or `gh run download <run-id> -n clipremix-prod-backup`), then restore into an **empty** database or Neon branch. `pg_restore` and `openssl` are needed, and `pg_restore` must be the same major version as the dump or newer, and the target server at least as new as the dump. The first CI rehearsal proved this the hard way: a dump made by `pg_dump` 17 does not load into a PostgreSQL 16 server (`unrecognized configuration parameter "transaction_timeout"`). The workflow sets `PG_VERSION: 17`; change it to the major version shown in the Neon console for the project.
 
 ```
 export BACKUP_PASSPHRASE='...'
@@ -258,7 +258,7 @@ Neon's own restore ("Restore" on the branch page, or branching from a past times
 
 ### What was exercised
 
-- **Real PostgreSQL in CI (done):** the `rehearsal` job starts PostgreSQL 16, creates the app schema with some rows, runs `backup.sh`, checks the file is encrypted and that a wrong passphrase fails, restores into a fresh database and compares the row count of every app table (`competitors`, `videos`, `remixes`, `content_plan`). The same check runs in the backend tests (`backend/tests/test_backup.py`, with `make test-postgres`) and by hand: `scripts/backup/rehearse.sh postgresql://user:pass@localhost:5432/postgres`.
+- **Real PostgreSQL in CI (done):** the `rehearsal` job starts PostgreSQL 17, creates the app schema with some rows, runs `backup.sh`, checks the file is encrypted and that a wrong passphrase fails, restores into a fresh database and compares the row count of every app table (`competitors`, `videos`, `remixes`, `content_plan`). The same check runs in the backend tests (`backend/tests/test_backup.py`, with `make test-postgres`) and by hand: `scripts/backup/rehearse.sh postgresql://user:pass@localhost:5432/postgres`.
 - **Restore into a scratch Neon branch (not yet exercised):** the agent that built this has no Neon account access, so this was not run against Neon. To do it once: in Neon create a branch `scratch` from `prod`, add its connection string as `NEON_SCRATCH_DATABASE_URL`, and run the workflow by hand. The `backup` job then restores the dump there and fails if the row counts differ from prod. Write the run link and date here after the first pass: _not recorded yet_. Delete the scratch branch afterwards.
 
 ## Things to know

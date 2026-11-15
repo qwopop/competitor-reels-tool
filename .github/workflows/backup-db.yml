@@ -24,15 +24,15 @@ permissions:
 
 env:
   RETENTION_DAYS: 30 # keep each backup artifact this long (free public-repo maximum is 90)
-  PG_VERSION: 17 # pg_dump must be at least as new as the Neon server
+  PG_VERSION: 17 # set to the major version of the Neon project (Neon console); a dump from a newer pg_dump does not restore into an older server
 
 jobs:
   rehearsal:
-    name: Rehearsal on a local PostgreSQL (backup, restore, compare)
+    name: Rehearsal on a local PostgreSQL 17 (backup, restore, compare)
     runs-on: ubuntu-latest
     services:
       postgres:
-        image: postgres:16-alpine
+        image: postgres:17-alpine # same major as PG_VERSION: pg_restore cannot load a newer dump into an older server
         env:
           POSTGRES_USER: clipremix
           POSTGRES_PASSWORD: clipremix

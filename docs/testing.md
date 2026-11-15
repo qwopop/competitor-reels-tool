@@ -41,7 +41,7 @@ The end-to-end exercise with a deliberate bug (alert, on-call run, fix pull requ
 
 The on-call engineer (poller, patch guard, fake agent) has its own tests in `on-call-engineer/tests/`, run by the backend job; see [on-call.md](on-call.md).
 
-The prod database backup (`.github/workflows/backup-db.yml`, scripts in `scripts/backup/`) has a `rehearsal` job that backs up a seeded PostgreSQL 16 service, restores it into a fresh database and compares row counts; the same rehearsal runs from `backend/tests/test_backup.py` when `TEST_DATABASE_URL` is set. See [deploy.md](deploy.md#backups-and-restore-84).
+The prod database backup (`.github/workflows/backup-db.yml`, scripts in `scripts/backup/`) has a `rehearsal` job that backs up a seeded PostgreSQL 17 service, restores it into a fresh database and compares row counts; the same rehearsal runs from `backend/tests/test_backup.py` when `TEST_DATABASE_URL` is set. See [deploy.md](deploy.md#backups-and-restore-84).
 
 A separate workflow, `.github/workflows/observability.yml`, starts the observability stack and the backend on a runner and runs `observability/smoke.py` (metrics in Prometheus, logs in Loki, a trace in Tempo, datasources in Grafana); see `docs/observability.md`.
 
