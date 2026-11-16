@@ -224,7 +224,7 @@ describe('Remix page opened with ?write=ai', () => {
     Element.prototype.scrollIntoView = scroll;
     await openWithAi(stub);
     await waitFor(() => expect(screen.getByLabelText('Creator voice')).toHaveFocus());
-    expect(scroll).toHaveBeenCalledWith(expect.objectContaining({ block: 'start' }));
+    await waitFor(() => expect(scroll).toHaveBeenCalledWith(expect.objectContaining({ block: 'start' })));
     expect(screen.getByText(INTRO)).toBeInTheDocument();
     expect(location()).toBe('/remix/remix_1');
     expect(stub.writeRemixWithAi).not.toHaveBeenCalled();
