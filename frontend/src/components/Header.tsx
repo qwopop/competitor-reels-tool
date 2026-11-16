@@ -17,7 +17,7 @@ export function Header() {
   // NavLink marks the current page with aria-current="page"; the pill follows it.
   const { containerRef, pill } = useSlidingPill<HTMLElement>('[aria-current="page"]', pathname);
   return (
-    <header className="sticky top-0 z-30 border-b border-white/5 bg-ground/70 backdrop-blur-xl">
+    <header data-app-header className="sticky top-0 z-30 border-b border-white/5 bg-ground/70 backdrop-blur-xl">
       <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-x-6 gap-y-3 px-6 py-4 sm:px-10">
         <Link to="/" className="flex items-center gap-2.5 text-lg font-semibold tracking-tight text-ink">
           <LogoMark size={32} className="shrink-0 rounded-[9px]" />

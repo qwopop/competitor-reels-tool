@@ -238,6 +238,23 @@ describe('Remix page opened with ?write=ai', () => {
     delete Element.prototype.scrollIntoView;
   });
 
+  it('stops the block below the sticky app header, measured when it scrolls', async () => {
+    const header = document.createElement('header');
+    header.setAttribute('data-app-header', '');
+    header.getBoundingClientRect = () => ({ height: 159 }) as DOMRect;
+    document.body.prepend(header);
+    const scroll = vi.fn();
+    Element.prototype.scrollIntoView = scroll;
+    await openWithAi(makeStub());
+    await waitFor(() => expect(scroll).toHaveBeenCalled());
+    const block = screen.getByRole('heading', { name: 'Write with AI' }).parentElement as HTMLElement;
+    expect(block.style.scrollMarginTop).toBe('175px');
+    expect(scroll.mock.instances[0]).toBe(block);
+    header.remove();
+    // @ts-expect-error clean up the jsdom stub
+    delete Element.prototype.scrollIntoView;
+  });
+
   it('the notice goes on Dismiss', async () => {
     const user = userEvent.setup();
     await openWithAi(makeStub());

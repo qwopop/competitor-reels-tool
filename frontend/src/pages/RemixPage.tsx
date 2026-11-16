@@ -119,7 +119,15 @@ export function RemixPage() {
     if (loading || !remix || !pendingAiFocus.current) return;
     pendingAiFocus.current = false;
     const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
-    aiBlock.current?.scrollIntoView?.({ block: 'start', behavior: reduceMotion ? 'auto' : 'smooth' });
+    const block = aiBlock.current;
+    if (block) {
+      // The sticky app header covers the top of the window, and its height changes when the nav
+      // wraps on phones, so it is measured now and the block stops just below it.
+      const header = document.querySelector<HTMLElement>('[data-app-header]');
+      const headerHeight = header ? Math.ceil(header.getBoundingClientRect().height) : 0;
+      block.style.scrollMarginTop = `${headerHeight + 16}px`;
+      block.scrollIntoView?.({ block: 'start', behavior: reduceMotion ? 'auto' : 'smooth' });
+    }
     voiceSelect.current?.focus({ preventScroll: true });
   }, [loading, remix]);
 
@@ -596,7 +604,7 @@ function AiBlock({
   const presets = CREATOR_VOICES.filter((v) => v.value !== 'custom');
   const custom = CREATOR_VOICES.find((v) => v.value === 'custom')!;
   return (
-    <div ref={blockRef} className="scroll-mt-6">
+    <div ref={blockRef}>
       <h2 className="label">Write with AI</h2>
       {intro ? (
         <div className="mt-4">
