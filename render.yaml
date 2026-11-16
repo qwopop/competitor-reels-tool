@@ -58,6 +58,8 @@ services:
         sync: false
       - key: VIDEO_SOURCE
         value: youtube
+      - key: YOUTUBE_API_KEY      # YouTube Data API v3 key (docs/deploy.md); without it the app falls back to the feed
+        sync: false
       # OpenTelemetry straight to Grafana Cloud (docs/observability.md). Nothing is
       # exported until the owner sets the endpoint and headers in Render.
       - key: OTEL_EXPORTER_OTLP_PROTOCOL

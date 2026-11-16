@@ -13,7 +13,7 @@ instance hours) and keep data you may not want kept.
 | What | How to delete |
 | --- | --- |
 | Scheduled workflows `on-call.yml` (every 5 minutes) and `grafana.yml` | Delete the files from the repository (`git rm .github/workflows/on-call.yml .github/workflows/grafana.yml`, commit, push), or disable them: Actions, pick the workflow, **...**, **Disable workflow**. Other workflows from the set: `deploy-dev.yml`, `deploy-dev-branch.yml`, `bug-patch.yml`, `bug-chain.yml`, `promote.yml`, `build-image.yml`, `observability.yml`, `grafana-local.yml`. |
-| Repository secrets `GRAFANA_API_TOKEN`, `GRAFANA_ALERT_TOKEN`, `GEMINI_API_KEY` | Settings, Secrets and variables, Actions, Secrets: delete each. Or `gh secret delete <NAME>`. |
+| Repository secrets `GRAFANA_API_TOKEN`, `GRAFANA_ALERT_TOKEN`, `GEMINI_API_KEY`, `YOUTUBE_API_KEY` | Settings, Secrets and variables, Actions, Secrets: delete each. Or `gh secret delete <NAME>`. |
 | Repository variables `GRAFANA_URL` and the optional `GEMINI_MODEL` (pins the Gemini model of the on-call agent) | Settings, Secrets and variables, Actions, Variables. Or `gh variable delete GRAFANA_URL` and `gh variable delete GEMINI_MODEL`. |
 | Environment secret `RENDER_DEPLOY_HOOK_URL` and variable `RENDER_APP_URL`, in both `dev` and `prod` | Deleted with the environments below. Older setups also had them at repository level (#78 removed that); `gh secret delete RENDER_DEPLOY_HOOK_URL` and `gh variable delete RENDER_APP_URL` remove any leftover. |
 | GitHub Environments `dev` and `prod` (with the `prod` required reviewer) | Settings, Environments, each one, **Delete environment**. Or `gh api -X DELETE repos/<owner>/<repo>/environments/dev` and the same for `prod`. |
@@ -48,6 +48,8 @@ With the API: `gh api -X DELETE /user/packages/container/clipremix` (needs the `
 
 The Gemini key behind `GEMINI_API_KEY`: https://aistudio.google.com/apikey, find the key, **Delete**.
 
+The YouTube key behind `YOUTUBE_API_KEY`: Google Cloud Console, **APIs & Services, Credentials**, find the API key, **Delete** (to rotate: create a new key, update the Render variable `YOUTUBE_API_KEY` on `clipremix-prod` and the GitHub secret, then delete the old one). Also remove the variable in Render when you delete the services.
+
 ## 7. Your machine
 
 ```bash
@@ -66,7 +68,7 @@ Run each line; the expected result is in the second column. `<owner>/<repo>` is 
 
 | Check | Gone when |
 | --- | --- |
-| `gh secret list` | none of `GRAFANA_API_TOKEN`, `GRAFANA_ALERT_TOKEN`, `GEMINI_API_KEY`, `RENDER_DEPLOY_HOOK_URL` |
+| `gh secret list` | none of `GRAFANA_API_TOKEN`, `GRAFANA_ALERT_TOKEN`, `GEMINI_API_KEY`, `YOUTUBE_API_KEY`, `RENDER_DEPLOY_HOOK_URL` |
 | `gh variable list` | none of `GRAFANA_URL`, `GEMINI_MODEL`, `RENDER_APP_URL` |
 | `gh api repos/<owner>/<repo>/environments --jq '.environments[].name'` | no `dev`, no `prod` |
 | `gh secret list --env dev` and `gh secret list --env prod` | an error that the environment does not exist |
@@ -80,3 +82,4 @@ Run each line; the expected result is in the second column. `<owner>/<repo>` is 
 | Neon console | no `clipremix` project (or no `dev` branch if you kept the project) |
 | Grafana Cloud, grafana.com account page | no stack, no access policy, no service account |
 | https://aistudio.google.com/apikey | no key named for this project |
+| Google Cloud Console, APIs & Services, Credentials | no YouTube Data API key for this project |

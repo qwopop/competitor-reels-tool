@@ -1,0 +1,64 @@
+# Proves the YouTube Data API source against the real API with the repository secret
+# YOUTUBE_API_KEY. Prints only non-secret facts. Manual runs only (workflow_dispatch). Proven green on the real API in run 43810245576.
+name: YouTube API check
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    env:
+      YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Skip when the secret is missing
+        id: gate
+        run: |
+          if [ -z "$YOUTUBE_API_KEY" ]; then
+            echo "::notice::Secret YOUTUBE_API_KEY is not set; skipping the real API check."
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: astral-sh/setup-uv@v5
+        if: steps.gate.outputs.run == 'true'
+      - name: Install the backend
+        if: steps.gate.outputs.run == 'true'
+        working-directory: backend
+        run: uv sync --frozen
+      - name: Resolve channels and fetch videos through YouTubeApiSource
+        if: steps.gate.outputs.run == 'true'
+        working-directory: backend
+        run: |
+          uv run python - <<'PY'
+          import os, sys
+          from types import SimpleNamespace
+          from app.youtube import ChannelRef, YouTubeApiSource, YouTubeError
+
+          source = YouTubeApiSource(os.environ["YOUTUBE_API_KEY"])
+          units = 0
+          failed = False
+          for handle in ("mrbeast", "kuplinovplay"):
+              try:
+                  info = source.resolve_channel(ChannelRef("handle", handle))
+                  units += 1
+                  competitor = SimpleNamespace(id="c1", username=handle, channel_id=info.channel_id)
+                  videos = source.fetch_videos(competitor)
+                  units += 3  # channels.list, playlistItems.list, videos.list
+              except YouTubeError as err:
+                  print(f"@{handle}: FAILED (HTTP-level status {err.status}): {err}")
+                  failed = True
+                  continue
+              first = videos[0] if videos else None
+              print(f"@{handle}: channel={info.title!r} id={info.channel_id} videos={len(videos)}")
+              if first:
+                  print(f"  first video: {first.caption!r} id={first.youtube_id} views={first.view_count} likes={first.like_count} comments={first.comment_count} posted={first.posted_at}")
+              if not videos:
+                  failed = True
+          print(f"Estimated quota cost: {units} units (1 unit per call, no search.list)")
+          sys.exit(1 if failed else 0)
+          PY
