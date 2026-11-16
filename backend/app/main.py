@@ -1,5 +1,6 @@
 """Application factory. Run locally with `make run` (uvicorn app.main:app)."""
 
+import logging
 import os
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -10,7 +11,7 @@ from sqlalchemy.engine import make_url
 from sqlalchemy.orm import sessionmaker
 
 from app.generator import SampleSource
-from app.youtube import YouTubeSource
+from app.youtube import YouTubeApiSource, YouTubeSource
 from app.models import Base, make_engine, upgrade_schema
 from app.frontend import mount_frontend
 from app.routers import router
@@ -25,8 +26,28 @@ _FROM_ENV = object()
 
 
 def source_from_env():
-    """VIDEO_SOURCE=sample uses generated videos and no network; anything else reads YouTube."""
-    return SampleSource() if os.getenv("VIDEO_SOURCE", "youtube").strip().lower() == "sample" else YouTubeSource()
+    """Pick the video source from VIDEO_SOURCE and YOUTUBE_API_KEY.
+
+    sample: generated videos, no network. youtube (default): the YouTube Data API when
+    YOUTUBE_API_KEY is set, otherwise the public channel feed. youtube_api: the API, and
+    startup fails when the key is missing. youtube_feed: always the public feed.
+    """
+    mode = os.getenv("VIDEO_SOURCE", "youtube").strip().lower()
+    key = os.getenv("YOUTUBE_API_KEY", "").strip()
+    if mode == "sample":
+        return SampleSource()
+    if mode == "youtube_feed":
+        return YouTubeSource()
+    if mode == "youtube_api":
+        if not key:
+            raise RuntimeError("VIDEO_SOURCE=youtube_api needs YOUTUBE_API_KEY to be set.")
+        return YouTubeApiSource(key)
+    if key:
+        return YouTubeApiSource(key)
+    logging.getLogger(__name__).warning(
+        "YOUTUBE_API_KEY is not set: reading YouTube's public feeds, which YouTube often refuses."
+    )
+    return YouTubeSource()
 
 
 def create_app(database_url: str | None = None, video_source=_FROM_ENV, telemetry=_FROM_ENV) -> FastAPI:

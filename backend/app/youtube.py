@@ -1,6 +1,6 @@
-"""YouTube channels and their latest videos, with no API key and no account.
+"""YouTube channels and their latest videos.
 
-Two public sources are used:
+Without an API key (YouTubeSource) two public sources are used:
 
 - The channel's Atom feed, https://www.youtube.com/feeds/videos.xml?channel_id=UC...,
   which YouTube publishes for feed readers. It lists the latest 15 uploads
@@ -14,6 +14,7 @@ input before anything is fetched.
 """
 
 import html
+import json
 import re
 import urllib.error
 import urllib.request
@@ -21,7 +22,7 @@ import xml.etree.ElementTree as ET
 from collections.abc import Callable
 from datetime import datetime
 from typing import NamedTuple
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, urlencode, urlparse
 
 from app.models import CompetitorRow, VideoRow
 
@@ -298,3 +299,171 @@ class YouTubeSource:
             )
             for e in entries[:VIDEOS_PER_FETCH]
         ]
+
+
+# ----- The YouTube Data API source ------------------------------------------
+#
+# YouTube answers the public Atom feed with 404 for most channels now, so with an
+# API key the app uses the Data API v3 instead. Only cheap endpoints are used, 1
+# quota unit per call and never search.list (100 units):
+#   channels.list       resolve a channel, find its uploads playlist
+#   playlistItems.list  the latest uploads
+#   videos.list         views, likes, comments and descriptions (up to 50 ids per call)
+# The key travels in the x-goog-api-key header, never in a URL, so it cannot show up
+# in a log line, a trace span or an error message.
+
+API_BASE = "https://www.googleapis.com/youtube/v3"
+API_KEY_HEADER = "x-goog-api-key"
+KEY_REJECTED = "The YouTube API key was rejected. Check YOUTUBE_API_KEY and that YouTube Data API v3 is enabled for it."
+QUOTA_USED_UP = "The YouTube API daily quota is used up. Try again tomorrow."
+_REJECTED_REASONS = {"keyInvalid", "accessNotConfigured", "ipRefererBlocked", "forbidden", "keyExpired", "referrerNotAllowed"}
+_QUOTA_REASONS = {"quotaExceeded", "rateLimitExceeded", "dailyLimitExceeded", "userRateLimitExceeded"}
+
+# (url, headers) -> parsed JSON. Raises YouTubeError.
+GetJson = Callable[[str, dict[str, str]], dict]
+
+
+def _error_reasons(body: bytes) -> tuple[set[str], str]:
+    try:
+        error = json.loads(body.decode("utf-8", errors="replace")).get("error", {})
+        reasons = {e.get("reason", "") for e in error.get("errors", []) if isinstance(e, dict)}
+        for detail in error.get("details", []):
+            if isinstance(detail, dict) and detail.get("reason"):
+                reasons.add(detail["reason"])
+        return reasons, str(error.get("message", ""))
+    except (ValueError, AttributeError, TypeError):
+        return set(), ""
+
+
+def _api_error(code: int, body: bytes) -> YouTubeError:
+    """A user-facing error for a failed API call. Never includes the request URL or headers."""
+    reasons, message = _error_reasons(body)
+    if reasons & _QUOTA_REASONS:
+        return YouTubeError(QUOTA_USED_UP)
+    if reasons & _REJECTED_REASONS or (code == 400 and "api key" in message.lower()):
+        return YouTubeError(KEY_REJECTED)
+    if code == 404:
+        return YouTubeError("YouTube could not find that channel.", status=404)
+    return YouTubeError(f"YouTube returned HTTP {code}. Try again in a minute.")
+
+
+def _http_get_json(url: str, headers: dict[str, str]) -> dict:
+    request = urllib.request.Request(url, headers=headers)
+    try:
+        with urllib.request.urlopen(request, timeout=20) as res:
+            return json.loads(res.read(3_000_000).decode("utf-8", errors="replace"))
+    except urllib.error.HTTPError as err:
+        raise _api_error(err.code, err.read(100_000)) from None
+    except (urllib.error.URLError, TimeoutError) as err:
+        raise YouTubeError("Could not reach YouTube. Check your internet connection and try again.") from err
+    except ValueError as err:
+        raise YouTubeError("YouTube sent an answer that could not be read. Try again later.") from err
+
+
+def _thumb(snippet: dict, video_id: str) -> str:
+    thumbs = snippet.get("thumbnails") or {}
+    for size in ("high", "medium", "standard", "default"):
+        if thumbs.get(size, {}).get("url"):
+            return thumbs[size]["url"]
+    return f"https://i.ytimg.com/vi/{video_id}/hqdefault.jpg"
+
+
+class YouTubeApiSource:
+    """Same interface as YouTubeSource, backed by the YouTube Data API v3."""
+
+    def __init__(self, api_key: str, get_json: GetJson = _http_get_json, fetch_text: FetchText = _http_get_text):
+        api_key = (api_key or "").strip()
+        if not api_key:
+            raise ValueError("YouTubeApiSource needs an API key")
+        self._api_key = api_key
+        self._get_json = get_json
+        self.fetch_text = fetch_text
+
+    def __repr__(self) -> str:
+        return "YouTubeApiSource()"
+
+    def _call(self, endpoint: str, **params: str) -> dict:
+        url = f"{API_BASE}/{endpoint}?{urlencode(params)}"
+        return self._get_json(url, {API_KEY_HEADER: self._api_key, "Accept": "application/json"})
+
+    def _channels(self, **params: str) -> dict:
+        items = self._call("channels", **params).get("items") or []
+        if not items:
+            raise YouTubeError("YouTube could not find that channel.", status=404)
+        return items[0]
+
+    def resolve_channel(self, ref: ChannelRef) -> ChannelInfo:
+        part = "snippet"
+        if ref.kind == "id":
+            item = self._channels(part=part, id=ref.value)
+        elif ref.kind == "handle":
+            item = self._channels(part=part, forHandle=f"@{ref.value}")
+        elif ref.kind == "user":
+            item = self._channels(part=part, forUsername=ref.value)
+        elif ref.kind == "video":
+            videos = self._call("videos", part="snippet", id=ref.value).get("items") or []
+            channel_id = videos[0].get("snippet", {}).get("channelId") if videos else None
+            if not channel_id:
+                raise YouTubeError("YouTube could not find that video.", status=404)
+            item = self._channels(part=part, id=channel_id)
+        else:  # /c/name links have no API lookup: read the id from the page, then ask the API
+            page = self.fetch_text(page_url(ref))
+            channel_id = _first(_CHANNEL_ID_PATTERNS, page)
+            if not channel_id:
+                raise YouTubeError("YouTube could not find that channel.", status=404)
+            item = self._channels(part=part, id=channel_id)
+        snippet = item.get("snippet") or {}
+        custom = (snippet.get("customUrl") or "").lstrip("@").lower()
+        handle = custom if HANDLE_RE.match(custom) else (ref.value if ref.kind == "handle" else None)
+        avatars = snippet.get("thumbnails") or {}
+        avatar = (avatars.get("default") or avatars.get("medium") or {}).get("url")
+        return ChannelInfo(item["id"], handle, snippet.get("title") or handle or item["id"], avatar)
+
+    def fetch_videos(self, competitor: CompetitorRow) -> list[VideoRow]:
+        from app.generator import new_id, now_iso  # local import: generator imports this module
+
+        channel = self._channels(part="contentDetails", id=competitor.channel_id)
+        uploads = (channel.get("contentDetails", {}).get("relatedPlaylists", {}) or {}).get("uploads")
+        if not uploads:
+            return []
+        try:
+            playlist = self._call("playlistItems", part="contentDetails", playlistId=uploads, maxResults=str(VIDEOS_PER_FETCH))
+        except YouTubeError as err:
+            if err.status == 404:
+                return []  # a channel that never uploaded has no uploads playlist
+            raise
+        ids = [
+            i.get("contentDetails", {}).get("videoId", "")
+            for i in playlist.get("items") or []
+        ]
+        ids = [v for v in ids if VIDEO_ID_RE.match(v)][:VIDEOS_PER_FETCH]
+        details: dict[str, dict] = {}
+        for start in range(0, len(ids), 50):
+            batch = ids[start : start + 50]
+            for item in self._call("videos", part="snippet,statistics", id=",".join(batch)).get("items") or []:
+                details[item.get("id", "")] = item
+        fetched_at = now_iso()
+        rows = []
+        for video_id in ids:  # playlist order is newest first; private or deleted videos have no details
+            item = details.get(video_id)
+            if not item:
+                continue
+            snippet, stats = item.get("snippet") or {}, item.get("statistics") or {}
+            rows.append(
+                VideoRow(
+                    id=new_id("video"),
+                    competitor_id=competitor.id,
+                    competitor_username=competitor.username,
+                    youtube_id=video_id,
+                    permalink=f"https://www.youtube.com/watch?v={video_id}"[:255],
+                    caption=(snippet.get("title") or "").strip()[:500],
+                    description=(snippet.get("description") or "").strip()[:5000],
+                    thumbnail_url=_thumb(snippet, video_id)[:512],
+                    view_count=_int(stats.get("viewCount")),
+                    like_count=_int(stats.get("likeCount")),  # absent when the channel hides likes
+                    comment_count=_int(stats.get("commentCount")),
+                    posted_at=_iso(snippet.get("publishedAt")) or fetched_at,
+                    fetched_at=fetched_at,
+                )
+            )
+        return rows
