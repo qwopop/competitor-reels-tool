@@ -1,4 +1,6 @@
 import type {
+  AiDraft,
+  AiDraftRequest,
   Competitor,
   ContentPlanItem,
   PlanItemChanges,
@@ -119,6 +121,13 @@ export class HttpVideosApi implements VideosApi {
 
   applyRemixTemplate(id: string, template: RemixTemplate) {
     return request<RemixedVideo>('POST', `/remixes/${enc(id)}/apply-template`, { template });
+  }
+
+  writeRemixWithAi(id: string, { voice, customVoice, instructions }: AiDraftRequest) {
+    const body: AiDraftRequest = { voice };
+    if (voice === 'custom') body.customVoice = customVoice ?? '';
+    if (instructions?.trim()) body.instructions = instructions;
+    return request<AiDraft>('POST', `/remixes/${enc(id)}/ai-draft`, body);
   }
 
   getRemix(id: string) {

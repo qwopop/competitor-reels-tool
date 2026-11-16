@@ -269,6 +269,74 @@ paths:
         "404":
           $ref: "#/components/responses/Error"
 
+  /api/remixes/{remix_id}/ai-draft:
+    parameters:
+      - $ref: "#/components/parameters/RemixId"
+    post:
+      operationId: writeRemixWithAi
+      summary: Ask Gemini for a draft title, hook, script and CTA in a creator voice
+      description: >
+        Gemini writes a draft from the source video's title, description, channel,
+        numbers and format (Short or long video), in the chosen voice. The draft is
+        returned only: nothing is saved (the remix and its updatedAt are unchanged).
+        The client fills the editor with it and saves through PATCH /api/remixes/{remix_id}.
+        The server first asks GEMINI_MODEL (default gemini-3.5-flash) and, when it
+        answers 404, 429, 5xx, times out or returns an invalid answer, retries once
+        with gemini-3.1-flash-lite. The templates keep working without Gemini.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AiDraftRequest"
+      responses:
+        "200":
+          description: Draft written (not saved)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AiDraft"
+        "404":
+          description: Remix not found, or its source video no longer exists
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: >
+            Invalid request: unknown voice, voice custom with an empty customVoice,
+            customVoice over 300 or instructions over 500 characters. Nothing is sent to Gemini.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          description: Gemini's quota is used up (every model tried answered 429)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                detail: Gemini's free quota is used up for now. Try again later, or use a template.
+        "502":
+          description: >
+            Gemini failed (5xx, timeout, network error, invalid answer, or the key
+            was rejected). The editor text should stay as it was.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                detail: Gemini couldn't write a draft this time. Your text hasn't changed. Try again.
+        "503":
+          description: AI writing is not configured (GEMINI_API_KEY is not set on the server)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                detail: AI writing is not set up on this server. Ask the owner to set GEMINI_API_KEY. Templates still work.
+
   /api/content-plan:
     get:
       operationId: listContentPlan
@@ -503,6 +571,51 @@ components:
         hook: { type: string, maxLength: 1000 }
         script: { type: string, maxLength: 2000 }
         cta: { type: string, maxLength: 500 }
+
+    CreatorVoice:
+      type: string
+      description: >
+        A preset persona for the AI writer, or custom (then customVoice describes it).
+      enum: [educational_blogger, storyteller, entertainer, expert_reviewer, motivational_coach, custom]
+
+    AiDraftRequest:
+      type: object
+      required: [voice]
+      additionalProperties: false
+      properties:
+        voice:
+          $ref: "#/components/schemas/CreatorVoice"
+        customVoice:
+          type: string
+          maxLength: 300
+          description: >
+            Who is speaking, in the owner's words ("You are a calm finance coach…").
+            Required and not blank when voice is custom; ignored for a preset voice.
+        instructions:
+          type: string
+          maxLength: 500
+          description: Optional extra instructions ("Keep it under 45 seconds.").
+
+    AiDraft:
+      type: object
+      description: >
+        A draft written by Gemini. Not a saved remix: it has no id or timestamps.
+        Fields longer than the limits of UpdateRemixRequest are cut to them.
+      required: [title, hook, script, cta, model]
+      properties:
+        title: { type: string, maxLength: 500 }
+        hook: { type: string, maxLength: 1000 }
+        script:
+          type: string
+          maxLength: 2000
+          description: >
+            Numbered beats as the templates write them: "1. …" lines for long videos,
+            time-marked lines ("0–3s · …", ending with "Last 5s · CTA") for Shorts.
+        cta: { type: string, maxLength: 500 }
+        model:
+          type: string
+          description: The Gemini model that answered.
+          example: gemini-3.5-flash
 
     PlanStatus:
       type: string

@@ -1,5 +1,6 @@
 """OpenTelemetry: resource, spans, logs and every metric, read from in-memory exporters."""
 
+import json
 import logging
 import socket
 import threading
@@ -14,7 +15,7 @@ from opentelemetry.sdk._logs.export import InMemoryLogRecordExporter, SimpleLogR
 from opentelemetry.sdk.trace.export import SimpleSpanProcessor
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 
-from app import store, telemetry
+from app import ai_writer, store, telemetry
 from app.generator import SampleSource
 from app.main import create_app
 from app.youtube import YouTubeError
@@ -332,7 +333,7 @@ def test_metric_attributes_are_bounded(tclient, recorder):
         "clipremix.plan_items.added",
         "clipremix.fetch.duration",
         "clipremix.competitors",
-    }
+    }  # clipremix.remix.ai_writes has its own test (outcome and model_role)
     for name in names:
         for attrs, _ in recorder.points(name):
             assert set(attrs) <= {"outcome"}
@@ -390,3 +391,102 @@ def test_unreachable_endpoint_does_not_break_or_slow_requests(database_url, monk
         assert time.perf_counter() - started < 3
         shutdown_started = time.perf_counter()
     assert time.perf_counter() - shutdown_started < 15
+
+
+# ---- AI writes (Gemini) ----------------------------------------------------------
+
+FAKE_GEMINI_KEY = "FAKE-gemini-key-for-telemetry-0000"
+
+
+class ScriptedGemini:
+    def __init__(self, *script):
+        self.script = list(script)
+
+    def generate(self, api_key, model, body, timeout):
+        item = self.script.pop(0)
+        if isinstance(item, BaseException):
+            raise item
+        return item
+
+
+def gemini_answer(**overrides):
+    fields = {"title": "T", "hook": "H", "script": "1. a\n2. b\n3. c", "cta": "C", **overrides}
+    return {"candidates": [{"content": {"parts": [{"text": json.dumps(fields)}]}}]}
+
+
+def ai_client(database_url, recorder, gemini):
+    app = create_app(database_url, video_source=SampleSource(), telemetry=recorder.telemetry, gemini=gemini)
+    return app
+
+
+@pytest.mark.parametrize(
+    "script, key, outcome, role",
+    [
+        ([gemini_answer()], FAKE_GEMINI_KEY, "success", "primary"),
+        ([ai_writer.GeminiHttpError(503), gemini_answer()], FAKE_GEMINI_KEY, "success", "fallback"),
+        ([], "", "not_configured", "none"),
+        ([ai_writer.GeminiHttpError(429)] * 2, FAKE_GEMINI_KEY, "quota", "fallback"),
+        ([ai_writer.GeminiHttpError(503), ai_writer.GeminiTimeout("t")], FAKE_GEMINI_KEY, "upstream_error", "fallback"),
+        ([ai_writer.GeminiHttpError(401)], FAKE_GEMINI_KEY, "upstream_error", "primary"),
+        ([gemini_answer(cta=""), gemini_answer(script="one line")], FAKE_GEMINI_KEY, "invalid_output", "fallback"),
+    ],
+    ids=["success", "fallback", "not_configured", "quota", "upstream_error", "rejected_key", "invalid_output"],
+)
+def test_ai_writes_are_counted_once_by_outcome_and_model_role(
+    database_url, recorder, monkeypatch, script, key, outcome, role
+):
+    monkeypatch.setenv("GEMINI_API_KEY", key)
+    with TestClient(ai_client(database_url, recorder, ScriptedGemini(*script))) as client:
+        video = first_video(client)
+        remix = client.post(f"/api/videos/{video['id']}/remix").json()
+        res = client.post(f"/api/remixes/{remix['id']}/ai-draft", json={"voice": "custom", "customVoice": "Me"})
+        assert res.status_code in (200, 429, 502, 503)
+        # Invalid requests and missing remixes are not AI writes.
+        client.post(f"/api/remixes/{remix['id']}/ai-draft", json={"voice": "custom"})
+        client.post("/api/remixes/nope/ai-draft", json={"voice": "storyteller"})
+    points = recorder.points("clipremix.remix.ai_writes")
+    assert [(attrs, p.value) for attrs, p in points] == [({"outcome": outcome, "model_role": role}, 1)]
+    assert outcome in telemetry.AI_WRITE_OUTCOMES and role in telemetry.AI_MODEL_ROLES
+
+
+def test_the_gemini_key_is_not_in_any_span_or_log(database_url, recorder, monkeypatch):
+    """The real HTTP client against a local stand-in for Gemini: the traced URL has no key."""
+    seen = {}
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_POST(self):
+            seen["key"] = self.headers.get("x-goog-api-key")
+            seen["path"] = self.path
+            self.rfile.read(int(self.headers["Content-Length"]))
+            body = json.dumps(gemini_answer()).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, *args):
+            pass
+
+    server = HTTPServer(("127.0.0.1", 0), Handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    monkeypatch.setenv("NO_PROXY", "127.0.0.1")
+    monkeypatch.delenv("no_proxy", raising=False)
+    monkeypatch.setenv("GEMINI_API_KEY", FAKE_GEMINI_KEY)
+    monkeypatch.setattr(ai_writer, "ENDPOINT", f"http://127.0.0.1:{server.server_port}/v1beta/models/{{model}}:generateContent")
+    try:
+        with TestClient(ai_client(database_url, recorder, ai_writer.HttpGeminiClient())) as client:
+            video = first_video(client)
+            remix = client.post(f"/api/videos/{video['id']}/remix").json()
+            res = client.post(f"/api/remixes/{remix['id']}/ai-draft", json={"voice": "storyteller"})
+    finally:
+        server.shutdown()
+    assert res.status_code == 200 and FAKE_GEMINI_KEY not in res.text
+    assert seen["key"] == FAKE_GEMINI_KEY and FAKE_GEMINI_KEY not in seen["path"]
+    spans = recorder.spans.get_finished_spans()
+    assert any(s.kind.name == "CLIENT" and "POST" in s.name for s in spans)
+    for span in spans:
+        assert FAKE_GEMINI_KEY not in json.dumps({k: str(v) for k, v in (span.attributes or {}).items()})
+        assert FAKE_GEMINI_KEY not in span.name
+    for record in recorder.logs.get_finished_logs():
+        assert FAKE_GEMINI_KEY not in str(record.log_record.body)
+        assert FAKE_GEMINI_KEY not in str(record.log_record.attributes)

@@ -31,12 +31,23 @@ A single user with no login. Anyone who can reach the app can use it.
    (opening promise, chapters, what the creator offers), channel, views and
    format, so every video gets its own text. Remixing a video that already has
    one opens the existing one.
-5. **Edit a remix.** The user edits the title, hook, script, or CTA and saves.
+5. **Write a remix with AI.** On the Remix page the user picks a creator voice
+   (Educational blogger, Storyteller, Entertainer, Expert reviewer, Motivational
+   coach, or a custom "You are…" text of up to 300 characters), optionally adds
+   instructions (up to 500 characters), and presses **Write with AI**. The
+   backend asks Google's Gemini (`backend/app/ai_writer.py`) to write the title,
+   hook, script (the same beat format as the templates) and CTA from the source
+   video's title, description, channel, numbers and format. The draft fills the
+   editor as unsaved changes; nothing is stored until **Save changes**. The
+   templates stay the fallback: when `GEMINI_API_KEY` is not set, the quota is
+   used up or Gemini fails, the user sees a message, the editor text is unchanged
+   and **Apply template** works as before.
+6. **Edit a remix.** The user edits the title, hook, script, or CTA and saves.
    Only changed fields are sent to the server.
-6. **Stop tracking.** Removing a competitor deletes its videos and their remixes.
+7. **Stop tracking.** Removing a competitor deletes its videos and their remixes.
    Videos that have a remix or a content plan item are kept when the competitor's
    videos are fetched again, so edits and plans are never lost.
-7. **Plan filming.** From the Videos page or a remix, the user adds a video to the
+8. **Plan filming.** From the Videos page or a remix, the user adds a video to the
    content plan. Each item has a status shown as an emoji: ❌ not started (the
    default), ⏳ ready to film (script done), or ✅ filmed (filmed and posted).
    The Content Plan page lists the items with their status and counts, and the
@@ -47,7 +58,7 @@ A single user with no login. Anyone who can reach the app can use it.
    prepared, published. The page has three layouts: Board (by status), Table,
    and **Calendar**, a month view showing what to film and publish on each day,
    with unscheduled videos listed underneath.
-8. **Open a channel.** As soon as the user types a valid channel link or handle
+9. **Open a channel.** As soon as the user types a valid channel link or handle
    on the dashboard or in the Add competitor dialog, a link to that channel's
    Videos tab appears (a video link opens the video). The **Go to videos** page
    does the same on its own and also links to the channel's Shorts.
@@ -74,6 +85,12 @@ No API key or account is needed (`backend/app/youtube.py`):
 - **Channel lookup:** the channel's public page, read once when a channel is
   added, like a link preview.
 
+**AI drafts:** Google's Gemini API (`generateContent`), called only from the
+backend with `GEMINI_API_KEY` (docs/deploy.md). Fixed instructions go in the
+system instruction; the video's text and the user's voice and instructions are
+sent only as JSON data, and the answer must match a JSON schema. Without the
+key, AI writing is off and the templates work as before.
+
 `VIDEO_SOURCE=sample` switches to generated sample data
 (`backend/app/generator.py`) with no network access. Tests always use it.
 
@@ -81,6 +98,6 @@ No API key or account is needed (`backend/app/youtube.py`):
 
 - More than the latest 15 videos per channel, and comment counts. Both need the
   YouTube Data API, which requires a Google API key.
-- AI-written breakdowns. Remixes are written by rules in `backend/app/remix.py`
-  from the video's title, description, channel name, views and format.
+- Limits on AI writes per day, remembered voices, AI from the Videos page, and
+  streaming or single-field AI rewrites (#97, #98, #99).
 - Accounts, authentication, and multiple users.

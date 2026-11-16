@@ -1,0 +1,114 @@
+# Proves the backend's Gemini remix writer (backend/app/ai_writer.py) against the real API with
+# the repository secret GEMINI_API_KEY: one draft for a fixed sample video in one preset voice.
+# Prints only non-secret facts (the model that answered, whether the fallback was used, the four
+# field lengths, the number of script lines, the outcome) and the generated draft. The key goes
+# only in the x-goog-api-key header and GitHub masks it in the log. Manual runs only.
+# Note: Render does not see GitHub secrets; the app reads GEMINI_API_KEY from Render (docs/deploy.md).
+# Proven on the real API in run 43823669144 (issue #96, through a temporary push trigger since removed).
+name: Gemini API check
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: gemini-api-check-${{ github.sha }}
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        shell: bash
+    env:
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      GEMINI_MODEL: ${{ vars.GEMINI_MODEL }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Skip when the secret is missing
+        id: gate
+        run: |
+          if [ -z "$GEMINI_API_KEY" ]; then
+            echo "::notice::Secret GEMINI_API_KEY is not set; skipping the real Gemini API check."
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: astral-sh/setup-uv@v5
+        if: steps.gate.outputs.run == 'true'
+      - name: Install the backend
+        if: steps.gate.outputs.run == 'true'
+        working-directory: backend
+        run: uv sync --frozen
+      - name: Write one draft through the backend's real Gemini client
+        if: steps.gate.outputs.run == 'true'
+        working-directory: backend
+        run: |
+          set -euo pipefail
+          uv run python - <<'PY'
+          import sys
+          import time
+
+          from app import ai_writer
+
+          facts = ai_writer.DraftFacts(
+              title="I let AI build my entire SaaS in 48 hours",
+              description=(
+                  "In this video I show you how I used AI coding tools to build and launch a small SaaS in one weekend.\n"
+                  "0:00 Intro\n1:10 Picking the idea\n4:30 Building the backend with AI\n"
+                  "9:45 Payments and auth\n14:20 Launch and first users\nGet my free prompt checklist below."
+              ),
+              channel="Vibe Coder",
+              views=162_900,
+              likes=8_400,
+              comments=512,
+              is_short=False,
+          )
+          model = ai_writer.model_from_env()
+          voice = "educational_blogger"
+          print(f"Primary model: {model}; fallback model: {ai_writer.FALLBACK_MODEL}; voice preset: {voice}")
+          started = time.perf_counter()
+          try:
+              draft = ai_writer.write_draft(
+                  ai_writer.HttpGeminiClient(), ai_writer.api_key_from_env(), model, facts,
+                  ai_writer.voice_text(voice, None), "Keep it under 60 seconds.",
+              )
+          except ai_writer.AiWriteError as err:
+              print(f"Outcome: {err.outcome} (HTTP {err.status} to the browser, reason {err.reason}, "
+                    f"last model {err.model}, model_role {err.model_role}) after {time.perf_counter() - started:.1f}s")
+              print(f"Message the owner would see: {err.detail}")
+              for attempt in err.attempts:
+                  print(f"  attempt {attempt}")
+              if err.outcome == "invalid_output":
+                  # One raw call to show what came back (the answer is not secret; the key is never printed).
+                  try:
+                      raw = ai_writer.HttpGeminiClient().generate(
+                          ai_writer.api_key_from_env(), err.model,
+                          ai_writer.build_request(facts, ai_writer.voice_text(voice, None), None), 60,
+                      )
+                      candidate = (raw.get("candidates") or [{}])[0]
+                      parts = (candidate.get("content") or {}).get("parts") or []
+                      print(f"  raw ({err.model}): finishReason={candidate.get('finishReason')} parts={[sorted(p) for p in parts]}")
+                      print(f"  raw usage: {raw.get('usageMetadata')}")
+                      print("  raw text (first 600 chars): " + "".join(p.get("text", "") for p in parts)[:600])
+                  except Exception as raw_err:
+                      print(f"  raw call failed: {type(raw_err).__name__}: {raw_err}")
+              print("::error::Gemini returned no valid draft.")
+              sys.exit(1)
+          fields = draft.fields
+          script_lines = [line for line in fields["script"].splitlines() if line.strip()]
+          print(f"Outcome: success in {time.perf_counter() - started:.1f}s")
+          print(f"Model that answered: {draft.model} (fallback used: {'yes' if draft.model_role == 'fallback' else 'no'})")
+          print("Field lengths: " + ", ".join(f"{name}={len(value)}" for name, value in fields.items()))
+          print(f"Script lines: {len(script_lines)}")
+          print("---- Generated draft ----")
+          for name in ("title", "hook", "script", "cta"):
+              print(f"[{name}]")
+              print(fields[name])
+          PY

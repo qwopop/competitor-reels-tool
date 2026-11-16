@@ -355,6 +355,38 @@ Get a key:
 
 The key is sent in the `x-goog-api-key` header, never in a URL, so it does not show in logs, traces or error messages. If Google rejects it the app says "The YouTube API key was rejected. Check YOUTUBE_API_KEY and that YouTube Data API v3 is enabled for it." Quota: 10,000 units a day by default, and a fetch costs about 3 units (adding a channel costs 1), so roughly 3,000 fetches a day. When it is used up the app says "The YouTube API daily quota is used up. Try again tomorrow." Rotate by creating a second key, setting it in Render and the GitHub secret, then deleting the old one (cleanup.md).
 
+## Gemini API key (`GEMINI_API_KEY`)
+
+The Remix page's **Write with AI** (#96) asks Google's Gemini API to write the title, hook, script and call to action in a
+creator voice. Without a key the app works exactly as before with the templates only, and **Write with AI** says it is not set up.
+
+1. Create a free key at [Google AI Studio](https://aistudio.google.com/apikey) (**Create API key**, free tier, no card). The
+   on-call engineer's key (#82) works too, but a separate key keeps the two quotas apart.
+2. Set it where the app runs. GitHub secrets are not visible to Render, so set `GEMINI_API_KEY` in Render on **both**
+   services: `clipremix-dev` and `clipremix-prod`, **Environment**, add `GEMINI_API_KEY` (`render.yaml` lists it with
+   `sync: false`, so the value is never in the repository). The service restarts with it; the key is read on every request.
+3. Optional: `GEMINI_MODEL` in Render picks the first model (default `gemini-3.5-flash`). When it answers 404, 429, a 5xx,
+   times out (20 s per call) or returns an unusable answer, the backend tries `gemini-3.1-flash-lite` once. With
+   `GEMINI_MODEL=gemini-3.1-flash-lite` there is no second try. See [on-call.md](on-call.md) ("Model") for why the model is pinned.
+
+The repository secret `GEMINI_API_KEY` is used only by the manual workflow `gemini-api-check.yml` (Actions, **Gemini API check**,
+**Run workflow**): it runs the backend's real Gemini client on a fixed sample video, prints the model that answered, whether the
+fallback was used, the field lengths, the script line count and the draft, and fails when no valid draft comes back. It skips
+with a notice when the secret is missing. The optional Actions variable `GEMINI_MODEL` applies to it as well.
+
+The key is sent only in the `x-goog-api-key` header, never in a URL, a log line, a trace, an error message or a response.
+The owner sees one of three messages when it does not work:
+
+| Situation | HTTP | Message |
+| --- | --- | --- |
+| `GEMINI_API_KEY` not set (or empty) | 503 | AI writing is not set up on this server. Ask the owner to set GEMINI_API_KEY. Templates still work. |
+| Every model tried answered 429 | 429 | Gemini's free quota is used up for now. Try again later, or use a template. |
+| 5xx, timeout, network error or invalid answer after the fallback | 502 | Gemini couldn't write a draft this time. Your text hasn't changed. Try again. |
+| Key rejected (400, 401, 403; not retried) | 502 | Gemini couldn't write a draft this time. Your text hasn't changed. Check GEMINI_API_KEY. |
+
+Drafts are never saved by the AI call: the owner reviews them and presses **Save changes**. Rotate the key by creating a new
+one, setting it in Render (both services) and in the GitHub secret, then deleting the old one ([cleanup.md](cleanup.md)).
+
 ## Clean up
 
 Everything the DevOps set created, and how to delete each piece and check it is gone: [cleanup.md](cleanup.md). The exercise that proves alert and on-call response end to end: [on-call-exercise.md](on-call-exercise.md).
