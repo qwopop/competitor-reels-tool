@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, BookmarkPlus, Sparkles, Trash2 } from 'lucide-react';
 import { useApi } from '@/services';
 import type { ContentPlanItem, CreatorVoice, Video, RemixedVideo, RemixTemplate } from '@/types';
@@ -45,9 +45,13 @@ function initialVoiceState(): { savedVoices: SavedVoice[]; voice: VoiceSelection
   return { savedVoices, voice, customVoice: last.customText };
 }
 
+// Shown when the page is opened from a video's Write with AI button (issue #99).
+const WRITE_AI_INTRO = 'Pick a voice, then press Write with AI. Nothing changes until you press Save changes.';
+
 export function RemixPage() {
   const { id } = useParams<{ id: string }>();
   const api = useApi();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const [remix, setRemix] = useState<RemixedVideo | null>(null);
   const [video, setVideo] = useState<Video | null>(null);
@@ -81,6 +85,10 @@ export function RemixPage() {
   // From the last successful AI write of this visit; null until then (nothing is shown).
   const [aiWrites, setAiWrites] = useState<{ left: number; limit: number } | null>(null);
   const [focusAfterWrite, setFocusAfterWrite] = useState<'title' | 'button' | 'voice' | null>(null);
+  // Opened with ?write=ai: the info notice in the AI block, and a scroll and focus still to do.
+  const [writeIntro, setWriteIntro] = useState(false);
+  const pendingAiFocus = useRef(false);
+  const aiBlock = useRef<HTMLDivElement>(null);
   const mounted = useRef(true);
   const writeButton = useRef<HTMLButtonElement>(null);
   const customVoiceBox = useRef<HTMLTextAreaElement>(null);
@@ -94,6 +102,26 @@ export function RemixPage() {
       mounted.current = false; // a late AI answer after leaving the page is ignored
     };
   }, []);
+
+  // ?write=ai is read once and dropped from the address at once (history replace), so a reload or
+  // back and forward does not show the notice or move focus again. Gemini is not called here.
+  useEffect(() => {
+    if (searchParams.get('write') !== 'ai') return;
+    pendingAiFocus.current = true;
+    setWriteIntro(true);
+    const next = new URLSearchParams(searchParams);
+    next.delete('write');
+    setSearchParams(next, { replace: true });
+  }, [searchParams, setSearchParams]);
+
+  // Once the remix has loaded, bring the Write with AI block into view and focus Creator voice.
+  useEffect(() => {
+    if (loading || !remix || !pendingAiFocus.current) return;
+    pendingAiFocus.current = false;
+    const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
+    aiBlock.current?.scrollIntoView?.({ block: 'start', behavior: reduceMotion ? 'auto' : 'smooth' });
+    voiceSelect.current?.focus({ preventScroll: true });
+  }, [loading, remix]);
 
   // Focus moves once the fields are editable again (they are read-only while Gemini writes).
   useEffect(() => {
@@ -184,6 +212,7 @@ export function RemixPage() {
   }
 
   function handleApplyClick() {
+    setWriteIntro(false);
     if (dirty) setConfirmApply(true);
     else applyTemplate();
   }
@@ -233,6 +262,7 @@ export function RemixPage() {
   }
 
   function handleWriteClick() {
+    setWriteIntro(false);
     if (voice === 'custom' && !customVoice.trim()) {
       setVoiceMissing(true);
       customVoiceBox.current?.focus();
@@ -354,6 +384,9 @@ export function RemixPage() {
 
         <section className="panel min-w-0 sm:p-8">
           <AiBlock
+            blockRef={aiBlock}
+            intro={writeIntro}
+            onDismissIntro={() => setWriteIntro(false)}
             voice={voice}
             onVoice={handleVoiceChange}
             voiceSelect={voiceSelect}
@@ -509,6 +542,9 @@ export function RemixPage() {
 }
 
 function AiBlock({
+  blockRef,
+  intro,
+  onDismissIntro,
   voice,
   onVoice,
   voiceSelect,
@@ -531,6 +567,9 @@ function AiBlock({
   writeButton,
   customVoiceBox,
 }: {
+  blockRef: React.RefObject<HTMLDivElement>;
+  intro: boolean;
+  onDismissIntro: () => void;
   voice: VoiceSelection;
   onVoice: (voice: VoiceSelection) => void;
   voiceSelect: React.RefObject<HTMLSelectElement>;
@@ -557,8 +596,13 @@ function AiBlock({
   const presets = CREATOR_VOICES.filter((v) => v.value !== 'custom');
   const custom = CREATOR_VOICES.find((v) => v.value === 'custom')!;
   return (
-    <div>
+    <div ref={blockRef} className="scroll-mt-6">
       <h2 className="label">Write with AI</h2>
+      {intro ? (
+        <div className="mt-4">
+          <Notice tone="info" message={WRITE_AI_INTRO} onDismiss={onDismissIntro} />
+        </div>
+      ) : null}
 
       <label htmlFor="ai-voice" className="mt-4 block text-sm text-ink/70">
         Creator voice
