@@ -4,13 +4,11 @@
 # field lengths, the number of script lines, the outcome) and the generated draft. The key goes
 # only in the x-goog-api-key header and GitHub masks it in the log. Manual runs only.
 # Note: Render does not see GitHub secrets; the app reads GEMINI_API_KEY from Render (docs/deploy.md).
+# Proven on the real API in run 43823669144 (issue #96, through a temporary push trigger since removed).
 name: Gemini API check
 
 on:
   workflow_dispatch:
-  push:  # TEMPORARY (issue #96): the proof run on the feature branch; removed in the next commit
-    branches: [claude/gallant-pascal-355cez]
-    paths: [.github/workflows/gemini-api-check.yml]
 
 permissions:
   contents: read
