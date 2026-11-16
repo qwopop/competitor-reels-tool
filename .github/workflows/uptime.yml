@@ -6,6 +6,7 @@ name: Uptime check
 
 on:
   workflow_dispatch:
+  # Schedules fire only from the default branch (main), on its latest commit.
   schedule:
     - cron: "41 * * * *"   # hourly: sleeping services are woken at most once an hour, see the runbook
   push:
