@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { Sparkles } from 'lucide-react';
 import type { ContentPlanItem, Video, RemixedVideo } from '@/types';
 import { useApi } from '@/services';
 import { relativeTime, videoStats } from '@/utils/format';
@@ -14,6 +15,7 @@ import { WatchOnYouTubeLink } from '@/components/YouTubeLinks';
 import { channelLabel } from '@/utils/youtube';
 
 type LibraryView = 'grid' | 'list';
+type BusyAction = 'remix' | 'ai' | 'plan';
 
 const SORT_OPTIONS: { value: VideoSort; label: string }[] = [
   { value: 'newest', label: 'Newest' },
@@ -30,6 +32,8 @@ export function VideosPage() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
+  // Which of the busy video's buttons was pressed, so only that one shows the Spinner.
+  const [busyAction, setBusyAction] = useState<BusyAction | null>(null);
   const [preview, setPreview] = useState<RemixedVideo | null>(null);
 
   const [view, setView] = useState<LibraryView>('grid');
@@ -66,15 +70,19 @@ export function VideosPage() {
     [videos, competitorId, query, sort]
   );
 
-  async function handleRemix(video: Video) {
+  // Remix and Write with AI both create the remix (or get the existing one) with the same call;
+  // Write with AI opens the Remix page with its AI block ready (issue #99). Gemini is not called here.
+  async function handleRemix(video: Video, action: 'remix' | 'ai' = 'remix') {
     setBusyId(video.id);
+    setBusyAction(action);
     const res = await api.remixVideo(video.id);
     setBusyId(null);
+    setBusyAction(null);
     if (res.error || !res.data) {
       setError(res.error ?? 'Could not create the breakdown.');
       return;
     }
-    navigate(`/remix/${res.data.id}`);
+    navigate(action === 'ai' ? `/remix/${res.data.id}?write=ai` : `/remix/${res.data.id}`);
   }
 
   async function handleAddToPlan(video: Video) {
@@ -83,8 +91,10 @@ export function VideosPage() {
       return;
     }
     setBusyId(video.id);
+    setBusyAction('plan');
     const res = await api.addToContentPlan(video.id);
     setBusyId(null);
+    setBusyAction(null);
     if (res.error || !res.data) {
       setError(res.error ?? 'Could not add to the Content Plan.');
       return;
@@ -211,10 +221,11 @@ export function VideosPage() {
               </div>
               <VideoActions
                 video={video}
-                busy={busyId === video.id}
+                busy={busyId === video.id ? busyAction : null}
                 inPlan={planByVideo[video.id]}
                 hasRemix={Boolean(remixByVideo[video.id])}
                 onRemix={() => handleRemix(video)}
+                onWriteWithAi={() => handleRemix(video, 'ai')}
                 onAddToPlan={() => handleAddToPlan(video)}
                 onPreview={() => setPreview(remixByVideo[video.id])}
               />
@@ -245,10 +256,11 @@ export function VideosPage() {
                 </div>
                 <VideoActions
                   video={video}
-                  busy={busyId === video.id}
+                  busy={busyId === video.id ? busyAction : null}
                   inPlan={planByVideo[video.id]}
                   hasRemix={Boolean(remixByVideo[video.id])}
                   onRemix={() => handleRemix(video)}
+                  onWriteWithAi={() => handleRemix(video, 'ai')}
                   onAddToPlan={() => handleAddToPlan(video)}
                   onPreview={() => setPreview(remixByVideo[video.id])}
                 />
@@ -269,17 +281,21 @@ function VideoActions({
   inPlan,
   hasRemix,
   onRemix,
+  onWriteWithAi,
   onAddToPlan,
   onPreview,
 }: {
   video: Video;
-  busy: boolean;
+  busy: BusyAction | null;
   inPlan: ContentPlanItem | undefined;
   hasRemix: boolean;
   onRemix: () => void;
+  onWriteWithAi: () => void;
   onAddToPlan: () => void;
   onPreview: () => void;
 }) {
+  // "Write with AI" repeats on every card, so its accessible name carries the caption.
+  const caption = video.caption.length > 80 ? video.caption.slice(0, 80) : video.caption;
   return (
     <div className="mt-5 flex flex-wrap items-center gap-3">
       {hasRemix && (
@@ -292,12 +308,21 @@ function VideoActions({
           <span aria-hidden="true">{planStatusMeta(inPlan.status).emoji}</span> In content plan
         </span>
       ) : (
-        <button type="button" onClick={onAddToPlan} disabled={busy} className="btn-outline px-4 py-2 text-sm">
+        <button type="button" onClick={onAddToPlan} disabled={busy !== null} className="btn-outline px-4 py-2 text-sm">
           Add to plan
         </button>
       )}
-      <button type="button" onClick={onRemix} disabled={busy} className="btn-primary px-4 py-2 text-sm">
-        {busy ? <Spinner /> : null} Remix
+      <button
+        type="button"
+        onClick={onWriteWithAi}
+        disabled={busy !== null}
+        aria-label={`Write with AI: ${caption}`}
+        className="btn-outline px-4 py-2 text-sm"
+      >
+        {busy === 'ai' ? <Spinner className="h-3.5 w-3.5" /> : <Sparkles size={14} aria-hidden="true" />} Write with AI
+      </button>
+      <button type="button" onClick={onRemix} disabled={busy !== null} className="btn-primary px-4 py-2 text-sm">
+        {busy === 'remix' ? <Spinner /> : null} Remix
       </button>
       <div className="basis-full">
         <WatchOnYouTubeLink permalink={video.permalink} username={video.competitorUsername} />
