@@ -1,14 +1,9 @@
 # Proves the YouTube Data API source against the real API with the repository secret
-# YOUTUBE_API_KEY. Prints only non-secret facts. Manual runs only (workflow_dispatch).
+# YOUTUBE_API_KEY. Prints only non-secret facts. Manual runs only (workflow_dispatch). Proven green on the real API in run 43810245576.
 name: YouTube API check
 
 on:
   workflow_dispatch:
-  push:
-    branches: [claude/gallant-pascal-355cez]
-    paths:
-      - .github/workflows/youtube-api-check.yml
-      - backend/app/youtube*.py
 
 permissions:
   contents: read
