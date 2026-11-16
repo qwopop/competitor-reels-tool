@@ -326,11 +326,34 @@ Neon's own restore ("Restore" on the branch page, or branching from a past times
 
 - **No login.** Anyone with the address can read and change the data. Add
   authentication before sharing the link widely.
-- **Videos come from YouTube's public channel feeds.** No API key is needed.
+- **Videos come from the YouTube Data API** when `YOUTUBE_API_KEY` is set (next section), otherwise from YouTube's public channel feeds, which YouTube now often answers with 404.
   `VIDEO_SOURCE=sample` gives generated videos instead (used on dev).
 - **Version.** `/api/health` reports `APP_VERSION` (the image tag, baked in at build), then `RENDER_GIT_COMMIT`, then `dev`.
 - **Old services.** If you created the earlier Blueprint (`reels-api`,
   `reels-web`), delete those services in Render.
+
+## YouTube Data API key (`YOUTUBE_API_KEY`)
+
+YouTube's public Atom feed no longer works for most channels (it answers 404, so "Fetch videos" fails with
+"YouTube could not find that channel."). With a key the app uses the YouTube Data API v3 instead:
+`channels.list`, `playlistItems.list` and `videos.list` only (never `search.list`).
+
+| `VIDEO_SOURCE` | Behaviour |
+| --- | --- |
+| `youtube` (default) | The API when `YOUTUBE_API_KEY` is set and not empty, otherwise the public feed (one warning in the log) |
+| `youtube_api` | The API only; the app refuses to start without `YOUTUBE_API_KEY` |
+| `youtube_feed` | The public feed only, the old behaviour |
+| `sample` | Generated videos, no network (dev, tests) |
+
+Get a key:
+
+1. In [Google Cloud Console](https://console.cloud.google.com/) create or pick a project.
+2. **APIs & Services, Library**: search **YouTube Data API v3** and **Enable** it.
+3. **APIs & Services, Credentials, Create credentials, API key**.
+4. Edit the key and under **API restrictions** choose **Restrict key**, select only **YouTube Data API v3**. Do not use HTTP-referrer restrictions: this is a server key and the server sends no referrer (an IP restriction does not fit Render's free plan either).
+5. Set it where it is used. GitHub secrets are not visible to Render, so set `YOUTUBE_API_KEY` in Render itself: service `clipremix-prod`, **Environment**, add `YOUTUBE_API_KEY`. Set it on `clipremix-dev` only if dev is switched from `VIDEO_SOURCE=sample`. The repository secret `YOUTUBE_API_KEY` is used only by the workflow `youtube-api-check.yml`.
+
+The key is sent in the `x-goog-api-key` header, never in a URL, so it does not show in logs, traces or error messages. If Google rejects it the app says "The YouTube API key was rejected. Check YOUTUBE_API_KEY and that YouTube Data API v3 is enabled for it." Quota: 10,000 units a day by default, and a fetch costs about 3 units (adding a channel costs 1), so roughly 3,000 fetches a day. When it is used up the app says "The YouTube API daily quota is used up. Try again tomorrow." Rotate by creating a second key, setting it in Render and the GitHub secret, then deleting the old one (cleanup.md).
 
 ## Clean up
 

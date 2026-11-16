@@ -32,7 +32,11 @@ instead of AWS).
 The smoke subset is also run against the dev site after every deploy, and promotion to prod needs it to have passed (see below).
 
 All of them run with sample videos (`VIDEO_SOURCE=sample`), so no test
-depends on YouTube.
+depends on YouTube. The YouTube Data API source is unit-tested with a fake
+transport (`backend/tests/test_youtube_api.py`: parsing, errors, no key in any
+URL or message, source selection). Against the real API it is checked by the
+workflow `youtube-api-check.yml` (manual, uses the secret `YOUTUBE_API_KEY`,
+prints only non-secret facts and skips with a notice when the secret is missing).
 
 `make e2e` starts from an **empty database**, like CI. Tests used to run
 on a database that kept every earlier run's channels. It grew to about
