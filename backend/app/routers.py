@@ -248,9 +248,9 @@ def write_remix_with_ai(
     except ai_writer.AiWriteError as err:
         # One line per AI write: outcome, model and duration, never the prompt, voice or output.
         log.warning(
-            "AI write failed: outcome=%s reason=%s model_role=%s model=%s duration=%.2fs",
-            err.outcome, err.reason, err.model_role, err.model,
-            time.perf_counter() - started,
+            "AI write failed: outcome=%s model_role=%s model=%s duration=%.2fs attempts=[%s]",
+            err.outcome, err.model_role, err.model,
+            time.perf_counter() - started, "; ".join(err.attempts),
         )
         telemetry.record_ai_write(err.outcome, err.model_role)
         raise HTTPException(status_code=err.status, detail=err.detail) from None

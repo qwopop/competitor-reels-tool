@@ -248,6 +248,24 @@ def test_two_invalid_answers_are_502(make):
     assert res.json() == {"detail": ai_writer.FAILED}
 
 
+def test_the_log_line_names_each_attempt_with_a_fixed_reason_and_no_answer_text(make, caplog):
+    caplog.set_level(logging.INFO)
+    client, fake, remix = make(ai_writer.GeminiTimeout("slow"), answer({**GOOD, "script": "1. SECRET-BEAT"}))
+    assert draft(client, remix).status_code == 502
+    line = next(r.getMessage() for r in caplog.records if r.getMessage().startswith("AI write failed"))
+    assert f"{PRIMARY}: timeout" in line and f"{FALLBACK}: invalid:script_lines=1" in line
+    assert "SECRET-BEAT" not in caplog.text
+
+
+def test_thought_parts_are_ignored(make):
+    response = {"candidates": [{"content": {"parts": [
+        {"text": "Let me think about this...", "thought": True},
+        {"text": json.dumps(GOOD)},
+    ]}}]}
+    client, fake, remix = make(response)
+    assert draft(client, remix).json()["title"] == GOOD["title"]
+
+
 def test_over_long_fields_are_cut_to_the_limits_and_can_be_saved(make):
     long = {"title": "T" * 900, "hook": "H" * 1500, "script": "\n".join(f"{i}. " + "s" * 300 for i in range(1, 12)),
             "cta": "C" * 800}

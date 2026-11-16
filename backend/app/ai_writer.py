@@ -255,26 +255,34 @@ class HttpGeminiClient:
 
 
 def parse_answer(response: dict) -> dict[str, str]:
-    """The four fields from a generateContent response, validated and cut to the limits."""
+    """The four fields from a generateContent response, validated and cut to the limits.
+
+    InvalidAnswer messages are short fixed codes (safe to log): they never quote the answer.
+    """
     try:
-        parts = response["candidates"][0]["content"]["parts"]
-        text = "".join(part.get("text", "") for part in parts)
+        candidate = response["candidates"][0]
+        finish = str(candidate.get("finishReason", "none"))[:40]
+        parts = candidate["content"]["parts"]
+        # Thinking models may add thought parts; only the answer's own text counts.
+        text = "".join(part.get("text", "") for part in parts if not part.get("thought"))
     except (KeyError, IndexError, TypeError, AttributeError):
-        raise InvalidAnswer("No candidate text in the answer") from None
+        finish = response.get("promptFeedback", {}).get("blockReason", "none") if isinstance(response, dict) else "none"
+        raise InvalidAnswer(f"no_candidate_text(reason={str(finish)[:40]})") from None
     try:
         draft = json.loads(text)
     except ValueError:
-        raise InvalidAnswer("The answer is not valid JSON") from None
+        raise InvalidAnswer(f"not_json(finishReason={finish}, chars={len(text)})") from None
     if not isinstance(draft, dict):
-        raise InvalidAnswer("The answer is not a JSON object")
+        raise InvalidAnswer("not_an_object")
     fields = {}
     for name, limit in FIELD_LIMITS.items():
         value = draft.get(name)
         if not isinstance(value, str) or not value.strip():
-            raise InvalidAnswer(f"The answer has no usable {name}")
+            raise InvalidAnswer(f"no_usable_{name}")
         fields[name] = value.strip()[:limit]
-    if len([line for line in fields["script"].splitlines() if line.strip()]) < 3:
-        raise InvalidAnswer("The script has fewer than 3 lines")
+    lines = len([line for line in fields["script"].splitlines() if line.strip()])
+    if lines < 3:
+        raise InvalidAnswer(f"script_lines={lines}")
     return fields
 
 
@@ -291,7 +299,10 @@ class Draft:
 class AiWriteError(Exception):
     """A failed AI write: the HTTP status and message for the owner, and the telemetry outcome."""
 
-    def __init__(self, status: int, detail: str, outcome: str, model_role: str, reason: str, model: str = "none"):
+    def __init__(
+        self, status: int, detail: str, outcome: str, model_role: str, reason: str, model: str = "none",
+        attempts: tuple[str, ...] = (),
+    ):
         super().__init__(detail)
         self.status = status
         self.detail = detail
@@ -299,6 +310,7 @@ class AiWriteError(Exception):
         self.model_role = model_role  # primary, fallback, none
         self.reason = reason  # for the log line: http_503, timeout, network, invalid, missing_key
         self.model = model  # the model of the last attempt, or "none"
+        self.attempts = attempts  # "<model>: <reason>" per call made, for the log line
 
 
 def write_draft(
@@ -315,30 +327,36 @@ def write_draft(
     body = build_request(facts, voice, instructions)
     models = [model] if model == FALLBACK_MODEL else [model, FALLBACK_MODEL]
     failures: list[tuple[str, str]] = []  # (outcome, reason) per attempt
+    attempts: list[str] = []
     role = "primary"
+
+    def give_up(status, detail, outcome, reason, current):
+        return AiWriteError(status, detail, outcome, role, reason, current, (*attempts, f"{current}: {reason}"))
+
     for index, current in enumerate(models):
         role = "primary" if index == 0 else "fallback"
         try:
             return Draft(parse_answer(client.generate(api_key, current, body, CALL_TIMEOUT_SECONDS)), current, role)
         except GeminiHttpError as err:
             if err.status in (400, 401, 403):
-                raise AiWriteError(502, KEY_REJECTED, "upstream_error", role, f"http_{err.status}", current) from None
+                raise give_up(502, KEY_REJECTED, "upstream_error", f"http_{err.status}", current) from None
             if err.status == 429:
                 failures.append(("quota", "http_429"))
             elif err.status == 404 or err.status >= 500:
                 failures.append(("upstream_error", f"http_{err.status}"))
             else:
-                raise AiWriteError(502, FAILED, "upstream_error", role, f"http_{err.status}", current) from None
+                raise give_up(502, FAILED, "upstream_error", f"http_{err.status}", current) from None
         except GeminiTimeout:
             failures.append(("upstream_error", "timeout"))
-        except InvalidAnswer:
-            failures.append(("invalid_output", "invalid"))
+        except InvalidAnswer as err:
+            failures.append(("invalid_output", f"invalid:{err}"))
         except GeminiNetworkError:
-            raise AiWriteError(502, FAILED, "upstream_error", role, "network", current) from None
+            raise give_up(502, FAILED, "upstream_error", "network", current) from None
+        attempts.append(f"{current}: {failures[-1][1]}")
     if all(outcome == "quota" for outcome, _ in failures):
-        raise AiWriteError(429, QUOTA, "quota", role, "http_429", models[-1])
+        raise AiWriteError(429, QUOTA, "quota", role, "http_429", models[-1], tuple(attempts))
     outcome, reason = failures[-1]
     if outcome == "quota":  # quota on one model, another failure on the other
         outcome = "upstream_error"
-    raise AiWriteError(502, FAILED, outcome, role, reason, models[-1])
+    raise AiWriteError(502, FAILED, outcome, role, reason, models[-1], tuple(attempts))
 

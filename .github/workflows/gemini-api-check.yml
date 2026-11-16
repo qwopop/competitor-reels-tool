@@ -85,6 +85,22 @@ jobs:
               print(f"Outcome: {err.outcome} (HTTP {err.status} to the browser, reason {err.reason}, "
                     f"last model {err.model}, model_role {err.model_role}) after {time.perf_counter() - started:.1f}s")
               print(f"Message the owner would see: {err.detail}")
+              for attempt in err.attempts:
+                  print(f"  attempt {attempt}")
+              if err.outcome == "invalid_output":
+                  # One raw call to show what came back (the answer is not secret; the key is never printed).
+                  try:
+                      raw = ai_writer.HttpGeminiClient().generate(
+                          ai_writer.api_key_from_env(), model,
+                          ai_writer.build_request(facts, ai_writer.voice_text(voice, None), None), 30,
+                      )
+                      candidate = (raw.get("candidates") or [{}])[0]
+                      parts = (candidate.get("content") or {}).get("parts") or []
+                      print(f"  raw: finishReason={candidate.get('finishReason')} parts={[sorted(p) for p in parts]}")
+                      print(f"  raw usage: {raw.get('usageMetadata')}")
+                      print("  raw text (first 600 chars): " + "".join(p.get("text", "") for p in parts)[:600])
+                  except Exception as raw_err:
+                      print(f"  raw call failed: {type(raw_err).__name__}: {raw_err}")
               print("::error::Gemini returned no valid draft.")
               sys.exit(1)
           fields = draft.fields
