@@ -12,6 +12,7 @@
 name: On-call engineer
 
 on:
+  # Schedules fire only from the default branch (main), on its latest commit.
   schedule:
     - cron: "*/5 * * * *"
   # A push of this file to a branch other than main runs the fixture path (a recorded alert, dry-run pull
