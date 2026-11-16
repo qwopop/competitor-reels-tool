@@ -165,6 +165,9 @@ jobs:
       contents: read
       statuses: write
     uses: ./.github/workflows/deploy-dev.yml
+    # A called workflow only sees the `dev` environment's secret (RENDER_DEPLOY_HOOK_URL)
+    # when the caller inherits secrets; without this the deploy was skipped as "secret missing".
+    secrets: inherit
     with:
       image: ${{ needs.image.outputs.image }}
       tag: ${{ needs.image.outputs.tag }}

@@ -44,6 +44,8 @@ jobs:
       contents: read
       statuses: write
     uses: ./.github/workflows/deploy-dev.yml
+    # Needed for the called workflow to see the `dev` environment's RENDER_DEPLOY_HOOK_URL.
+    secrets: inherit
     with:
       image: ${{ needs.image.outputs.image }}
       tag: ${{ needs.image.outputs.tag }}
