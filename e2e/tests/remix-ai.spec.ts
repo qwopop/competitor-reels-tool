@@ -73,10 +73,16 @@ test('Write with AI on a video opens its remix with Creator voice focused, witho
 });
 
 // QA on issue 99: the scrolled-to block must not end up behind the sticky header, even when the
-// header's nav wraps on a phone.
+// header's nav wraps on a phone, and even when the web fonts arrive after the scroll (CI runners
+// have no Inter installed, so the swap re-wraps the text above the block and moves it up).
 for (const width of [1280, 390]) {
   test(`?write=ai brings the heading and the notice fully below the sticky header at ${width} px`, async ({ page, request }) => {
     await page.setViewportSize({ width, height: width === 390 ? 844 : 800 });
+    // The web fonts arrive late on purpose, so the font swap always happens after the scroll.
+    await page.route(/fonts\.(googleapis|gstatic)\.com/, async (route) => {
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+      await route.continue().catch(() => {});
+    });
     const { videos } = await seedChannel(request, `ai-scroll-${width}`);
     const remix = await api.remix(request, videos[0].id);
     await page.goto(`/remix/${remix.id}?write=ai`);
@@ -87,25 +93,24 @@ for (const width of [1280, 390]) {
     const dismiss = notice.getByRole('button', { name: 'Dismiss' });
     await expect(dismiss).toBeVisible();
 
-    const headerBottom = async () => {
-      const box = await page.locator('[data-app-header]').boundingBox();
-      return box ? box.y + box.height : 0;
-    };
-    const top = async (l: typeof heading) => (await l.boundingBox())?.y ?? -1;
-    // Wait for the smooth scroll to settle, then compare with the header as it is now.
-    await expect.poll(async () => (await top(heading)) - (await headerBottom()), { timeout: 5_000 }).toBeGreaterThanOrEqual(0);
-    let last = -1;
+    // Ready = every font that was requested has loaded (or failed) and nothing is moving any more:
+    // the heading keeps the same position for a full second.
+    // (If Google Fonts cannot be reached there is no swap to wait for, so a timeout is fine.)
+    await page.waitForFunction(() => [...document.fonts].some((f) => f.family.replace(/["']/g, '') === 'Inter' && f.status === 'loaded'), null, { timeout: 15_000 }).catch(() => {});
+    await page.evaluate(() => document.fonts.ready);
+    const top = async (l: typeof heading) => (await l.boundingBox())?.y ?? Number.NaN;
+    const samples: number[] = [];
     await expect.poll(async () => {
-      const now = await top(heading);
-      const settled = now === last;
-      last = now;
-      return settled;
-    }, { intervals: [250] }).toBe(true);
+      samples.push(await top(heading));
+      const recent = samples.slice(-5);
+      return recent.length === 5 && recent.every((y) => y === recent[0]);
+    }, { intervals: [250], timeout: 15_000 }).toBe(true);
 
-    const bottom = await headerBottom();
-    expect(await top(heading)).toBeGreaterThanOrEqual(bottom);
-    expect(await top(notice)).toBeGreaterThanOrEqual(bottom);
-    expect(await top(dismiss)).toBeGreaterThanOrEqual(bottom);
+    const box = await page.locator('[data-app-header]').boundingBox();
+    const bottom = box ? box.y + box.height : 0;
+    expect(await top(heading), 'heading top vs header bottom').toBeGreaterThanOrEqual(bottom);
+    expect(await top(notice), 'notice top vs header bottom').toBeGreaterThanOrEqual(bottom);
+    expect(await top(dismiss), 'Dismiss top vs header bottom').toBeGreaterThanOrEqual(bottom);
 
     // A real click: Playwright fails it if the header would receive it instead.
     await dismiss.click({ timeout: 5_000 });

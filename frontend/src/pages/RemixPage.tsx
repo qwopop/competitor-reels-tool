@@ -31,6 +31,7 @@ import {
 } from '@/utils/voiceStorage';
 import { REMIX_TEMPLATES } from '@/utils/templates';
 import { planStatusMeta } from '@/utils/plan';
+import { revealBelowHeader } from '@/utils/revealBelowHeader';
 import { WatchOnYouTubeLink } from '@/components/YouTubeLinks';
 import { channelLabel } from '@/utils/youtube';
 
@@ -114,22 +115,19 @@ export function RemixPage() {
     setSearchParams(next, { replace: true });
   }, [searchParams, setSearchParams]);
 
-  // Once the remix has loaded, bring the Write with AI block into view and focus Creator voice.
+  // Once the remix has loaded, bring the Write with AI block into view below the sticky header
+  // and focus Creator voice. The scroll is kept on target while fonts and layout settle.
+  const stopReveal = useRef<(() => void) | null>(null);
   useEffect(() => {
     if (loading || !remix || !pendingAiFocus.current) return;
     pendingAiFocus.current = false;
-    const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
-    const block = aiBlock.current;
-    if (block) {
-      // The sticky app header covers the top of the window, and its height changes when the nav
-      // wraps on phones, so it is measured now and the block stops just below it.
-      const header = document.querySelector<HTMLElement>('[data-app-header]');
-      const headerHeight = header ? Math.ceil(header.getBoundingClientRect().height) : 0;
-      block.style.scrollMarginTop = `${headerHeight + 16}px`;
-      block.scrollIntoView?.({ block: 'start', behavior: reduceMotion ? 'auto' : 'smooth' });
-    }
     voiceSelect.current?.focus({ preventScroll: true });
+    const block = aiBlock.current;
+    if (!block) return;
+    const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
+    stopReveal.current = revealBelowHeader(block, { smooth: !reduceMotion });
   }, [loading, remix]);
+  useEffect(() => () => stopReveal.current?.(), []);
 
   // Focus moves once the fields are editable again (they are read-only while Gemini writes).
   useEffect(() => {
