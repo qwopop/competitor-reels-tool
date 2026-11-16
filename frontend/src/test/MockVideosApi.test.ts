@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { MockVideosApi } from '@/services/MockVideosApi';
 import type { VideosApi } from '@/types';
-import { AI_MESSAGES } from '@/utils/voices';
+import { AI_MESSAGES, isAiDailyLimitMessage } from '@/utils/voices';
 
 // The whole app depends only on the VideosApi interface. These tests exercise
 // the mock implementation that ships with the app so swapping backends later
@@ -244,7 +244,7 @@ describe('MockVideosApi.writeRemixWithAi', () => {
     const first = await api.writeRemixWithAi(remix.id, { voice: 'storyteller' });
     const again = await api.writeRemixWithAi(remix.id, { voice: 'storyteller' });
     expect(first.error).toBeNull();
-    expect(first.data).toEqual(again.data);
+    expect({ ...first.data, writesLeftToday: 0 }).toEqual({ ...again.data, writesLeftToday: 0 });
     expect(first.data!.script.split('\n').length).toBeGreaterThanOrEqual(3);
     expect((await api.getRemix(remix.id)).data).toEqual(remix);
   });
@@ -266,5 +266,32 @@ describe('MockVideosApi.writeRemixWithAi', () => {
     const remix = await remixOf(new MockVideosApi());
     const res = await new MockVideosApi({ aiFailure: failure }).writeRemixWithAi(remix.id, { voice: 'entertainer' });
     expect(res).toEqual({ data: null, error: message });
+  });
+
+  it('counts down from 50 per mock session, then answers with the daily limit', async () => {
+    const api = new MockVideosApi();
+    const remix = await remixOf(api);
+    // All at once (the mock counts before its simulated delay), so the test takes one delay, not 50.
+    const results = await Promise.all(
+      Array.from({ length: 50 }, () => api.writeRemixWithAi(remix.id, { voice: 'storyteller' }))
+    );
+    expect(results.every((r) => r.data!.writesPerDay === 50)).toBe(true);
+    expect(results.map((r) => r.data!.writesLeftToday)).toEqual(Array.from({ length: 50 }, (_, i) => 49 - i));
+    const limited = await api.writeRemixWithAi(remix.id, { voice: 'storyteller' });
+    expect(limited.data).toBeNull();
+    expect(limited.error).toMatch(
+      /^Today's limit of 50 AI writes is used up\. It resets at midnight UTC, in (\d+ h)?( ?\d+ min)?\. Templates still work\.$/
+    );
+    expect(isAiDailyLimitMessage(limited.error)).toBe(true);
+  });
+
+  it.each([
+    ['daily_limit', /^Today's limit of 50 AI writes is used up\./],
+    ['turned_off', /^AI writing is turned off on this server for now\. Templates still work\.$/],
+  ] as const)('can simulate %s', async (failure, pattern) => {
+    const remix = await remixOf(new MockVideosApi());
+    const res = await new MockVideosApi({ aiFailure: failure }).writeRemixWithAi(remix.id, { voice: 'entertainer' });
+    expect(res.data).toBeNull();
+    expect(res.error).toMatch(pattern);
   });
 });

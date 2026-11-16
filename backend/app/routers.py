@@ -221,7 +221,7 @@ def apply_remix_template(
     response_model=AiDraft,
     responses={code: {"description": text} for code, text in (
         (404, "Remix or source video not found"),
-        (429, "Gemini's quota is used up"),
+        (429, "The server's daily limit of AI writes, or Gemini's quota, is used up"),
         (502, "Gemini failed"),
         (503, "AI writing is not configured"),
     )},
@@ -229,7 +229,11 @@ def apply_remix_template(
 def write_remix_with_ai(
     remix_id: str, payload: AiDraftRequest, request: Request, db: Session = Depends(get_db)
 ):
-    """A Gemini draft in the chosen voice. Returned only: the remix itself is not changed."""
+    """A Gemini draft in the chosen voice. Returned only: the remix itself is not changed.
+
+    Checks in order: 422 (validation, by FastAPI) → 404 remix / video → 503 no key →
+    the daily limit (one write reserved, not given back if Gemini then fails) → Gemini.
+    """
     remix = store.get_remix(db, remix_id)
     if not remix:
         raise not_found("Remix not found.")
@@ -239,12 +243,23 @@ def write_remix_with_ai(
     facts = ai_writer.facts_from_video(video, store.channel_name(db, video))
     voice = ai_writer.voice_text(payload.voice, payload.custom_voice)
     model = ai_writer.model_from_env()
+    api_key = ai_writer.api_key_from_env()
+    limit = ai_writer.writes_per_day_from_env()
     telemetry = request.app.state.telemetry
     started = time.perf_counter()
+    headers = None
     try:
-        draft = ai_writer.write_draft(
-            request.app.state.gemini, ai_writer.api_key_from_env(), model, facts, voice, payload.instructions
-        )
+        if not api_key:
+            raise ai_writer.AiWriteError(503, ai_writer.NOT_CONFIGURED, "not_configured", "none", "missing_key")
+        now = request.app.state.clock()
+        writes_left = store.reserve_ai_write(db, ai_writer.utc_day(now), limit)
+        if writes_left is None:
+            seconds = ai_writer.seconds_until_utc_midnight(now)
+            headers = {"Retry-After": str(seconds)}
+            raise ai_writer.AiWriteError(
+                429, ai_writer.daily_limit_message(limit, seconds), "daily_limit", "none", "daily_limit"
+            )
+        draft = ai_writer.write_draft(request.app.state.gemini, api_key, model, facts, voice, payload.instructions)
     except ai_writer.AiWriteError as err:
         # One line per AI write: outcome, model and duration, never the prompt, voice or output.
         log.warning(
@@ -253,13 +268,13 @@ def write_remix_with_ai(
             time.perf_counter() - started, "; ".join(err.attempts),
         )
         telemetry.record_ai_write(err.outcome, err.model_role)
-        raise HTTPException(status_code=err.status, detail=err.detail) from None
+        raise HTTPException(status_code=err.status, detail=err.detail, headers=headers) from None
     log.info(
         "AI write: outcome=success model_role=%s model=%s duration=%.2fs",
         draft.model_role, draft.model, time.perf_counter() - started,
     )
     telemetry.record_ai_write("success", draft.model_role)
-    return AiDraft(**draft.fields, model=draft.model)
+    return AiDraft(**draft.fields, model=draft.model, writes_left_today=writes_left, writes_per_day=limit)
 
 
 @router.get("/remixes/{remix_id}", response_model=RemixedVideo)

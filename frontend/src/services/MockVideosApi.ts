@@ -12,7 +12,7 @@ import type {
   ServiceResult,
 } from '@/types';
 import { channelUrlForRef, parseChannelInput } from '@/utils/youtube';
-import { AI_MESSAGES, CREATOR_VOICES } from '@/utils/voices';
+import { AI_MESSAGES, CREATOR_VOICES, aiDailyLimitMessage } from '@/utils/voices';
 
 // ----------------------------------------------------------------------------
 // Offline mock of the VideosApi service, persisted to localStorage. It is no
@@ -181,15 +181,31 @@ function aiDraftText(video: Video, voice: AiDraftRequest['voice']): AiDraft {
     ].join('\n'),
     cta: 'Save this and tell me in the comments which step you will try first.',
     model: 'mock-gemini',
+    writesLeftToday: 0,
+    writesPerDay: MOCK_WRITES_PER_DAY,
   };
 }
 
+// Like the backend's AI_WRITES_PER_DAY default: each mock session (one MockVideosApi) counts down from 50.
+export const MOCK_WRITES_PER_DAY = 50;
+
+// The time until the next 00:00 UTC, rounded up to whole minutes: "3 h 20 min", "45 min", "1 h".
+function timeLeftToUtcMidnight(now = new Date()): string {
+  const midnight = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1);
+  const minutes = Math.max(1, Math.ceil((midnight - now.getTime()) / 60_000));
+  const hours = Math.floor(minutes / 60);
+  const rest = minutes % 60;
+  return [hours ? `${hours} h` : '', rest ? `${rest} min` : ''].filter(Boolean).join(' ');
+}
+
 // The AI failures the mock can simulate (for tests): what the backend answers in each case.
-export type MockAiFailure = 'not_configured' | 'quota' | 'failed';
-const AI_FAILURES: Record<MockAiFailure, string> = {
-  not_configured: AI_MESSAGES.notConfigured,
-  quota: AI_MESSAGES.quota,
-  failed: AI_MESSAGES.failed,
+export type MockAiFailure = 'not_configured' | 'quota' | 'failed' | 'daily_limit' | 'turned_off';
+const AI_FAILURES: Record<MockAiFailure, () => string> = {
+  not_configured: () => AI_MESSAGES.notConfigured,
+  quota: () => AI_MESSAGES.quota,
+  failed: () => AI_MESSAGES.failed,
+  daily_limit: () => aiDailyLimitMessage(MOCK_WRITES_PER_DAY, timeLeftToUtcMidnight()),
+  turned_off: () => AI_MESSAGES.turnedOff,
 };
 
 // ----- Service implementation -----------------------------------------------
@@ -197,6 +213,9 @@ const AI_FAILURES: Record<MockAiFailure, string> = {
 export class MockVideosApi implements VideosApi {
   // Set to simulate an AI writing failure; by default the mock writes a deterministic draft.
   constructor(private readonly options: { aiFailure?: MockAiFailure } = {}) {}
+
+  // AI writes taken in this mock session; like the server, a failed attempt counts too.
+  private aiWritesUsed = 0;
 
   async listCompetitors(): Promise<ServiceResult<Competitor[]>> {
     const competitors = read<Competitor[]>(COMPETITORS_KEY, []);
@@ -364,8 +383,14 @@ export class MockVideosApi implements VideosApi {
       return fail<AiDraft>('Some of the information is not valid.');
     }
     const failure = this.options.aiFailure;
-    if (failure) return delay(fail<AiDraft>(AI_FAILURES[failure]), 300);
-    return delay(ok(aiDraftText(video, request.voice)), 900);
+    if (failure === 'not_configured') return delay(fail<AiDraft>(AI_FAILURES[failure]()), 300);
+    if (failure === 'daily_limit' || failure === 'turned_off' || this.aiWritesUsed >= MOCK_WRITES_PER_DAY) {
+      return delay(fail<AiDraft>(AI_FAILURES[failure === 'turned_off' ? 'turned_off' : 'daily_limit']()), 300);
+    }
+    this.aiWritesUsed += 1;
+    if (failure) return delay(fail<AiDraft>(AI_FAILURES[failure]()), 300);
+    const writesLeftToday = MOCK_WRITES_PER_DAY - this.aiWritesUsed;
+    return delay(ok({ ...aiDraftText(video, request.voice), writesLeftToday }), 900);
   }
 
   async updateRemix(

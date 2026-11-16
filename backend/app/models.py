@@ -90,6 +90,15 @@ class ContentPlanRow(Base):
     published_done: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
 
 
+class AiWriteUsageRow(Base):
+    """How many AI writes were taken on one UTC day (YYYY-MM-DD). One tiny row per day."""
+
+    __tablename__ = "ai_write_usage"
+
+    day: Mapped[str] = mapped_column(String(10), primary_key=True)
+    count: Mapped[int] = mapped_column(Integer, nullable=False)
+
+
 IN_MEMORY_URLS = ("sqlite://", "sqlite:///:memory:")
 
 

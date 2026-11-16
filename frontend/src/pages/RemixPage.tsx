@@ -1,21 +1,57 @@
 import { useEffect, useRef, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
-import { ArrowLeft, Sparkles } from 'lucide-react';
+import { Link, useParams, useSearchParams } from 'react-router-dom';
+import { ArrowLeft, BookmarkPlus, Sparkles, Trash2 } from 'lucide-react';
 import { useApi } from '@/services';
 import type { ContentPlanItem, CreatorVoice, Video, RemixedVideo, RemixTemplate } from '@/types';
 import { relativeTime, videoStats } from '@/utils/format';
 import { ErrorBanner, FullPageLoader, Spinner } from '@/components/ui';
 import { ConfirmDialog } from '@/components/Modal';
 import { Notice } from '@/components/Notice';
-import { CREATOR_VOICES, CUSTOM_VOICE_LIMIT, INSTRUCTIONS_LIMIT, voiceName } from '@/utils/voices';
+import {
+  CREATOR_VOICES,
+  CUSTOM_VOICE_LIMIT,
+  INSTRUCTIONS_LIMIT,
+  aiWritesLeftText,
+  isAiDailyLimitMessage,
+  voiceName,
+} from '@/utils/voices';
+import {
+  SAVED_VOICES_MAX,
+  VOICE_MESSAGES,
+  VOICE_NAME_LIMIT,
+  deleteSavedVoice,
+  readLastVoice,
+  readSavedVoices,
+  saveVoice,
+  savedIdOf,
+  savedSelection,
+  writeLastVoice,
+  type SavedVoice,
+  type VoiceSelection,
+} from '@/utils/voiceStorage';
 import { REMIX_TEMPLATES } from '@/utils/templates';
 import { planStatusMeta } from '@/utils/plan';
 import { WatchOnYouTubeLink } from '@/components/YouTubeLinks';
 import { channelLabel } from '@/utils/youtube';
 
+// The Write with AI block's starting voice: the one of the last successful write in this browser
+// (issue #98), or Educational blogger when nothing usable is stored.
+function initialVoiceState(): { savedVoices: SavedVoice[]; voice: VoiceSelection; customVoice: string } {
+  const savedVoices = readSavedVoices();
+  const last = readLastVoice();
+  if (!last) return { savedVoices, voice: 'educational_blogger', customVoice: '' };
+  const savedId = savedIdOf(last.selection);
+  const voice = savedId && !savedVoices.some((v) => v.id === savedId) ? 'educational_blogger' : last.selection;
+  return { savedVoices, voice, customVoice: last.customText };
+}
+
+// Shown when the page is opened from a video's Write with AI button (issue #99).
+const WRITE_AI_INTRO = 'Pick a voice, then press Write with AI. Nothing changes until you press Save changes.';
+
 export function RemixPage() {
   const { id } = useParams<{ id: string }>();
   const api = useApi();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const [remix, setRemix] = useState<RemixedVideo | null>(null);
   const [video, setVideo] = useState<Video | null>(null);
@@ -34,18 +70,31 @@ export function RemixPage() {
   const [confirmApply, setConfirmApply] = useState(false);
 
   // Write with AI: the chosen voice and instructions, the request in flight, and its message.
-  const [voice, setVoice] = useState<CreatorVoice>('educational_blogger');
-  const [customVoice, setCustomVoice] = useState('');
+  const [initialVoice] = useState(initialVoiceState);
+  const [voice, setVoice] = useState<VoiceSelection>(initialVoice.voice);
+  const [customVoice, setCustomVoice] = useState(initialVoice.customVoice);
+  // Custom voices saved in this browser, oldest first, and the "Saved “…”." line.
+  const [savedVoices, setSavedVoices] = useState<SavedVoice[]>(initialVoice.savedVoices);
+  const [voiceStatus, setVoiceStatus] = useState<string | null>(null);
+  const [confirmDeleteVoice, setConfirmDeleteVoice] = useState<SavedVoice | null>(null);
   const [instructions, setInstructions] = useState('');
   const [voiceMissing, setVoiceMissing] = useState(false);
   const [confirmAi, setConfirmAi] = useState(false);
   const [writing, setWriting] = useState(false);
   const [aiNotice, setAiNotice] = useState<{ tone: 'success' | 'error'; message: string } | null>(null);
-  const [focusAfterWrite, setFocusAfterWrite] = useState<'title' | 'button' | null>(null);
+  // From the last successful AI write of this visit; null until then (nothing is shown).
+  const [aiWrites, setAiWrites] = useState<{ left: number; limit: number } | null>(null);
+  const [focusAfterWrite, setFocusAfterWrite] = useState<'title' | 'button' | 'voice' | null>(null);
+  // Opened with ?write=ai: the info notice in the AI block, and a scroll and focus still to do.
+  const [writeIntro, setWriteIntro] = useState(false);
+  const pendingAiFocus = useRef(false);
+  const aiBlock = useRef<HTMLDivElement>(null);
   const mounted = useRef(true);
   const writeButton = useRef<HTMLButtonElement>(null);
   const customVoiceBox = useRef<HTMLTextAreaElement>(null);
   const titleField = useRef<HTMLInputElement>(null);
+  const voiceSelect = useRef<HTMLSelectElement>(null);
+  const selectedSaved = savedVoices.find((v) => v.id === savedIdOf(voice)) ?? null;
 
   useEffect(() => {
     mounted.current = true;
@@ -54,10 +103,38 @@ export function RemixPage() {
     };
   }, []);
 
+  // ?write=ai is read once and dropped from the address at once (history replace), so a reload or
+  // back and forward does not show the notice or move focus again. Gemini is not called here.
+  useEffect(() => {
+    if (searchParams.get('write') !== 'ai') return;
+    pendingAiFocus.current = true;
+    setWriteIntro(true);
+    const next = new URLSearchParams(searchParams);
+    next.delete('write');
+    setSearchParams(next, { replace: true });
+  }, [searchParams, setSearchParams]);
+
+  // Once the remix has loaded, bring the Write with AI block into view and focus Creator voice.
+  useEffect(() => {
+    if (loading || !remix || !pendingAiFocus.current) return;
+    pendingAiFocus.current = false;
+    const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
+    const block = aiBlock.current;
+    if (block) {
+      // The sticky app header covers the top of the window, and its height changes when the nav
+      // wraps on phones, so it is measured now and the block stops just below it.
+      const header = document.querySelector<HTMLElement>('[data-app-header]');
+      const headerHeight = header ? Math.ceil(header.getBoundingClientRect().height) : 0;
+      block.style.scrollMarginTop = `${headerHeight + 16}px`;
+      block.scrollIntoView?.({ block: 'start', behavior: reduceMotion ? 'auto' : 'smooth' });
+    }
+    voiceSelect.current?.focus({ preventScroll: true });
+  }, [loading, remix]);
+
   // Focus moves once the fields are editable again (they are read-only while Gemini writes).
   useEffect(() => {
     if (!focusAfterWrite) return;
-    (focusAfterWrite === 'title' ? titleField : writeButton).current?.focus();
+    ({ title: titleField, button: writeButton, voice: voiceSelect })[focusAfterWrite].current?.focus();
     setFocusAfterWrite(null);
   }, [focusAfterWrite]);
 
@@ -143,6 +220,7 @@ export function RemixPage() {
   }
 
   function handleApplyClick() {
+    setWriteIntro(false);
     if (dirty) setConfirmApply(true);
     else applyTemplate();
   }
@@ -151,10 +229,16 @@ export function RemixPage() {
     if (!remix) return;
     setConfirmAi(false);
     setAiNotice(null);
+    setVoiceStatus(null);
     setWriting(true);
+    // A saved voice is sent as a custom voice with its saved text (the API is unchanged).
+    const selection = voice;
+    const saved = selectedSaved;
+    const customText = customVoice;
+    const apiVoice: CreatorVoice = saved ? 'custom' : (selection as CreatorVoice);
     const res = await api.writeRemixWithAi(remix.id, {
-      voice,
-      customVoice: voice === 'custom' ? customVoice : undefined,
+      voice: apiVoice,
+      customVoice: saved ? saved.text : apiVoice === 'custom' ? customText : undefined,
       instructions: instructions.trim() ? instructions : undefined,
     });
     if (!mounted.current) return;
@@ -162,23 +246,31 @@ export function RemixPage() {
     if (res.error || !res.data) {
       // The editor keeps exactly the text it had; only the message is shown.
       setAiNotice({ tone: 'error', message: res.error ?? "Gemini couldn't write a draft this time. Your text hasn't changed. Try again." });
+      // The server's daily limit: a shown "writes left" line switches to the 0 wording.
+      if (isAiDailyLimitMessage(res.error)) setAiWrites((current) => (current ? { ...current, left: 0 } : current));
       setFocusAfterWrite('button');
       return;
     }
+    // Only a successful write is remembered, for the next Remix page in this browser.
+    writeLastVoice({ selection, customText });
     const draft = res.data;
     setTitle(draft.title);
     setHook(draft.hook);
     setScript(draft.script);
     setCta(draft.cta);
     setDirty(true);
+    if (typeof draft.writesLeftToday === 'number' && typeof draft.writesPerDay === 'number') {
+      setAiWrites({ left: draft.writesLeftToday, limit: draft.writesPerDay });
+    }
     setAiNotice({
       tone: 'success',
-      message: `Draft written in the ${voiceName(voice)} voice. Review it, then press Save changes.`,
+      message: `Draft written in the ${voiceName(apiVoice, saved?.name)} voice. Review it, then press Save changes.`,
     });
     setFocusAfterWrite('title');
   }
 
   function handleWriteClick() {
+    setWriteIntro(false);
     if (voice === 'custom' && !customVoice.trim()) {
       setVoiceMissing(true);
       customVoiceBox.current?.focus();
@@ -186,6 +278,36 @@ export function RemixPage() {
     }
     if (dirty) setConfirmAi(true);
     else writeWithAi();
+  }
+
+  function handleVoiceChange(next: VoiceSelection) {
+    setVoice(next);
+    setVoiceStatus(null);
+  }
+
+  // Saves the custom voice under `name`; returns the error to show, or null when it was saved.
+  function handleSaveVoice(name: string): string | null {
+    // Re-read storage so a voice saved on another page in the meantime is kept.
+    const result = saveVoice(mergeVoices(savedVoices, readSavedVoices()), name, customVoice);
+    if (!result.ok) return result.error;
+    setSavedVoices(result.voices);
+    setVoice(savedSelection(result.voice.id));
+    setVoiceStatus(`Saved “${result.voice.name}”.`);
+    setFocusAfterWrite('voice');
+    return null;
+  }
+
+  function deleteVoice() {
+    const target = confirmDeleteVoice;
+    setConfirmDeleteVoice(null);
+    if (!target) return;
+    setSavedVoices(deleteSavedVoice(mergeVoices(savedVoices, readSavedVoices()), target.id));
+    // The text stays in the box, so the owner can still write with it once or save it again.
+    setVoice('custom');
+    setCustomVoice(target.text);
+    setVoiceMissing(false);
+    setVoiceStatus(null);
+    setFocusAfterWrite('voice');
   }
 
   if (loading) return <FullPageLoader label="Loading remix…" />;
@@ -218,6 +340,15 @@ export function RemixPage() {
           confirmLabel="Write with AI"
           onConfirm={writeWithAi}
           onCancel={() => setConfirmAi(false)}
+        />
+      )}
+      {confirmDeleteVoice && (
+        <ConfirmDialog
+          title="Delete this voice?"
+          message={`“${confirmDeleteVoice.name}” will be removed from this browser. Remixes you already wrote are not changed.`}
+          confirmLabel="Delete voice"
+          onConfirm={deleteVoice}
+          onCancel={() => setConfirmDeleteVoice(null)}
         />
       )}
       <BackLink />
@@ -261,8 +392,17 @@ export function RemixPage() {
 
         <section className="panel min-w-0 sm:p-8">
           <AiBlock
+            blockRef={aiBlock}
+            intro={writeIntro}
+            onDismissIntro={() => setWriteIntro(false)}
             voice={voice}
-            onVoice={setVoice}
+            onVoice={handleVoiceChange}
+            voiceSelect={voiceSelect}
+            savedVoices={savedVoices}
+            selectedSaved={selectedSaved}
+            onSaveVoice={handleSaveVoice}
+            onDeleteVoice={() => selectedSaved && setConfirmDeleteVoice(selectedSaved)}
+            voiceStatus={voiceStatus}
             customVoice={customVoice}
             onCustomVoice={(value) => {
               setCustomVoice(value);
@@ -276,6 +416,7 @@ export function RemixPage() {
             onWrite={handleWriteClick}
             notice={aiNotice}
             onDismissNotice={() => setAiNotice(null)}
+            writesLeft={aiWrites}
             writeButton={writeButton}
             customVoiceBox={customVoiceBox}
           />
@@ -409,8 +550,17 @@ export function RemixPage() {
 }
 
 function AiBlock({
+  blockRef,
+  intro,
+  onDismissIntro,
   voice,
   onVoice,
+  voiceSelect,
+  savedVoices,
+  selectedSaved,
+  onSaveVoice,
+  onDeleteVoice,
+  voiceStatus,
   customVoice,
   onCustomVoice,
   voiceMissing,
@@ -421,11 +571,21 @@ function AiBlock({
   onWrite,
   notice,
   onDismissNotice,
+  writesLeft,
   writeButton,
   customVoiceBox,
 }: {
-  voice: CreatorVoice;
-  onVoice: (voice: CreatorVoice) => void;
+  blockRef: React.RefObject<HTMLDivElement>;
+  intro: boolean;
+  onDismissIntro: () => void;
+  voice: VoiceSelection;
+  onVoice: (voice: VoiceSelection) => void;
+  voiceSelect: React.RefObject<HTMLSelectElement>;
+  savedVoices: SavedVoice[];
+  selectedSaved: SavedVoice | null;
+  onSaveVoice: (name: string) => string | null;
+  onDeleteVoice: () => void;
+  voiceStatus: string | null;
   customVoice: string;
   onCustomVoice: (value: string) => void;
   voiceMissing: boolean;
@@ -436,32 +596,75 @@ function AiBlock({
   onWrite: () => void;
   notice: { tone: 'success' | 'error'; message: string } | null;
   onDismissNotice: () => void;
+  writesLeft: { left: number; limit: number } | null;
   writeButton: React.RefObject<HTMLButtonElement>;
   customVoiceBox: React.RefObject<HTMLTextAreaElement>;
 }) {
   const description = CREATOR_VOICES.find((v) => v.value === voice)?.description;
+  const presets = CREATOR_VOICES.filter((v) => v.value !== 'custom');
+  const custom = CREATOR_VOICES.find((v) => v.value === 'custom')!;
   return (
-    <div>
+    <div ref={blockRef}>
       <h2 className="label">Write with AI</h2>
+      {intro ? (
+        <div className="mt-4">
+          <Notice tone="info" message={WRITE_AI_INTRO} onDismiss={onDismissIntro} />
+        </div>
+      ) : null}
 
       <label htmlFor="ai-voice" className="mt-4 block text-sm text-ink/70">
         Creator voice
       </label>
       <select
         id="ai-voice"
+        ref={voiceSelect}
         className="input mt-2 sm:max-w-xs"
         value={voice}
-        onChange={(e) => onVoice(e.target.value as CreatorVoice)}
+        onChange={(e) => onVoice(e.target.value as VoiceSelection)}
         disabled={writing}
         aria-describedby="ai-voice-description"
       >
-        {CREATOR_VOICES.map((v) => (
+        {presets.map((v) => (
           <option key={v.value} value={v.value}>{v.label}</option>
         ))}
+        {savedVoices.length > 0 ? (
+          <optgroup label="Saved voices">
+            {savedVoices.map((v) => (
+              <option key={v.id} value={savedSelection(v.id)}>{v.name}</option>
+            ))}
+          </optgroup>
+        ) : null}
+        <option value={custom.value}>{custom.label}</option>
       </select>
-      <p id="ai-voice-description" className="mt-2 text-sm text-ink/50">
-        {description}
-      </p>
+      {selectedSaved ? (
+        <div className="mt-2 flex flex-col items-start gap-2 sm:flex-row sm:justify-between sm:gap-4">
+          <p
+            id="ai-voice-description"
+            title={selectedSaved.text}
+            className="line-clamp-3 min-w-0 flex-1 whitespace-pre-line break-words text-sm text-ink/50 [overflow-wrap:anywhere]"
+          >
+            {selectedSaved.text}
+          </p>
+          <button
+            type="button"
+            onClick={onDeleteVoice}
+            disabled={writing}
+            className="btn-ghost shrink-0 px-3 py-2 text-sm"
+            aria-label={`Delete saved voice ${selectedSaved.name}`}
+          >
+            <Trash2 size={14} aria-hidden="true" /> Delete
+          </button>
+        </div>
+      ) : (
+        <p id="ai-voice-description" className="mt-2 text-sm text-ink/50">
+          {description}
+        </p>
+      )}
+      {voiceStatus ? (
+        <p role="status" className="mt-2 break-words text-sm text-ink/70 [overflow-wrap:anywhere]">
+          {voiceStatus}
+        </p>
+      ) : null}
 
       {voice === 'custom' ? (
         <div className="mt-5">
@@ -482,6 +685,11 @@ function AiBlock({
             <p id="ai-custom-voice-error" className="mt-2 text-sm text-danger">
               Describe the voice, or pick a preset.
             </p>
+          ) : null}
+          {savedVoices.length >= SAVED_VOICES_MAX ? (
+            <p className="mt-3 text-sm text-ink/50">{VOICE_MESSAGES.limit}</p>
+          ) : customVoice.trim() ? (
+            <SaveVoiceControls writing={writing} onSave={onSaveVoice} />
           ) : null}
         </div>
       ) : null}
@@ -506,6 +714,7 @@ function AiBlock({
         onClick={onWrite}
         disabled={writing || sourceGone}
         className="btn-primary mt-5 w-full sm:w-auto"
+        aria-describedby={writesLeft ? 'ai-writes-left' : undefined}
       >
         {/* Both labels share one grid cell, so the button keeps its width while busy. */}
         <span className="grid">
@@ -528,6 +737,11 @@ function AiBlock({
           ? "The source video is gone, so AI can't write from it. You can still edit the text."
           : "Gemini writes a draft from this video's details. Nothing is saved until you press Save changes."}
       </p>
+      {writesLeft ? (
+        <p id="ai-writes-left" className={`mt-1 text-sm ${writesLeft.left <= 5 ? 'text-ink/70' : 'text-ink/50'}`}>
+          {aiWritesLeftText(writesLeft.left, writesLeft.limit)}
+        </p>
+      ) : null}
       {writing ? (
         <p role="status" className="mt-3 text-sm text-ink/70">
           Gemini is writing your draft. This can take up to half a minute.
@@ -540,6 +754,107 @@ function AiBlock({
       ) : null}
     </div>
   );
+}
+
+// "Save this voice", and the Name row it opens (issue #98).
+function SaveVoiceControls({ writing, onSave }: { writing: boolean; onSave: (name: string) => string | null }) {
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [focus, setFocus] = useState<'name' | 'button' | null>(null);
+  const openButton = useRef<HTMLButtonElement>(null);
+  const nameInput = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (!focus) return;
+    (focus === 'name' ? nameInput : openButton).current?.focus();
+    setFocus(null);
+  }, [focus]);
+
+  function close() {
+    setOpen(false);
+    setName('');
+    setError(null);
+    setFocus('button');
+  }
+
+  function save() {
+    const problem = onSave(name);
+    if (problem) {
+      setError(problem);
+      return;
+    }
+    setOpen(false);
+    setName('');
+    setError(null);
+  }
+
+  if (!open) {
+    return (
+      <button
+        ref={openButton}
+        type="button"
+        onClick={() => {
+          setOpen(true);
+          setFocus('name');
+        }}
+        disabled={writing}
+        className="btn-ghost mt-3 px-3 py-2 text-sm"
+      >
+        <BookmarkPlus size={14} aria-hidden="true" /> Save this voice
+      </button>
+    );
+  }
+
+  return (
+    <div className="mt-4">
+      <CountedLabel id="ai-voice-name" label="Name" count={name.length} limit={VOICE_NAME_LIMIT} />
+      <div className="mt-2 flex flex-wrap items-center gap-3">
+        <input
+          id="ai-voice-name"
+          ref={nameInput}
+          type="text"
+          className="input sm:max-w-xs"
+          maxLength={VOICE_NAME_LIMIT}
+          value={name}
+          placeholder="e.g. My finance voice"
+          disabled={writing}
+          onChange={(e) => {
+            setName(e.target.value);
+            setError(null);
+          }}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              save();
+            } else if (e.key === 'Escape') {
+              e.preventDefault();
+              close();
+            }
+          }}
+          aria-invalid={error ? 'true' : undefined}
+          aria-describedby={`ai-voice-name-count${error ? ' ai-voice-name-error' : ''}`}
+        />
+        <button type="button" onClick={save} disabled={writing} className="btn-outline">
+          Save voice
+        </button>
+        <button type="button" onClick={close} disabled={writing} className="btn-ghost">
+          Cancel
+        </button>
+      </div>
+      {error ? (
+        <p id="ai-voice-name-error" className="mt-2 break-words text-sm text-danger [overflow-wrap:anywhere]">
+          {error}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+// The stored list, plus any voice only this page knows about (kept in its saved order).
+function mergeVoices(current: SavedVoice[], stored: SavedVoice[]): SavedVoice[] {
+  const ids = new Set(stored.map((v) => v.id));
+  return [...stored, ...current.filter((v) => !ids.has(v.id))];
 }
 
 function CountedLabel({ id, label, count, limit }: { id: string; label: string; count: number; limit: number }) {

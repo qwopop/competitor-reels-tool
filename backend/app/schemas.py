@@ -145,3 +145,5 @@ class AiDraft(ApiModel):
     script: str = Field(max_length=2000)
     cta: str = Field(max_length=500)
     model: str
+    writes_left_today: int = Field(ge=0)
+    writes_per_day: int = Field(ge=0)

@@ -107,6 +107,9 @@ export interface AiDraft {
   cta: string;
   // The Gemini model that answered.
   model: string;
+  // AI writes still allowed today (UTC) after this one, and the server's daily limit (AI_WRITES_PER_DAY).
+  writesLeftToday: number;
+  writesPerDay: number;
 }
 
 export interface ServiceResult<T> {
