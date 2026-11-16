@@ -7,7 +7,14 @@ import { relativeTime, videoStats } from '@/utils/format';
 import { ErrorBanner, FullPageLoader, Spinner } from '@/components/ui';
 import { ConfirmDialog } from '@/components/Modal';
 import { Notice } from '@/components/Notice';
-import { CREATOR_VOICES, CUSTOM_VOICE_LIMIT, INSTRUCTIONS_LIMIT, voiceName } from '@/utils/voices';
+import {
+  CREATOR_VOICES,
+  CUSTOM_VOICE_LIMIT,
+  INSTRUCTIONS_LIMIT,
+  aiWritesLeftText,
+  isAiDailyLimitMessage,
+  voiceName,
+} from '@/utils/voices';
 import { REMIX_TEMPLATES } from '@/utils/templates';
 import { planStatusMeta } from '@/utils/plan';
 import { WatchOnYouTubeLink } from '@/components/YouTubeLinks';
@@ -41,6 +48,8 @@ export function RemixPage() {
   const [confirmAi, setConfirmAi] = useState(false);
   const [writing, setWriting] = useState(false);
   const [aiNotice, setAiNotice] = useState<{ tone: 'success' | 'error'; message: string } | null>(null);
+  // From the last successful AI write of this visit; null until then (nothing is shown).
+  const [aiWrites, setAiWrites] = useState<{ left: number; limit: number } | null>(null);
   const [focusAfterWrite, setFocusAfterWrite] = useState<'title' | 'button' | null>(null);
   const mounted = useRef(true);
   const writeButton = useRef<HTMLButtonElement>(null);
@@ -162,6 +171,8 @@ export function RemixPage() {
     if (res.error || !res.data) {
       // The editor keeps exactly the text it had; only the message is shown.
       setAiNotice({ tone: 'error', message: res.error ?? "Gemini couldn't write a draft this time. Your text hasn't changed. Try again." });
+      // The server's daily limit: a shown "writes left" line switches to the 0 wording.
+      if (isAiDailyLimitMessage(res.error)) setAiWrites((current) => (current ? { ...current, left: 0 } : current));
       setFocusAfterWrite('button');
       return;
     }
@@ -171,6 +182,9 @@ export function RemixPage() {
     setScript(draft.script);
     setCta(draft.cta);
     setDirty(true);
+    if (typeof draft.writesLeftToday === 'number' && typeof draft.writesPerDay === 'number') {
+      setAiWrites({ left: draft.writesLeftToday, limit: draft.writesPerDay });
+    }
     setAiNotice({
       tone: 'success',
       message: `Draft written in the ${voiceName(voice)} voice. Review it, then press Save changes.`,
@@ -276,6 +290,7 @@ export function RemixPage() {
             onWrite={handleWriteClick}
             notice={aiNotice}
             onDismissNotice={() => setAiNotice(null)}
+            writesLeft={aiWrites}
             writeButton={writeButton}
             customVoiceBox={customVoiceBox}
           />
@@ -421,6 +436,7 @@ function AiBlock({
   onWrite,
   notice,
   onDismissNotice,
+  writesLeft,
   writeButton,
   customVoiceBox,
 }: {
@@ -436,6 +452,7 @@ function AiBlock({
   onWrite: () => void;
   notice: { tone: 'success' | 'error'; message: string } | null;
   onDismissNotice: () => void;
+  writesLeft: { left: number; limit: number } | null;
   writeButton: React.RefObject<HTMLButtonElement>;
   customVoiceBox: React.RefObject<HTMLTextAreaElement>;
 }) {
@@ -506,6 +523,7 @@ function AiBlock({
         onClick={onWrite}
         disabled={writing || sourceGone}
         className="btn-primary mt-5 w-full sm:w-auto"
+        aria-describedby={writesLeft ? 'ai-writes-left' : undefined}
       >
         {/* Both labels share one grid cell, so the button keeps its width while busy. */}
         <span className="grid">
@@ -528,6 +546,11 @@ function AiBlock({
           ? "The source video is gone, so AI can't write from it. You can still edit the text."
           : "Gemini writes a draft from this video's details. Nothing is saved until you press Save changes."}
       </p>
+      {writesLeft ? (
+        <p id="ai-writes-left" className={`mt-1 text-sm ${writesLeft.left <= 5 ? 'text-ink/70' : 'text-ink/50'}`}>
+          {aiWritesLeftText(writesLeft.left, writesLeft.limit)}
+        </p>
+      ) : null}
       {writing ? (
         <p role="status" className="mt-3 text-sm text-ink/70">
           Gemini is writing your draft. This can take up to half a minute.

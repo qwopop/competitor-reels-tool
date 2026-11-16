@@ -5,7 +5,7 @@ import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import type { AiDraft, RemixedVideo, ServiceResult, Video, VideosApi } from '@/types';
 import { ApiProvider } from '@/services/ApiContext';
 import { RemixPage } from '@/pages/RemixPage';
-import { AI_MESSAGES } from '@/utils/voices';
+import { AI_MESSAGES, aiDailyLimitMessage } from '@/utils/voices';
 
 // Issue #96: Write the remix with Gemini in a chosen creator voice.
 
@@ -26,6 +26,8 @@ const DRAFT: AiDraft = {
   script: '1. Hook (first 15 seconds)\n2. Middle\n3. Wrap up and CTA',
   cta: 'AI CTA',
   model: 'gemini-3.5-flash',
+  writesLeftToday: 12,
+  writesPerDay: 50,
 };
 
 const VIDEO: Video = {
@@ -345,5 +347,119 @@ describe('Write with AI: errors keep the editor text', () => {
     pending.resolve({ data: DRAFT, error: null });
     await pending.promise;
     expect(stub.updateRemix).not.toHaveBeenCalled();
+  });
+});
+
+// Issue #97: the daily limit of AI writes.
+describe('Write with AI: writes left today', () => {
+  const LIMIT_MESSAGE = aiDailyLimitMessage(50, '3 h 20 min');
+  const writesLeft = () => document.getElementById('ai-writes-left');
+
+  async function confirmWrite(user: ReturnType<typeof userEvent.setup>) {
+    await user.click(writeButton());
+    const confirm = screen.getByRole('dialog', { name: 'Replace your edits?' });
+    await user.click(Array.from(confirm.querySelectorAll('button')).find((b) => b.textContent === 'Write with AI')!);
+  }
+
+  it('shows nothing before the first write, then the remaining line under the helper text', async () => {
+    const user = userEvent.setup();
+    await renderPage(makeStub());
+    expect(writesLeft()).toBeNull();
+    expect(writeButton()).not.toHaveAttribute('aria-describedby');
+    await user.click(writeButton());
+    await waitFor(() => expect(fields().title).toHaveValue('AI title'));
+    const line = writesLeft()!;
+    expect(line).toHaveTextContent('12 of 50 AI writes left today. Resets at midnight UTC.');
+    expect(line).toHaveClass('mt-1', 'text-sm', 'text-ink/50');
+    expect(line).not.toHaveAttribute('role');
+    expect(line).not.toHaveAttribute('aria-live');
+    expect(writeButton()).toHaveAttribute('aria-describedby', 'ai-writes-left');
+    // Directly under the helper text.
+    expect(line.previousElementSibling).toHaveTextContent("Gemini writes a draft from this video's details.");
+  });
+
+  it.each([
+    [5, '5 of 50 AI writes left today. Resets at midnight UTC.', 'text-ink/70'],
+    [1, '1 AI write left today (of 50). Resets at midnight UTC.', 'text-ink/70'],
+    [0, 'No AI writes left today. They reset at midnight UTC. Templates still work.', 'text-ink/70'],
+    [6, '6 of 50 AI writes left today. Resets at midnight UTC.', 'text-ink/50'],
+  ])('with %i left reads the right wording', async (left, text, tone) => {
+    const user = userEvent.setup();
+    const stub = makeStub();
+    stub.writeRemixWithAi.mockResolvedValue({ data: { ...DRAFT, writesLeftToday: left }, error: null });
+    await renderPage(stub);
+    await user.click(writeButton());
+    await waitFor(() => expect(writesLeft()).toHaveTextContent(text));
+    expect(writesLeft()).toHaveClass(tone);
+    // The server decides: the button stays enabled even with 0 left.
+    expect(writeButton()).toBeEnabled();
+  });
+
+  it('updates the number in the same render as the next draft', async () => {
+    const user = userEvent.setup();
+    const stub = makeStub();
+    stub.writeRemixWithAi
+      .mockResolvedValueOnce({ data: DRAFT, error: null })
+      .mockResolvedValueOnce({ data: { ...DRAFT, title: 'Second title', writesLeftToday: 11 }, error: null });
+    await renderPage(stub);
+    await user.click(writeButton());
+    await waitFor(() => expect(writesLeft()).toHaveTextContent('12 of 50'));
+    await confirmWrite(user);
+    await waitFor(() => expect(fields().title).toHaveValue('Second title'));
+    expect(writesLeft()).toHaveTextContent('11 of 50 AI writes left today.');
+  });
+
+  it('the daily limit keeps the four fields, shows the error Notice and switches the line to 0', async () => {
+    const user = userEvent.setup();
+    const stub = makeStub();
+    stub.writeRemixWithAi
+      .mockResolvedValueOnce({ data: DRAFT, error: null })
+      .mockResolvedValueOnce({ data: null, error: LIMIT_MESSAGE });
+    await renderPage(stub);
+    await user.click(writeButton());
+    await waitFor(() => expect(fields().title).toHaveValue('AI title'));
+    await user.clear(fields().hook);
+    await user.type(fields().hook, 'My own hook');
+    const before = values();
+    await confirmWrite(user);
+    const notice = await screen.findByText(LIMIT_MESSAGE);
+    expect(notice.closest('[role="status"]')).toHaveClass('text-danger');
+    expect(values()).toEqual(before);
+    expect(screen.getByText('Unsaved changes')).toBeInTheDocument();
+    expect(writesLeft()).toHaveTextContent('No AI writes left today. They reset at midnight UTC. Templates still work.');
+    await waitFor(() => expect(writeButton()).toHaveFocus());
+    expect(writeButton()).toBeEnabled();
+    expect(screen.getByLabelText('Remix template')).toBeEnabled();
+  });
+
+  it.each([
+    ['limit reached', LIMIT_MESSAGE],
+    ['turned off', AI_MESSAGES.turnedOff],
+  ])('%s as the first write: the message only, no remaining line, nothing changed', async (_name, message) => {
+    const user = userEvent.setup();
+    const stub = makeStub();
+    stub.writeRemixWithAi.mockResolvedValue({ data: null, error: message });
+    await renderPage(stub);
+    const before = values();
+    await user.click(writeButton());
+    expect(await screen.findByText(message)).toBeInTheDocument();
+    expect(values()).toEqual(before);
+    expect(writesLeft()).toBeNull();
+    expect(screen.queryByText('Unsaved changes')).toBeNull();
+    await waitFor(() => expect(writeButton()).toHaveFocus());
+  });
+
+  it("Gemini's own quota does not switch the line to 0", async () => {
+    const user = userEvent.setup();
+    const stub = makeStub();
+    stub.writeRemixWithAi
+      .mockResolvedValueOnce({ data: DRAFT, error: null })
+      .mockResolvedValueOnce({ data: null, error: AI_MESSAGES.quota });
+    await renderPage(stub);
+    await user.click(writeButton());
+    await waitFor(() => expect(writesLeft()).toHaveTextContent('12 of 50'));
+    await confirmWrite(user);
+    await screen.findByText(AI_MESSAGES.quota);
+    expect(writesLeft()).toHaveTextContent('12 of 50');
   });
 });
