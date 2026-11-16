@@ -91,12 +91,12 @@ jobs:
                   # One raw call to show what came back (the answer is not secret; the key is never printed).
                   try:
                       raw = ai_writer.HttpGeminiClient().generate(
-                          ai_writer.api_key_from_env(), model,
-                          ai_writer.build_request(facts, ai_writer.voice_text(voice, None), None), 30,
+                          ai_writer.api_key_from_env(), err.model,
+                          ai_writer.build_request(facts, ai_writer.voice_text(voice, None), None), 60,
                       )
                       candidate = (raw.get("candidates") or [{}])[0]
                       parts = (candidate.get("content") or {}).get("parts") or []
-                      print(f"  raw: finishReason={candidate.get('finishReason')} parts={[sorted(p) for p in parts]}")
+                      print(f"  raw ({err.model}): finishReason={candidate.get('finishReason')} parts={[sorted(p) for p in parts]}")
                       print(f"  raw usage: {raw.get('usageMetadata')}")
                       print("  raw text (first 600 chars): " + "".join(p.get("text", "") for p in parts)[:600])
                   except Exception as raw_err:

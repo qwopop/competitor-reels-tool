@@ -257,6 +257,30 @@ def test_the_log_line_names_each_attempt_with_a_fixed_reason_and_no_answer_text(
     assert "SECRET-BEAT" not in caplog.text
 
 
+@pytest.mark.parametrize(
+    "script, expected",
+    [
+        ("1. Hook here 2. The middle 3. Wrap up and CTA", ["1. Hook here", "2. The middle", "3. Wrap up and CTA"]),
+        ("0–3s · Hook 3–15s · Beat 15–30s · Beat 30–45s · Beat Last 5s · CTA",
+         ["0–3s · Hook", "3–15s · Beat", "15–30s · Beat", "30–45s · Beat", "Last 5s · CTA"]),
+        ("1. a\\n2. b\\n3. c", ["1. a", "2. b", "3. c"]),
+        ("1. a\r\n\n2. b\n  3. c  ", ["1. a", "2. b", "3. c"]),
+    ],
+    ids=["numbered-on-one-line", "short-on-one-line", "literal-backslash-n", "blank-lines"],
+)
+def test_a_script_on_one_line_is_split_into_beats(make, script, expected):
+    client, fake, remix = make(answer({**GOOD, "script": script}))
+    body = draft(client, remix).json()
+    assert body["script"].split("\n") == expected
+    assert body["model"] == PRIMARY
+
+
+def test_the_request_asks_for_low_thinking(make):
+    client, fake, remix = make()
+    draft(client, remix)
+    assert fake.calls[0]["body"]["generationConfig"]["thinkingConfig"] == {"thinkingLevel": "low"}
+
+
 def test_thought_parts_are_ignored(make):
     response = {"candidates": [{"content": {"parts": [
         {"text": "Let me think about this...", "thought": True},
