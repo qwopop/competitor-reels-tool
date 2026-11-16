@@ -71,3 +71,44 @@ test('Write with AI on a video opens its remix with Creator voice focused, witho
   await expect(page.getByRole('heading', { name: 'Write with AI' })).toBeVisible();
   await expect(intro).toHaveCount(0);
 });
+
+// QA on issue 99: the scrolled-to block must not end up behind the sticky header, even when the
+// header's nav wraps on a phone.
+for (const width of [1280, 390]) {
+  test(`?write=ai brings the heading and the notice fully below the sticky header at ${width} px`, async ({ page, request }) => {
+    await page.setViewportSize({ width, height: width === 390 ? 844 : 800 });
+    const { videos } = await seedChannel(request, `ai-scroll-${width}`);
+    const remix = await api.remix(request, videos[0].id);
+    await page.goto(`/remix/${remix.id}?write=ai`);
+
+    await expect(page.getByLabel('Creator voice')).toBeFocused();
+    const heading = page.getByRole('heading', { name: 'Write with AI' });
+    const notice = page.getByRole('status').filter({ hasText: 'Pick a voice, then press Write with AI.' });
+    const dismiss = notice.getByRole('button', { name: 'Dismiss' });
+    await expect(dismiss).toBeVisible();
+
+    const headerBottom = async () => {
+      const box = await page.locator('[data-app-header]').boundingBox();
+      return box ? box.y + box.height : 0;
+    };
+    const top = async (l: typeof heading) => (await l.boundingBox())?.y ?? -1;
+    // Wait for the smooth scroll to settle, then compare with the header as it is now.
+    await expect.poll(async () => (await top(heading)) - (await headerBottom()), { timeout: 5_000 }).toBeGreaterThanOrEqual(0);
+    let last = -1;
+    await expect.poll(async () => {
+      const now = await top(heading);
+      const settled = now === last;
+      last = now;
+      return settled;
+    }, { intervals: [250] }).toBe(true);
+
+    const bottom = await headerBottom();
+    expect(await top(heading)).toBeGreaterThanOrEqual(bottom);
+    expect(await top(notice)).toBeGreaterThanOrEqual(bottom);
+    expect(await top(dismiss)).toBeGreaterThanOrEqual(bottom);
+
+    // A real click: Playwright fails it if the header would receive it instead.
+    await dismiss.click({ timeout: 5_000 });
+    await expect(notice).toHaveCount(0);
+  });
+}
