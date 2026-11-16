@@ -2,12 +2,12 @@
 
 from collections.abc import Callable
 
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app import generator
-from app.models import ContentPlanRow, CompetitorRow, VideoRow, RemixRow
+from app.models import AiWriteUsageRow, ContentPlanRow, CompetitorRow, VideoRow, RemixRow
 from app.youtube import ChannelInfo
 
 
@@ -24,6 +24,45 @@ def _add_or_get(db: Session, row, find: Callable[[], object | None]):
         if existing is None:
             raise
         return existing, False
+
+
+def _take_ai_write(db: Session, day: str, limit: int) -> int | None:
+    """The conditional UPDATE: count + 1 only while below the limit. Returns the new count, or None."""
+    result = db.execute(
+        update(AiWriteUsageRow)
+        .where(AiWriteUsageRow.day == day, AiWriteUsageRow.count < limit)
+        .values(count=AiWriteUsageRow.count + 1)
+    )
+    if result.rowcount != 1:
+        db.rollback()
+        return None
+    # Read before the commit: the updated row is still locked by this transaction, so this is our count.
+    count = db.scalar(select(AiWriteUsageRow.count).where(AiWriteUsageRow.day == day))
+    db.commit()
+    return count
+
+
+def reserve_ai_write(db: Session, day: str, limit: int) -> int | None:
+    """Take one AI write for `day` (YYYY-MM-DD, UTC). Returns the writes left after it, or None
+    when the day's limit is reached.
+
+    Atomic on SQLite and PostgreSQL: the count only goes up through a conditional UPDATE
+    (`count < limit` in the WHERE clause), so two requests can never both take the last write.
+    The day's first write INSERTs the row; if another request inserted it first, the
+    unique-key conflict is caught and the conditional UPDATE is tried once more.
+    """
+    if limit <= 0:
+        return None
+    exists = db.scalar(select(AiWriteUsageRow.day).where(AiWriteUsageRow.day == day))
+    if exists is None:
+        db.add(AiWriteUsageRow(day=day, count=1))
+        try:
+            db.commit()
+            return limit - 1
+        except IntegrityError:
+            db.rollback()
+    count = _take_ai_write(db, day, limit)
+    return None if count is None else max(limit - count, 0)
 
 
 def list_competitors(db: Session) -> list[CompetitorRow]:

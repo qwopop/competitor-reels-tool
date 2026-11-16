@@ -35,7 +35,7 @@ log = logging.getLogger(__name__)
 SERVICE_NAME = "clipremix"
 HEALTH_PATH = "/api/health"
 FETCH_OUTCOMES = ("success", "empty", "error")
-AI_WRITE_OUTCOMES = ("success", "not_configured", "quota", "upstream_error", "invalid_output")
+AI_WRITE_OUTCOMES = ("success", "not_configured", "daily_limit", "quota", "upstream_error", "invalid_output")
 AI_MODEL_ROLES = ("primary", "fallback", "none")
 # Fetches take from milliseconds (sample source) to many seconds (YouTube).
 FETCH_BUCKETS = [0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 20, 30]

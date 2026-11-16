@@ -116,7 +116,7 @@ def test_a_preset_returns_a_draft_from_the_primary_model_and_saves_nothing(make)
     res = draft(client, remix)
     assert res.status_code == 200
     body = res.json()
-    assert body == {**GOOD, "model": PRIMARY}
+    assert body == {**GOOD, "model": PRIMARY, "writesLeftToday": 49, "writesPerDay": 50}
     assert "id" not in body and "updatedAt" not in body
     assert fake.models == [PRIMARY]
     assert fake.calls[0]["timeout"] == 20

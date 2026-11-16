@@ -12,6 +12,8 @@ returns is never stored.
   for as JSON with a response schema, then validated and cut to the column limits.
 - The call: the standard library only (urllib, as app/youtube.py), the key only
   in the `x-goog-api-key` header, never in the URL, a log line or an error.
+- The daily limit: at most AI_WRITES_PER_DAY (default 50) writes per UTC day, counted
+  in the database (app.store.reserve_ai_write) before Gemini is called; see the route.
 - The models: GEMINI_MODEL (default gemini-3.5-flash), and once more with
   gemini-3.1-flash-lite when the first answers 404, 429, 5xx, times out or
   returns an invalid answer.
@@ -27,6 +29,7 @@ import socket
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 from typing import Protocol
 
 log = logging.getLogger(__name__)
@@ -110,6 +113,12 @@ NOT_CONFIGURED = "AI writing is not set up on this server. Ask the owner to set 
 QUOTA = "Gemini's free quota is used up for now. Try again later, or use a template."
 FAILED = "Gemini couldn't write a draft this time. Your text hasn't changed. Try again."
 KEY_REJECTED = "Gemini couldn't write a draft this time. Your text hasn't changed. Check GEMINI_API_KEY."
+DAILY_LIMIT = "Today's limit of {limit} AI writes is used up. It resets at midnight UTC, in {time}. Templates still work."
+TURNED_OFF = "AI writing is turned off on this server for now. Templates still work."
+
+DEFAULT_WRITES_PER_DAY = 50
+_INVALID_WRITES_PER_DAY = "AI_WRITES_PER_DAY is not a whole number ≥ 0; using 50."
+_warned_invalid_writes_per_day = False
 
 
 def api_key_from_env() -> str:
@@ -119,6 +128,52 @@ def api_key_from_env() -> str:
 
 def model_from_env() -> str:
     return os.getenv("GEMINI_MODEL", "").strip() or DEFAULT_MODEL
+
+
+def writes_per_day_from_env() -> int:
+    """AI_WRITES_PER_DAY, read at request time. Unset or empty → 50; not a whole number ≥ 0 → 50
+    with a warning (logged once per process); 0 turns AI writing off."""
+    global _warned_invalid_writes_per_day
+    raw = os.getenv("AI_WRITES_PER_DAY", "").strip()
+    if not raw:
+        return DEFAULT_WRITES_PER_DAY
+    if raw.isascii() and raw.isdigit():
+        return int(raw)
+    if not _warned_invalid_writes_per_day:
+        _warned_invalid_writes_per_day = True
+        log.warning(_INVALID_WRITES_PER_DAY)
+    return DEFAULT_WRITES_PER_DAY
+
+
+# ----- The daily limit --------------------------------------------------------------
+
+
+def utc_day(now: datetime) -> str:
+    """The UTC calendar day of `now`, as YYYY-MM-DD."""
+    return now.astimezone(timezone.utc).strftime("%Y-%m-%d")
+
+
+def seconds_until_utc_midnight(now: datetime) -> int:
+    """Whole seconds until the next 00:00 UTC, rounded up, at least 1."""
+    now = now.astimezone(timezone.utc)
+    midnight = datetime(now.year, now.month, now.day, tzinfo=timezone.utc) + timedelta(days=1)
+    left = (midnight - now).total_seconds()
+    return max(1, int(left) + (1 if left > int(left) else 0))
+
+
+def time_left_text(seconds: int) -> str:
+    """Seconds as "3 h 20 min", "45 min" or "1 h", rounded up to whole minutes, at least "1 min"."""
+    minutes = max(1, -(-seconds // 60))
+    hours, minutes = divmod(minutes, 60)
+    parts = ([f"{hours} h"] if hours else []) + ([f"{minutes} min"] if minutes else [])
+    return " ".join(parts)
+
+
+def daily_limit_message(limit: int, seconds_left: int) -> str:
+    """The 429 detail when the day's writes are used up (or TURNED_OFF when the limit is 0)."""
+    if limit <= 0:
+        return TURNED_OFF
+    return DAILY_LIMIT.format(limit=limit, time=time_left_text(seconds_left))
 
 
 # ----- The facts and the prompt -------------------------------------------------
@@ -320,9 +375,9 @@ class AiWriteError(Exception):
         super().__init__(detail)
         self.status = status
         self.detail = detail
-        self.outcome = outcome  # not_configured, quota, upstream_error, invalid_output
+        self.outcome = outcome  # not_configured, daily_limit, quota, upstream_error, invalid_output
         self.model_role = model_role  # primary, fallback, none
-        self.reason = reason  # for the log line: http_503, timeout, network, invalid, missing_key
+        self.reason = reason  # for the log line: http_503, timeout, network, invalid, missing_key, daily_limit
         self.model = model  # the model of the last attempt, or "none"
         self.attempts = attempts  # "<model>: <reason>" per call made, for the log line
 

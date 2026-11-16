@@ -24,6 +24,7 @@ def no_network(monkeypatch):
     monkeypatch.setenv("VIDEO_SOURCE", "sample")
     monkeypatch.delenv("GEMINI_API_KEY", raising=False)
     monkeypatch.delenv("GEMINI_MODEL", raising=False)
+    monkeypatch.delenv("AI_WRITES_PER_DAY", raising=False)
     real_getaddrinfo = socket.getaddrinfo
 
     def guarded_getaddrinfo(host, *args, **kwargs):

@@ -449,6 +449,29 @@ def test_ai_writes_are_counted_once_by_outcome_and_model_role(
     assert outcome in telemetry.AI_WRITE_OUTCOMES and role in telemetry.AI_MODEL_ROLES
 
 
+@pytest.mark.parametrize("limit, successes", [("1", 1), ("0", 0)], ids=["limit-reached", "turned-off"])
+def test_a_request_refused_by_the_daily_limit_is_counted_as_daily_limit(
+    database_url, recorder, monkeypatch, limit, successes
+):
+    monkeypatch.setenv("GEMINI_API_KEY", FAKE_GEMINI_KEY)
+    monkeypatch.setenv("AI_WRITES_PER_DAY", limit)
+    with TestClient(ai_client(database_url, recorder, ScriptedGemini(gemini_answer()))) as client:
+        video = first_video(client)
+        remix = client.post(f"/api/videos/{video['id']}/remix").json()
+        url = f"/api/remixes/{remix['id']}/ai-draft"
+        for _ in range(successes):
+            assert client.post(url, json={"voice": "storyteller"}).status_code == 200
+        assert client.post(url, json={"voice": "storyteller"}).status_code == 429
+    points = recorder.points("clipremix.remix.ai_writes")
+    expected = [({"outcome": "daily_limit", "model_role": "none"}, 1)]
+    if successes:
+        expected.insert(0, ({"outcome": "success", "model_role": "primary"}, 1))
+    assert sorted((tuple(sorted(a.items())), p.value) for a, p in points) == sorted(
+        (tuple(sorted(a.items())), v) for a, v in expected
+    )
+    assert "daily_limit" in telemetry.AI_WRITE_OUTCOMES
+
+
 def test_the_gemini_key_is_not_in_any_span_or_log(database_url, recorder, monkeypatch):
     """The real HTTP client against a local stand-in for Gemini: the traced URL has no key."""
     seen = {}

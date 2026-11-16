@@ -3,6 +3,7 @@
 import logging
 import os
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -52,7 +53,7 @@ def source_from_env():
 
 
 def create_app(
-    database_url: str | None = None, video_source=_FROM_ENV, telemetry=_FROM_ENV, gemini=None
+    database_url: str | None = None, video_source=_FROM_ENV, telemetry=_FROM_ENV, gemini=None, clock=None
 ) -> FastAPI:
     """`video_source` looks channels up and fetches their videos; by default it comes from VIDEO_SOURCE.
 
@@ -61,6 +62,9 @@ def create_app(
 
     `gemini` is the client the AI writer calls (app.ai_writer); by default the real HTTP client.
     Its key (GEMINI_API_KEY) is read on every request, so AI writing works only when it is set.
+
+    `clock` returns the current time (timezone-aware); it decides the UTC day of the AI write
+    limit (AI_WRITES_PER_DAY). By default the real time; tests inject a fixed one.
     """
     url = database_url or os.getenv("DATABASE_URL", DEFAULT_DATABASE_URL)
     engine = make_engine(url)
@@ -85,6 +89,7 @@ def create_app(
     app.state.telemetry = telemetry
     app.state.video_source = source_from_env() if video_source is _FROM_ENV else video_source
     app.state.gemini = gemini or HttpGeminiClient()
+    app.state.clock = clock or (lambda: datetime.now(timezone.utc))
     # The Vite dev server proxies /api, so CORS only matters if you call the API directly.
     app.add_middleware(
         CORSMiddleware,
