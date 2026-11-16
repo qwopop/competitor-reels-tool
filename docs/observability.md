@@ -32,8 +32,8 @@ seconds (Render sends SIGTERM when a free service sleeps).
 
 OTel names. Prometheus names follow the standard conversion (dots become
 underscores, counters get `_total`, the histogram unit `s` becomes `_seconds`).
-No attribute holds a channel id, URL or any unbounded value; the only attribute
-is `outcome`.
+No attribute holds a channel id, URL or any unbounded value; the attributes are
+`outcome`, and `model_role` on the AI writes counter.
 
 | OTel name | Prometheus name | Type | Meaning |
 | --- | --- | --- | --- |
@@ -41,6 +41,7 @@ is `outcome`.
 | `clipremix.videos.fetched` | `clipremix_videos_fetched_total` | counter, `outcome` | One per fetch request. `success`, `empty` (no public videos) or `error` (source failure). |
 | `clipremix.remixes.created` | `clipremix_remixes_created_total` | counter | New remixes (201), not the 200 for an existing one. |
 | `clipremix.remix.failures` | `clipremix_remix_failures_total` | counter | Remix creation, apply-template or update raised an unexpected error (HTTP 500). 404 and other 4xx do not count. |
+| `clipremix.remix.ai_writes` | `clipremix_remix_ai_writes_total` | counter, `outcome`, `model_role` | One per **Write with AI** request that reached Gemini or found it unconfigured (422 and 404 are not counted). `outcome`: `success`, `not_configured`, `quota`, `upstream_error` (5xx, timeout, network, rejected key) or `invalid_output`. `model_role`: `primary`, `fallback` (the last model tried was `gemini-3.1-flash-lite`) or `none` (no call made). Logs add one line per AI write with outcome, model and duration, never the prompt, voice, instructions or output. |
 | `clipremix.plan_items.added` | `clipremix_plan_items_added_total` | counter | New content plan items (201). |
 | `clipremix.fetch.duration` | `clipremix_fetch_duration_seconds` (`_bucket`, `_sum`, `_count`) | histogram, `outcome` | Seconds spent in the video source fetch. |
 | `clipremix.competitors` | `clipremix_competitors` | observable gauge | Competitors currently in the database. A database error in the callback is logged and skipped. |

@@ -12,7 +12,7 @@ instance hours) and keep data you may not want kept.
 
 | What | How to delete |
 | --- | --- |
-| Scheduled workflows `on-call.yml` (every 5 minutes) and `grafana.yml` | Delete the files from the repository (`git rm .github/workflows/on-call.yml .github/workflows/grafana.yml`, commit, push), or disable them: Actions, pick the workflow, **...**, **Disable workflow**. Other workflows from the set: `deploy-dev.yml`, `deploy-dev-branch.yml`, `bug-patch.yml`, `bug-chain.yml`, `promote.yml`, `build-image.yml`, `observability.yml`, `grafana-local.yml`. |
+| Scheduled workflows `on-call.yml` (every 5 minutes) and `grafana.yml` | Delete the files from the repository (`git rm .github/workflows/on-call.yml .github/workflows/grafana.yml`, commit, push), or disable them: Actions, pick the workflow, **...**, **Disable workflow**. Other workflows from the set: `gemini-api-check.yml` (manual), `deploy-dev.yml`, `deploy-dev-branch.yml`, `bug-patch.yml`, `bug-chain.yml`, `promote.yml`, `build-image.yml`, `observability.yml`, `grafana-local.yml`. |
 | Repository secrets `GRAFANA_API_TOKEN`, `GRAFANA_ALERT_TOKEN`, `GEMINI_API_KEY`, `YOUTUBE_API_KEY` | Settings, Secrets and variables, Actions, Secrets: delete each. Or `gh secret delete <NAME>`. |
 | Repository variables `GRAFANA_URL` and the optional `GEMINI_MODEL` (pins the Gemini model of the on-call agent) | Settings, Secrets and variables, Actions, Variables. Or `gh variable delete GRAFANA_URL` and `gh variable delete GEMINI_MODEL`. |
 | Environment secret `RENDER_DEPLOY_HOOK_URL` and variable `RENDER_APP_URL`, in both `dev` and `prod` | Deleted with the environments below. Older setups also had them at repository level (#78 removed that); `gh secret delete RENDER_DEPLOY_HOOK_URL` and `gh variable delete RENDER_APP_URL` remove any leftover. |
@@ -46,7 +46,9 @@ With the API: `gh api -X DELETE /user/packages/container/clipremix` (needs the `
 
 ## 6. Google AI Studio
 
-The Gemini key behind `GEMINI_API_KEY`: https://aistudio.google.com/apikey, find the key, **Delete**.
+The Gemini key behind `GEMINI_API_KEY`: https://aistudio.google.com/apikey, find the key, **Delete**. The same name is used in
+two places: the repository secret (on-call agent and `gemini-api-check.yml`) and the Render variable on `clipremix-dev` and
+`clipremix-prod` (**Write with AI**, #96). Remove the Render variable too; without it the app keeps working with templates only.
 
 The YouTube key behind `YOUTUBE_API_KEY`: Google Cloud Console, **APIs & Services, Credentials**, find the API key, **Delete** (to rotate: create a new key, update the Render variable `YOUTUBE_API_KEY` on `clipremix-prod` and the GitHub secret, then delete the old one). Also remove the variable in Render when you delete the services.
 

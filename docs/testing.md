@@ -22,10 +22,10 @@ instead of AWS).
 
 | Layer | What it checks | Command | Size |
 | --- | --- | --- | --- |
-| Backend unit and API | Every endpoint, YouTube parsing, remix writing, schema upgrades, OpenTelemetry signals and metrics (in-memory exporters, `tests/test_telemetry.py`), observability config files | `make test` (SQLite) and `make test-postgres` (PostgreSQL) | 211 tests |
-| Frontend unit | Pages, components, helpers | `cd frontend && npm test` | 152 tests |
+| Backend unit and API | Every endpoint, YouTube parsing, remix writing, schema upgrades, OpenTelemetry signals and metrics (in-memory exporters, `tests/test_telemetry.py`), observability config files, the Gemini writer with a fake client | `make test` (SQLite) and `make test-postgres` (PostgreSQL) | 336 tests |
+| Frontend unit | Pages, components, helpers | `cd frontend && npm test` | 178 tests |
 | Integration | The compose stack: frontend served, backend on PostgreSQL | `make integration` | 13 tests |
-| End-to-end | Each feature in a real browser against the compose stack | `make e2e` | 20 specs, 59 tests |
+| End-to-end | Each feature in a real browser against the compose stack | `make e2e` | 22 specs, 64 tests |
 
 | Smoke (dev) | The `@smoke` subset, `e2e/tests/smoke.spec.ts`: health, pages, list endpoints, one add/remix/delete cycle that cleans up after itself | `cd e2e && npm run smoke` | 4 tests |
 
@@ -37,6 +37,19 @@ transport (`backend/tests/test_youtube_api.py`: parsing, errors, no key in any
 URL or message, source selection). Against the real API it is checked by the
 workflow `youtube-api-check.yml` (manual, uses the secret `YOUTUBE_API_KEY`,
 prints only non-secret facts and skips with a notice when the secret is missing).
+
+The Gemini remix writer (#96) never calls the real API in tests. The backend
+injects a fake client (`app.state.gemini`, `backend/tests/test_ai_writer.py`):
+fallback after 404, 429, 5xx and timeouts, quota and failure messages, invalid
+answers, length cuts, 422 and 404 cases, the prompt's facts, a prompt-injection
+test (user text stays inside the JSON data block; the system instruction and
+schema do not change) and a test that a recognisable fake key never reaches a
+log, a response or a span. `tests/conftest.py` clears `GEMINI_API_KEY` and fails
+any test that tries to resolve `generativelanguage.googleapis.com`. The frontend
+uses stubs and `MockVideosApi` (which can simulate the three errors), and
+`e2e/tests/remix-ai.spec.ts` checks the "not set up" path on the compose stack,
+which runs without a key. The real API is checked only by the manual workflow
+`gemini-api-check.yml` (secret `GEMINI_API_KEY`; skips with a notice without it).
 
 `make e2e` starts from an **empty database**, like CI. Tests used to run
 on a database that kept every earlier run's channels. It grew to about
