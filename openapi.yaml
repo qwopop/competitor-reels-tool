@@ -283,6 +283,10 @@ paths:
         The server first asks GEMINI_MODEL (default gemini-3.5-flash) and, when it
         answers 404, 429, 5xx, times out or returns an invalid answer, retries once
         with gemini-3.1-flash-lite. The templates keep working without Gemini.
+        The server allows at most AI_WRITES_PER_DAY (default 50) AI writes per UTC day.
+        A request that passes validation (422), finds its remix and video (404) and has
+        GEMINI_API_KEY set (503) counts as one write, reserved before Gemini is called and
+        not given back when Gemini then fails, even when the fallback model is tried too.
       requestBody:
         required: true
         content:
@@ -311,13 +315,37 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
         "429":
-          description: Gemini's quota is used up (every model tried answered 429)
+          description: >
+            Two cases, told apart by `detail`. (1) The server's daily limit: AI_WRITES_PER_DAY
+            (default 50) AI writes per UTC day are used up, or AI_WRITES_PER_DAY is 0 (AI writing
+            turned off). Gemini is not called and the response has a Retry-After header.
+            (2) Gemini's own quota is used up (every model tried answered 429); no Retry-After.
+          headers:
+            Retry-After:
+              description: >
+                Daily-limit case only: whole seconds (at least 1) until the next 00:00 UTC,
+                when the count starts again from 0.
+              schema:
+                type: integer
+                minimum: 1
+              example: 12000
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-              example:
-                detail: Gemini's free quota is used up for now. Try again later, or use a template.
+              examples:
+                dailyLimit:
+                  summary: The server's daily limit is used up
+                  value:
+                    detail: Today's limit of 50 AI writes is used up. It resets at midnight UTC, in 3 h 20 min. Templates still work.
+                turnedOff:
+                  summary: AI_WRITES_PER_DAY is 0
+                  value:
+                    detail: AI writing is turned off on this server for now. Templates still work.
+                geminiQuota:
+                  summary: Gemini's own quota is used up
+                  value:
+                    detail: Gemini's free quota is used up for now. Try again later, or use a template.
         "502":
           description: >
             Gemini failed (5xx, timeout, network error, invalid answer, or the key
@@ -601,7 +629,7 @@ components:
       description: >
         A draft written by Gemini. Not a saved remix: it has no id or timestamps.
         Fields longer than the limits of UpdateRemixRequest are cut to them.
-      required: [title, hook, script, cta, model]
+      required: [title, hook, script, cta, model, writesLeftToday, writesPerDay]
       properties:
         title: { type: string, maxLength: 500 }
         hook: { type: string, maxLength: 1000 }
@@ -616,6 +644,16 @@ components:
           type: string
           description: The Gemini model that answered.
           example: gemini-3.5-flash
+        writesLeftToday:
+          type: integer
+          minimum: 0
+          description: AI writes still allowed today (UTC) after this one.
+          example: 49
+        writesPerDay:
+          type: integer
+          minimum: 0
+          description: The server's daily limit (AI_WRITES_PER_DAY, default 50).
+          example: 50
 
     PlanStatus:
       type: string
