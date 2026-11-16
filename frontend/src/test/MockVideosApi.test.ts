@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { MockVideosApi } from '@/services/MockVideosApi';
 import type { VideosApi } from '@/types';
+import { AI_MESSAGES } from '@/utils/voices';
 
 // The whole app depends only on the VideosApi interface. These tests exercise
 // the mock implementation that ships with the app so swapping backends later
@@ -227,5 +228,43 @@ describe('MockVideosApi re-fetch keeps the user work', () => {
 
     const remix = await api.remixVideo(item.data!.videoId);
     expect(remix.error).toBeNull();
+  });
+});
+
+describe('MockVideosApi.writeRemixWithAi', () => {
+  async function remixOf(api: VideosApi) {
+    const comp = await api.addCompetitor('https://www.youtube.com/@aicreator');
+    const videos = await api.fetchVideosForCompetitor(comp.data!.id);
+    return (await api.remixVideo(videos.data![0].id)).data!;
+  }
+
+  it('writes a deterministic draft and saves nothing', async () => {
+    const api = new MockVideosApi();
+    const remix = await remixOf(api);
+    const first = await api.writeRemixWithAi(remix.id, { voice: 'storyteller' });
+    const again = await api.writeRemixWithAi(remix.id, { voice: 'storyteller' });
+    expect(first.error).toBeNull();
+    expect(first.data).toEqual(again.data);
+    expect(first.data!.script.split('\n').length).toBeGreaterThanOrEqual(3);
+    expect((await api.getRemix(remix.id)).data).toEqual(remix);
+  });
+
+  it('needs a custom voice and a known remix', async () => {
+    const api = new MockVideosApi();
+    const remix = await remixOf(api);
+    expect((await api.writeRemixWithAi(remix.id, { voice: 'custom', customVoice: ' ' })).error).toBe(
+      'Describe the voice, or pick a preset.'
+    );
+    expect((await api.writeRemixWithAi('nope', { voice: 'storyteller' })).error).toBe('Remix not found.');
+  });
+
+  it.each([
+    ['not_configured', AI_MESSAGES.notConfigured],
+    ['quota', AI_MESSAGES.quota],
+    ['failed', AI_MESSAGES.failed],
+  ] as const)('can simulate %s', async (failure, message) => {
+    const remix = await remixOf(new MockVideosApi());
+    const res = await new MockVideosApi({ aiFailure: failure }).writeRemixWithAi(remix.id, { voice: 'entertainer' });
+    expect(res).toEqual({ data: null, error: message });
   });
 });

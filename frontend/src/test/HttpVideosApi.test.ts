@@ -64,6 +64,36 @@ describe('HttpVideosApi', () => {
     expect(res.error).toMatch(/Could not reach the server/);
   });
 
+  it('posts the voice and instructions to the AI draft endpoint', async () => {
+    fetchMock.mockResolvedValue(jsonResponse(200, { title: 't', hook: 'h', script: 's', cta: 'c', model: 'm' }));
+    const res = await new HttpVideosApi().writeRemixWithAi('remix_1', {
+      voice: 'storyteller',
+      customVoice: 'ignored for a preset',
+      instructions: 'Keep it short.',
+    });
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe('/api/remixes/remix_1/ai-draft');
+    expect(init.method).toBe('POST');
+    expect(JSON.parse(init.body)).toEqual({ voice: 'storyteller', instructions: 'Keep it short.' });
+    expect(res.data?.model).toBe('m');
+  });
+
+  it('sends the custom voice only for custom, and no empty instructions', async () => {
+    fetchMock.mockResolvedValue(jsonResponse(200, {}));
+    await new HttpVideosApi().writeRemixWithAi('remix_1', { voice: 'custom', customVoice: 'You are me', instructions: '  ' });
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({ voice: 'custom', customVoice: 'You are me' });
+  });
+
+  it.each([
+    [503, 'AI writing is not set up on this server. Ask the owner to set GEMINI_API_KEY. Templates still work.'],
+    [429, "Gemini's free quota is used up for now. Try again later, or use a template."],
+    [502, "Gemini couldn't write a draft this time. Your text hasn't changed. Try again."],
+  ])('shows the server message for an AI draft answered %i', async (status, detail) => {
+    fetchMock.mockResolvedValue(jsonResponse(status, { detail }));
+    const res = await new HttpVideosApi().writeRemixWithAi('remix_1', { voice: 'entertainer' });
+    expect(res).toEqual({ data: null, error: detail });
+  });
+
   it('sends PATCH with only the changed fields', async () => {
     fetchMock.mockResolvedValue(jsonResponse(200, { id: 'remix_1' }));
     await new HttpVideosApi().updateRemix('remix_1', { hook: 'New hook' });

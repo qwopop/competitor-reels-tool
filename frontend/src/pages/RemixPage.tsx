@@ -1,11 +1,13 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, Sparkles } from 'lucide-react';
 import { useApi } from '@/services';
-import type { ContentPlanItem, Video, RemixedVideo, RemixTemplate } from '@/types';
+import type { ContentPlanItem, CreatorVoice, Video, RemixedVideo, RemixTemplate } from '@/types';
 import { relativeTime, videoStats } from '@/utils/format';
 import { ErrorBanner, FullPageLoader, Spinner } from '@/components/ui';
 import { ConfirmDialog } from '@/components/Modal';
+import { Notice } from '@/components/Notice';
+import { CREATOR_VOICES, CUSTOM_VOICE_LIMIT, INSTRUCTIONS_LIMIT, voiceName } from '@/utils/voices';
 import { REMIX_TEMPLATES } from '@/utils/templates';
 import { planStatusMeta } from '@/utils/plan';
 import { WatchOnYouTubeLink } from '@/components/YouTubeLinks';
@@ -30,6 +32,34 @@ export function RemixPage() {
   const [planItem, setPlanItem] = useState<ContentPlanItem | null>(null);
   const [template, setTemplate] = useState<RemixTemplate>('default');
   const [confirmApply, setConfirmApply] = useState(false);
+
+  // Write with AI: the chosen voice and instructions, the request in flight, and its message.
+  const [voice, setVoice] = useState<CreatorVoice>('educational_blogger');
+  const [customVoice, setCustomVoice] = useState('');
+  const [instructions, setInstructions] = useState('');
+  const [voiceMissing, setVoiceMissing] = useState(false);
+  const [confirmAi, setConfirmAi] = useState(false);
+  const [writing, setWriting] = useState(false);
+  const [aiNotice, setAiNotice] = useState<{ tone: 'success' | 'error'; message: string } | null>(null);
+  const [focusAfterWrite, setFocusAfterWrite] = useState<'title' | 'button' | null>(null);
+  const mounted = useRef(true);
+  const writeButton = useRef<HTMLButtonElement>(null);
+  const customVoiceBox = useRef<HTMLTextAreaElement>(null);
+  const titleField = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false; // a late AI answer after leaving the page is ignored
+    };
+  }, []);
+
+  // Focus moves once the fields are editable again (they are read-only while Gemini writes).
+  useEffect(() => {
+    if (!focusAfterWrite) return;
+    (focusAfterWrite === 'title' ? titleField : writeButton).current?.focus();
+    setFocusAfterWrite(null);
+  }, [focusAfterWrite]);
 
   useEffect(() => {
     if (!id) return;
@@ -80,6 +110,7 @@ export function RemixPage() {
     setRemix(res.data);
     setSavedAt(res.data.updatedAt);
     setDirty(false);
+    if (aiNotice?.tone === 'success') setAiNotice(null);
   }
 
   async function handleAddToPlan() {
@@ -95,6 +126,7 @@ export function RemixPage() {
   async function applyTemplate() {
     if (!remix) return;
     setConfirmApply(false);
+    setAiNotice(null);
     const res = await api.applyRemixTemplate(remix.id, template);
     if (res.error || !res.data) {
       setError(res.error ?? 'Could not apply the template.');
@@ -113,6 +145,47 @@ export function RemixPage() {
   function handleApplyClick() {
     if (dirty) setConfirmApply(true);
     else applyTemplate();
+  }
+
+  async function writeWithAi() {
+    if (!remix) return;
+    setConfirmAi(false);
+    setAiNotice(null);
+    setWriting(true);
+    const res = await api.writeRemixWithAi(remix.id, {
+      voice,
+      customVoice: voice === 'custom' ? customVoice : undefined,
+      instructions: instructions.trim() ? instructions : undefined,
+    });
+    if (!mounted.current) return;
+    setWriting(false);
+    if (res.error || !res.data) {
+      // The editor keeps exactly the text it had; only the message is shown.
+      setAiNotice({ tone: 'error', message: res.error ?? "Gemini couldn't write a draft this time. Your text hasn't changed. Try again." });
+      setFocusAfterWrite('button');
+      return;
+    }
+    const draft = res.data;
+    setTitle(draft.title);
+    setHook(draft.hook);
+    setScript(draft.script);
+    setCta(draft.cta);
+    setDirty(true);
+    setAiNotice({
+      tone: 'success',
+      message: `Draft written in the ${voiceName(voice)} voice. Review it, then press Save changes.`,
+    });
+    setFocusAfterWrite('title');
+  }
+
+  function handleWriteClick() {
+    if (voice === 'custom' && !customVoice.trim()) {
+      setVoiceMissing(true);
+      customVoiceBox.current?.focus();
+      return;
+    }
+    if (dirty) setConfirmAi(true);
+    else writeWithAi();
   }
 
   if (loading) return <FullPageLoader label="Loading remix…" />;
@@ -138,15 +211,24 @@ export function RemixPage() {
           onCancel={() => setConfirmApply(false)}
         />
       )}
+      {confirmAi && (
+        <ConfirmDialog
+          title="Replace your edits?"
+          message="Writing with AI replaces the title, hook, script and call to action in the editor. Your unsaved edits will be lost."
+          confirmLabel="Write with AI"
+          onConfirm={writeWithAi}
+          onCancel={() => setConfirmAi(false)}
+        />
+      )}
       <BackLink />
 
       <header className="mt-10 max-w-3xl">
-        <h1 className="text-4xl font-semibold leading-[1.0] tracking-[-0.03em] text-ink sm:text-6xl">
+        <h1 className="break-words text-4xl font-semibold leading-[1.0] tracking-[-0.03em] text-ink [overflow-wrap:anywhere] sm:text-6xl">
           {title || 'Untitled remix'}
         </h1>
         <p className="mt-5 max-w-md text-base text-ink/70">
-          A draft written from the source video's title, description and numbers.
-          Edit the hook, script and call to action until it sounds like you.
+          Write a draft with AI in a creator voice, or start from a template. Then edit the
+          hook, script and call to action until it sounds like you.
         </p>
       </header>
 
@@ -177,7 +259,33 @@ export function RemixPage() {
           )}
         </section>
 
-        <section className="panel sm:p-8">
+        <section className="panel min-w-0 sm:p-8">
+          <AiBlock
+            voice={voice}
+            onVoice={setVoice}
+            customVoice={customVoice}
+            onCustomVoice={(value) => {
+              setCustomVoice(value);
+              if (value.trim()) setVoiceMissing(false);
+            }}
+            voiceMissing={voiceMissing}
+            instructions={instructions}
+            onInstructions={setInstructions}
+            writing={writing}
+            sourceGone={!video}
+            onWrite={handleWriteClick}
+            notice={aiNotice}
+            onDismissNotice={() => setAiNotice(null)}
+            writeButton={writeButton}
+            customVoiceBox={customVoiceBox}
+          />
+
+          <div className="my-10 flex items-center gap-4">
+            <span aria-hidden="true" className="flex-1 border-t border-white/10" />
+            <span className="max-w-[60%] text-center text-sm text-ink/50">or start from a template</span>
+            <span aria-hidden="true" className="flex-1 border-t border-white/10" />
+          </div>
+
           <div className="mb-10">
             <p className="label">Template</p>
             <div className="mt-3 flex flex-wrap items-center gap-3">
@@ -186,27 +294,30 @@ export function RemixPage() {
                 value={template}
                 onChange={(e) => setTemplate(e.target.value as RemixTemplate)}
                 aria-label="Remix template"
+                disabled={writing}
               >
                 {REMIX_TEMPLATES.map((t) => (
                   <option key={t.value} value={t.value}>{t.label}</option>
                 ))}
               </select>
-              <button type="button" onClick={handleApplyClick} className="btn-outline">
+              <button type="button" onClick={handleApplyClick} className="btn-outline" disabled={writing}>
                 Apply template
               </button>
             </div>
             <p className="mt-2 text-sm text-ink/50">
               {REMIX_TEMPLATES.find((t) => t.value === template)?.description} Drafts are
-              built from the video's details, not AI analysis.
+              built by rules from the video's details.
             </p>
           </div>
 
-          <div className="space-y-8">
+          <div className="space-y-8" aria-busy={writing}>
             <Field id="remix-title" label="Title">
               <input
                 id="remix-title"
+                ref={titleField}
                 maxLength={500}
-                className="input"
+                readOnly={writing}
+                className={`input${writing ? ' opacity-60 animate-pulse-soft motion-reduce:animate-none' : ''}`}
                 value={title}
                 onChange={markDirty(setTitle)}
                 placeholder="Give your remix a title"
@@ -221,7 +332,8 @@ export function RemixPage() {
               <textarea
                 id="remix-hook"
                 maxLength={1000}
-                className="input min-h-[88px] resize-y"
+                readOnly={writing}
+                className={`input min-h-[88px] resize-y${writing ? ' opacity-60 animate-pulse-soft motion-reduce:animate-none' : ''}`}
                 value={hook}
                 onChange={markDirty(setHook)}
                 placeholder="Write a scroll-stopping hook…"
@@ -236,7 +348,8 @@ export function RemixPage() {
               <textarea
                 id="remix-script"
                 maxLength={2000}
-                className="input min-h-[180px] resize-y leading-relaxed"
+                readOnly={writing}
+                className={`input min-h-[180px] resize-y leading-relaxed${writing ? ' opacity-60 animate-pulse-soft motion-reduce:animate-none' : ''}`}
                 rows={Math.min(14, Math.max(6, script.split('\n').length + 1))}
                 value={script}
                 onChange={markDirty(setScript)}
@@ -252,7 +365,8 @@ export function RemixPage() {
               <textarea
                 id="remix-cta"
                 maxLength={500}
-                className="input min-h-[80px] resize-y"
+                readOnly={writing}
+                className={`input min-h-[80px] resize-y${writing ? ' opacity-60 animate-pulse-soft motion-reduce:animate-none' : ''}`}
                 value={cta}
                 onChange={markDirty(setCta)}
                 placeholder="Tell the viewer what to do next…"
@@ -281,7 +395,7 @@ export function RemixPage() {
               ) : null}
               <button
                 onClick={handleSave}
-                disabled={!dirty || saving}
+                disabled={!dirty || saving || writing}
                 className="btn-primary"
               >
                 {saving ? <Spinner /> : null} Save changes
@@ -290,6 +404,153 @@ export function RemixPage() {
           </div>
         </section>
       </div>
+    </div>
+  );
+}
+
+function AiBlock({
+  voice,
+  onVoice,
+  customVoice,
+  onCustomVoice,
+  voiceMissing,
+  instructions,
+  onInstructions,
+  writing,
+  sourceGone,
+  onWrite,
+  notice,
+  onDismissNotice,
+  writeButton,
+  customVoiceBox,
+}: {
+  voice: CreatorVoice;
+  onVoice: (voice: CreatorVoice) => void;
+  customVoice: string;
+  onCustomVoice: (value: string) => void;
+  voiceMissing: boolean;
+  instructions: string;
+  onInstructions: (value: string) => void;
+  writing: boolean;
+  sourceGone: boolean;
+  onWrite: () => void;
+  notice: { tone: 'success' | 'error'; message: string } | null;
+  onDismissNotice: () => void;
+  writeButton: React.RefObject<HTMLButtonElement>;
+  customVoiceBox: React.RefObject<HTMLTextAreaElement>;
+}) {
+  const description = CREATOR_VOICES.find((v) => v.value === voice)?.description;
+  return (
+    <div>
+      <h2 className="label">Write with AI</h2>
+
+      <label htmlFor="ai-voice" className="mt-4 block text-sm text-ink/70">
+        Creator voice
+      </label>
+      <select
+        id="ai-voice"
+        className="input mt-2 sm:max-w-xs"
+        value={voice}
+        onChange={(e) => onVoice(e.target.value as CreatorVoice)}
+        disabled={writing}
+        aria-describedby="ai-voice-description"
+      >
+        {CREATOR_VOICES.map((v) => (
+          <option key={v.value} value={v.value}>{v.label}</option>
+        ))}
+      </select>
+      <p id="ai-voice-description" className="mt-2 text-sm text-ink/50">
+        {description}
+      </p>
+
+      {voice === 'custom' ? (
+        <div className="mt-5">
+          <CountedLabel id="ai-custom-voice" label="Describe the voice" count={customVoice.length} limit={CUSTOM_VOICE_LIMIT} />
+          <textarea
+            id="ai-custom-voice"
+            ref={customVoiceBox}
+            className="input mt-2 min-h-[80px] resize-y"
+            maxLength={CUSTOM_VOICE_LIMIT}
+            value={customVoice}
+            onChange={(e) => onCustomVoice(e.target.value)}
+            placeholder="You are a calm finance coach who explains with everyday examples…"
+            disabled={writing}
+            aria-invalid={voiceMissing ? 'true' : undefined}
+            aria-describedby={`ai-custom-voice-count${voiceMissing ? ' ai-custom-voice-error' : ''}`}
+          />
+          {voiceMissing ? (
+            <p id="ai-custom-voice-error" className="mt-2 text-sm text-danger">
+              Describe the voice, or pick a preset.
+            </p>
+          ) : null}
+        </div>
+      ) : null}
+
+      <div className="mt-5">
+        <CountedLabel id="ai-instructions" label="Extra instructions (optional)" count={instructions.length} limit={INSTRUCTIONS_LIMIT} />
+        <textarea
+          id="ai-instructions"
+          className="input mt-2 min-h-[80px] resize-y"
+          maxLength={INSTRUCTIONS_LIMIT}
+          value={instructions}
+          onChange={(e) => onInstructions(e.target.value)}
+          placeholder="Keep it under 45 seconds. Mention my free checklist."
+          disabled={writing}
+          aria-describedby="ai-instructions-count"
+        />
+      </div>
+
+      <button
+        ref={writeButton}
+        type="button"
+        onClick={onWrite}
+        disabled={writing || sourceGone}
+        className="btn-primary mt-5 w-full sm:w-auto"
+      >
+        {/* Both labels share one grid cell, so the button keeps its width while busy. */}
+        <span className="grid">
+          <span
+            aria-hidden={writing || undefined}
+            className={`col-start-1 row-start-1 inline-flex items-center justify-center gap-2 ${writing ? 'invisible' : ''}`}
+          >
+            <Sparkles size={16} aria-hidden="true" /> Write with AI
+          </span>
+          <span
+            aria-hidden={!writing || undefined}
+            className={`col-start-1 row-start-1 inline-flex items-center justify-center gap-2 ${writing ? '' : 'invisible'}`}
+          >
+            <Spinner /> Writing…
+          </span>
+        </span>
+      </button>
+      <p className="mt-3 text-sm text-ink/50">
+        {sourceGone
+          ? "The source video is gone, so AI can't write from it. You can still edit the text."
+          : "Gemini writes a draft from this video's details. Nothing is saved until you press Save changes."}
+      </p>
+      {writing ? (
+        <p role="status" className="mt-3 text-sm text-ink/70">
+          Gemini is writing your draft. This can take up to half a minute.
+        </p>
+      ) : null}
+      {notice ? (
+        <div className="mt-4">
+          <Notice tone={notice.tone} message={notice.message} onDismiss={onDismissNotice} />
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function CountedLabel({ id, label, count, limit }: { id: string; label: string; count: number; limit: number }) {
+  return (
+    <div className="flex items-baseline justify-between gap-4">
+      <label htmlFor={id} className="text-sm text-ink/70">
+        {label}
+      </label>
+      <span id={`${id}-count`} className="text-sm tabular-nums text-ink/50">
+        {count}/{limit}
+      </span>
     </div>
   );
 }

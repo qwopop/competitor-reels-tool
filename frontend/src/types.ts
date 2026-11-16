@@ -82,6 +82,33 @@ export type PlanItemChanges = Partial<Pick<ContentPlanItem, 'status' | 'filmDate
 
 export type RemixTemplate = 'default' | 'educational' | 'storytelling' | 'promotional';
 
+// The creator voice the AI writer uses: a preset persona, or `custom` with the owner's own text.
+export type CreatorVoice =
+  | 'educational_blogger'
+  | 'storyteller'
+  | 'entertainer'
+  | 'expert_reviewer'
+  | 'motivational_coach'
+  | 'custom';
+
+export interface AiDraftRequest {
+  voice: CreatorVoice;
+  // Required (not blank) for `custom`, at most 300 characters; ignored for a preset.
+  customVoice?: string;
+  // Optional, at most 500 characters.
+  instructions?: string;
+}
+
+// A draft written by Gemini (POST /api/remixes/{id}/ai-draft). Not saved: no id or timestamps.
+export interface AiDraft {
+  title: string;
+  hook: string;
+  script: string;
+  cta: string;
+  // The Gemini model that answered.
+  model: string;
+}
+
 export interface ServiceResult<T> {
   data: T | null;
   error: string | null;
@@ -100,6 +127,8 @@ export interface VideosApi {
   listRemixes(): Promise<ServiceResult<RemixedVideo[]>>;
   getRemixForVideo(videoId: string): Promise<ServiceResult<RemixedVideo>>;
   applyRemixTemplate(id: string, template: RemixTemplate): Promise<ServiceResult<RemixedVideo>>;
+  // Gemini writes a draft in the chosen voice. Nothing is saved; save it with updateRemix.
+  writeRemixWithAi(id: string, request: AiDraftRequest): Promise<ServiceResult<AiDraft>>;
   getRemix(id: string): Promise<ServiceResult<RemixedVideo>>;
   updateRemix(
     id: string,

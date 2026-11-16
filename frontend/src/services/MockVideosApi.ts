@@ -1,4 +1,6 @@
 import type {
+  AiDraft,
+  AiDraftRequest,
   Competitor,
   ContentPlanItem,
   PlanItemChanges,
@@ -10,6 +12,7 @@ import type {
   ServiceResult,
 } from '@/types';
 import { channelUrlForRef, parseChannelInput } from '@/utils/youtube';
+import { AI_MESSAGES, CREATOR_VOICES } from '@/utils/voices';
 
 // ----------------------------------------------------------------------------
 // Offline mock of the VideosApi service, persisted to localStorage. It is no
@@ -162,9 +165,39 @@ function delay<T>(value: T, ms = 600): Promise<T> {
   return new Promise((resolve) => setTimeout(() => resolve(value), ms));
 }
 
+// A deterministic stand-in for the Gemini draft: the same video and voice always give the same text.
+function aiDraftText(video: Video, voice: AiDraftRequest['voice']): AiDraft {
+  const label = voice === 'custom' ? 'your own' : (CREATOR_VOICES.find((v) => v.value === voice)?.label ?? voice);
+  const topic = video.caption;
+  return {
+    title: `${topic}, in the ${label.toLowerCase()} voice`,
+    hook: `Here is ${topic.toLowerCase()} the way a ${label.toLowerCase()} would say it.`,
+    script: [
+      '1. Hook (first 15 seconds)',
+      `2. The one idea behind “${topic}”`,
+      '3. Show it on screen, step by step',
+      '4. The mistake to avoid',
+      '5. Wrap up and CTA',
+    ].join('\n'),
+    cta: 'Save this and tell me in the comments which step you will try first.',
+    model: 'mock-gemini',
+  };
+}
+
+// The AI failures the mock can simulate (for tests): what the backend answers in each case.
+export type MockAiFailure = 'not_configured' | 'quota' | 'failed';
+const AI_FAILURES: Record<MockAiFailure, string> = {
+  not_configured: AI_MESSAGES.notConfigured,
+  quota: AI_MESSAGES.quota,
+  failed: AI_MESSAGES.failed,
+};
+
 // ----- Service implementation -----------------------------------------------
 
 export class MockVideosApi implements VideosApi {
+  // Set to simulate an AI writing failure; by default the mock writes a deterministic draft.
+  constructor(private readonly options: { aiFailure?: MockAiFailure } = {}) {}
+
   async listCompetitors(): Promise<ServiceResult<Competitor[]>> {
     const competitors = read<Competitor[]>(COMPETITORS_KEY, []);
     return delay(ok(competitors), 150);
@@ -317,6 +350,22 @@ export class MockVideosApi implements VideosApi {
     remixes[idx] = updated;
     write(REMIXES_KEY, remixes);
     return delay(ok(updated), 200);
+  }
+
+  async writeRemixWithAi(id: string, request: AiDraftRequest): Promise<ServiceResult<AiDraft>> {
+    const remix = read<RemixedVideo[]>(REMIXES_KEY, []).find((rm) => rm.id === id);
+    if (!remix) return fail<AiDraft>('Remix not found.');
+    const video = read<Video[]>(VIDEOS_KEY, []).find((v) => v.id === remix.videoId);
+    if (!video) return fail<AiDraft>('Video not found.');
+    if (request.voice === 'custom' && !request.customVoice?.trim()) {
+      return fail<AiDraft>('Describe the voice, or pick a preset.');
+    }
+    if ((request.customVoice?.length ?? 0) > 300 || (request.instructions?.length ?? 0) > 500) {
+      return fail<AiDraft>('Some of the information is not valid.');
+    }
+    const failure = this.options.aiFailure;
+    if (failure) return delay(fail<AiDraft>(AI_FAILURES[failure]), 300);
+    return delay(ok(aiDraftText(video, request.voice)), 900);
   }
 
   async updateRemix(
