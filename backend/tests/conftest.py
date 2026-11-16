@@ -1,8 +1,10 @@
 import os
+import socket
 
 import pytest
 from fastapi.testclient import TestClient
 
+from app.ai_writer import API_HOST as GEMINI_HOST
 from app.generator import SampleSource
 from app.main import create_app
 from app.models import Base, make_engine
@@ -14,8 +16,22 @@ TEST_DATABASE_URL = os.getenv("TEST_DATABASE_URL", "").strip()
 
 @pytest.fixture(autouse=True)
 def no_network(monkeypatch):
-    """Apps built from the environment use sample data, so no test ever calls YouTube."""
+    """Apps built from the environment use sample data, so no test ever calls YouTube.
+
+    No test calls Gemini either: GEMINI_API_KEY and GEMINI_MODEL are cleared, and any attempt
+    to resolve Gemini's host fails the test (tests inject a fake client instead).
+    """
     monkeypatch.setenv("VIDEO_SOURCE", "sample")
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.delenv("GEMINI_MODEL", raising=False)
+    real_getaddrinfo = socket.getaddrinfo
+
+    def guarded_getaddrinfo(host, *args, **kwargs):
+        if isinstance(host, (str, bytes)) and GEMINI_HOST in (host.decode() if isinstance(host, bytes) else host):
+            pytest.fail(f"A test tried to reach {GEMINI_HOST}; use a fake Gemini client.")
+        return real_getaddrinfo(host, *args, **kwargs)
+
+    monkeypatch.setattr(socket, "getaddrinfo", guarded_getaddrinfo)
 
 
 @pytest.fixture

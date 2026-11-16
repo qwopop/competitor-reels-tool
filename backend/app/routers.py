@@ -8,12 +8,14 @@ from fastapi import APIRouter, Body, Depends, HTTPException, Request, Response, 
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from app import store
+from app import ai_writer, store
 from app.config import app_environment, app_version
 from app.telemetry import untraced
 from app.youtube import YouTubeError, parse_channel_input
 from app.schemas import (
     AddCompetitorRequest,
+    AiDraft,
+    AiDraftRequest,
     AddToPlanRequest,
     Competitor,
     ContentPlanItem,
@@ -212,6 +214,52 @@ def apply_remix_template(
         raise not_found("Video not found.")
     with request.app.state.telemetry.remix_failure_guard():
         return store.apply_remix_template(db, remix, video, payload.template)
+
+
+@router.post(
+    "/remixes/{remix_id}/ai-draft",
+    response_model=AiDraft,
+    responses={code: {"description": text} for code, text in (
+        (404, "Remix or source video not found"),
+        (429, "Gemini's quota is used up"),
+        (502, "Gemini failed"),
+        (503, "AI writing is not configured"),
+    )},
+)
+def write_remix_with_ai(
+    remix_id: str, payload: AiDraftRequest, request: Request, db: Session = Depends(get_db)
+):
+    """A Gemini draft in the chosen voice. Returned only: the remix itself is not changed."""
+    remix = store.get_remix(db, remix_id)
+    if not remix:
+        raise not_found("Remix not found.")
+    video = store.get_video(db, remix.video_id)
+    if not video:
+        raise not_found("Video not found.")
+    facts = ai_writer.facts_from_video(video, store.channel_name(db, video))
+    voice = ai_writer.voice_text(payload.voice, payload.custom_voice)
+    model = ai_writer.model_from_env()
+    telemetry = request.app.state.telemetry
+    started = time.perf_counter()
+    try:
+        draft = ai_writer.write_draft(
+            request.app.state.gemini, ai_writer.api_key_from_env(), model, facts, voice, payload.instructions
+        )
+    except ai_writer.AiWriteError as err:
+        # One line per AI write: outcome, model and duration, never the prompt, voice or output.
+        log.warning(
+            "AI write failed: outcome=%s reason=%s model_role=%s model=%s duration=%.2fs",
+            err.outcome, err.reason, err.model_role, err.model,
+            time.perf_counter() - started,
+        )
+        telemetry.record_ai_write(err.outcome, err.model_role)
+        raise HTTPException(status_code=err.status, detail=err.detail) from None
+    log.info(
+        "AI write: outcome=success model_role=%s model=%s duration=%.2fs",
+        draft.model_role, draft.model, time.perf_counter() - started,
+    )
+    telemetry.record_ai_write("success", draft.model_role)
+    return AiDraft(**draft.fields, model=draft.model)
 
 
 @router.get("/remixes/{remix_id}", response_model=RemixedVideo)

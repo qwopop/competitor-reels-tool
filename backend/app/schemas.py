@@ -116,3 +116,32 @@ class UpdateRemixRequest(ApiModel):
     hook: str | None = Field(default=None, max_length=1000)
     script: str | None = Field(default=None, max_length=2000)
     cta: str | None = Field(default=None, max_length=500)
+
+
+CreatorVoice = Literal[
+    "educational_blogger", "storyteller", "entertainer", "expert_reviewer", "motivational_coach", "custom"
+]
+
+
+class AiDraftRequest(ApiModel):
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True, extra="forbid")
+
+    voice: CreatorVoice
+    custom_voice: str | None = Field(default=None, max_length=300)
+    instructions: str | None = Field(default=None, max_length=500)
+
+    @model_validator(mode="after")
+    def _custom_voice_is_described(self):
+        if self.voice == "custom" and not (self.custom_voice or "").strip():
+            raise ValueError("Describe the voice, or pick a preset.")
+        return self
+
+
+class AiDraft(ApiModel):
+    """A draft written by Gemini. Not stored, so it has no id or timestamps."""
+
+    title: str = Field(max_length=500)
+    hook: str = Field(max_length=1000)
+    script: str = Field(max_length=2000)
+    cta: str = Field(max_length=500)
+    model: str

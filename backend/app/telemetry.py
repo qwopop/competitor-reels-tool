@@ -35,6 +35,8 @@ log = logging.getLogger(__name__)
 SERVICE_NAME = "clipremix"
 HEALTH_PATH = "/api/health"
 FETCH_OUTCOMES = ("success", "empty", "error")
+AI_WRITE_OUTCOMES = ("success", "not_configured", "quota", "upstream_error", "invalid_output")
+AI_MODEL_ROLES = ("primary", "fallback", "none")
 # Fetches take from milliseconds (sample source) to many seconds (YouTube).
 FETCH_BUCKETS = [0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 20, 30]
 SHUTDOWN_WAIT_SECONDS = 6
@@ -103,6 +105,11 @@ class Telemetry:
             "clipremix.remix.failures",
             description="Remix create, apply-template or update requests that failed with an unexpected error (HTTP 500).",
         )
+        self.remix_ai_writes = meter.create_counter(
+            "clipremix.remix.ai_writes",
+            description="AI draft requests (Gemini), by outcome and by which model answered or failed last "
+            "(model_role: primary, fallback, none).",
+        )
         self.plan_items_added = meter.create_counter(
             "clipremix.plan_items.added", description="Content plan items newly created (HTTP 201)."
         )
@@ -119,6 +126,10 @@ class Telemetry:
         """One fetch request. `outcome` is one of FETCH_OUTCOMES, never an id or URL."""
         self.videos_fetched.add(1, {"outcome": outcome})
         self.fetch_duration.record(seconds, {"outcome": outcome})
+
+    def record_ai_write(self, outcome: str, model_role: str) -> None:
+        """One AI draft request. Only these two bounded attributes, never ids, voice text or model names."""
+        self.remix_ai_writes.add(1, {"outcome": outcome, "model_role": model_role})
 
     @contextmanager
     def remix_failure_guard(self) -> Iterator[None]:

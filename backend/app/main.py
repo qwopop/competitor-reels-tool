@@ -10,6 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.engine import make_url
 from sqlalchemy.orm import sessionmaker
 
+from app.ai_writer import HttpGeminiClient
 from app.generator import SampleSource
 from app.youtube import YouTubeApiSource, YouTubeSource
 from app.models import Base, make_engine, upgrade_schema
@@ -50,11 +51,16 @@ def source_from_env():
     return YouTubeSource()
 
 
-def create_app(database_url: str | None = None, video_source=_FROM_ENV, telemetry=_FROM_ENV) -> FastAPI:
+def create_app(
+    database_url: str | None = None, video_source=_FROM_ENV, telemetry=_FROM_ENV, gemini=None
+) -> FastAPI:
     """`video_source` looks channels up and fetches their videos; by default it comes from VIDEO_SOURCE.
 
     `telemetry` is an app.telemetry.Telemetry; by default it comes from the OTEL_EXPORTER_OTLP_*
     variables and is disabled (nothing exported) when OTEL_EXPORTER_OTLP_ENDPOINT is unset.
+
+    `gemini` is the client the AI writer calls (app.ai_writer); by default the real HTTP client.
+    Its key (GEMINI_API_KEY) is read on every request, so AI writing works only when it is set.
     """
     url = database_url or os.getenv("DATABASE_URL", DEFAULT_DATABASE_URL)
     engine = make_engine(url)
@@ -78,6 +84,7 @@ def create_app(database_url: str | None = None, video_source=_FROM_ENV, telemetr
     app.state.session_factory = session_factory
     app.state.telemetry = telemetry
     app.state.video_source = source_from_env() if video_source is _FROM_ENV else video_source
+    app.state.gemini = gemini or HttpGeminiClient()
     # The Vite dev server proxies /api, so CORS only matters if you call the API directly.
     app.add_middleware(
         CORSMiddleware,
