@@ -14,8 +14,10 @@ export const CREATOR_VOICES: { value: CreatorVoice; label: string; description: 
 export const CUSTOM_VOICE_LIMIT = 300;
 export const INSTRUCTIONS_LIMIT = 500;
 
-// The words used in "Draft written in the … voice.": the preset's label, or "custom".
-export function voiceName(voice: CreatorVoice): string {
+// The words used in "Draft written in the … voice.": the preset's label, "custom", or a saved
+// voice's name in quotes (issue #98).
+export function voiceName(voice: CreatorVoice, savedName?: string): string {
+  if (savedName) return `“${savedName}”`;
   if (voice === 'custom') return 'custom';
   return CREATOR_VOICES.find((v) => v.value === voice)?.label ?? voice;
 }
